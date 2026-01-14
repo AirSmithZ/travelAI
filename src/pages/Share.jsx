@@ -8,6 +8,20 @@ import { CheckCircle, Download, Link, ArrowLeft } from 'lucide-react';
 const Share = () => {
   const navigate = useNavigate();
   const { preferences, itinerary } = useTravel();
+  
+  // 计算天数
+  let days = 5; // 默认值
+  if (preferences.flights && preferences.flights.length > 0) {
+    const firstFlight = preferences.flights[0];
+    const lastFlight = preferences.flights[preferences.flights.length - 1];
+    if (firstFlight?.departureTime && lastFlight?.returnTime) {
+      const diffTime = lastFlight.returnTime.getTime() - firstFlight.departureTime.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) {
+        days = diffDays;
+      }
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 flex items-center justify-center">
@@ -17,17 +31,20 @@ const Share = () => {
             <CheckCircle className="text-green-600 w-8 h-8" />
           </div>
           <CardTitle className="text-2xl text-slate-800">行程已准备就绪！</CardTitle>
-          <p className="text-slate-500">您的 {preferences.destination} {preferences.days} 日游规划已生成</p>
+          <p className="text-slate-500">您的 {preferences.destination} {days} 日游规划已生成</p>
         </CardHeader>
         <CardContent className="space-y-8">
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
               <div>
                 <h3 className="font-bold text-lg">{preferences.destination}深度游</h3>
-                <p className="text-sm text-slate-500">共 {Object.values(itinerary).flat().length} 个景点 · 预算 ¥{preferences.budget[0]}</p>
+                <p className="text-sm text-slate-500">
+                  共 {Object.values(itinerary).flat().length} 个景点 · 预算 ¥
+                  {preferences.budget.min} - ¥{preferences.budget.max}
+                </p>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-primary">{preferences.days}</div>
+                <div className="text-2xl font-bold text-primary">{days}</div>
                 <div className="text-xs text-slate-400">天数</div>
               </div>
             </div>

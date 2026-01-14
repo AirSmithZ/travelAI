@@ -1,22 +1,45 @@
+import { WORLD_CITY_DATA } from '../constants/worldCities';
+
 export const INTEREST_TAGS = [
-  "自然风光", "人文历史", "美食", "亲子", "摄影", "夜生活",
-  "极限运动", "购物", "博物馆", "温泉", "建筑", "宗教"
+  '自然风光',
+  '人文历史',
+  '美食',
+  '亲子',
+  '摄影',
+  '夜生活',
+  '极限运动',
+  '购物',
+  '博物馆',
+  '温泉',
+  '建筑',
+  '宗教',
 ];
 
 export const CUISINES = [
-  "中餐", "日料", "韩餐", "意大利菜", "法餐", "西班牙菜", 
-  "墨西哥菜", "泰国菜", "印度菜", "越南菜", "素食", "海鲜", "烧烤", "火锅", "甜品"
+  '中餐',
+  '日料',
+  '韩餐',
+  '意大利菜',
+  '法餐',
+  '西班牙菜',
+  '墨西哥菜',
+  '泰国菜',
+  '印度菜',
+  '越南菜',
+  '素食',
+  '海鲜',
+  '烧烤',
+  '火锅',
+  '甜品',
 ];
 
-export const CITIES = {
-  "东京": { lat: 35.6762, lng: 139.6503 },
-  "巴黎": { lat: 48.8566, lng: 2.3522 },
-  "曼谷": { lat: 13.7563, lng: 100.5018 },
-  "罗马": { lat: 41.9028, lng: 12.4964 },
-  "纽约": { lat: 40.7128, lng: -74.0060 },
-  "悉尼": { lat: -33.8688, lng: 151.2093 },
-  "巴塞罗那": { lat: 41.3851, lng: 2.1734 }
-};
+export const CITY_DATA = WORLD_CITY_DATA;
+
+// 兼容原有基于城市名读取经纬度的逻辑（Key 为中文名）
+export const CITIES = CITY_DATA.reduce((acc, city) => {
+  acc[city.name] = { lat: city.lat, lng: city.lng };
+  return acc;
+}, {});
 
 export const POI_DATA = [
   { id: 't1', city: '东京', name: '浅草寺', category: '人文历史', lat: 35.7148, lng: 139.7967, duration: 90, rating: 4.5, imageKeyword: 'Sensoji Temple' },

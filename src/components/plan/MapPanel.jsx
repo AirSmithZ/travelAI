@@ -1,106 +1,175 @@
-import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet';
+import React, { useEffect, useRef } from 'react';
 import { useTravel } from '../../context/TravelContext';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { MapPin } from 'lucide-react';
 
-// Fix Leaflet default icon issue
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+// 简单的脚本加载工具，避免重复加载高德 SDK
+const loadAmapScript = (() => {
+  let loadingPromise = null;
+  return () => {
+    if (window.AMap) return Promise.resolve(window.AMap);
+    if (loadingPromise) return loadingPromise;
 
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+    const key = import.meta.env.VITE_AMAP_WEB_KEY || '31d12ccab5b38ae944d01977a0d37cc1';
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.async = true;
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${key}`;
 
-// Custom Marker Icons
-const createCustomIcon = (color) => {
-  return L.divIcon({
-    className: 'custom-marker',
-    html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12]
-  });
-};
+    loadingPromise = new Promise((resolve, reject) => {
+      script.onload = () => {
+        if (window.AMap) {
+          resolve(window.AMap);
+        } else {
+          reject(new Error('AMap 加载失败'));
+        }
+      };
+      script.onerror = () => reject(new Error('AMap 脚本加载出错'));
+    });
 
-const MapUpdater = ({ center, zoom }) => {
-  const map = useMap();
-  useEffect(() => {
-    map.flyTo(center, zoom, { duration: 1.5 });
-  }, [center, zoom, map]);
-  return null;
-};
+    document.body.appendChild(script);
+    return loadingPromise;
+  };
+})();
 
 const MapPanel = () => {
-  const { mapCenter, mapZoom, itinerary, selectedPoi } = useTravel();
+  const { mapCenter, mapZoom, itinerary } = useTravel();
+  const mapContainerRef = useRef(null);
+  const mapRef = useRef(null);
+  const polylineRef = useRef(null);
+  const markersRef = useRef([]);
 
-  // 收集所有点用于绘制连线
   const allPoints = Object.values(itinerary).flat();
-  const polylinePositions = allPoints.map(p => [p.lat, p.lng]);
+
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    let isMounted = true;
+
+    loadAmapScript()
+      .then((AMap) => {
+        if (!isMounted || !AMap) return;
+
+        const center = [mapCenter[1], mapCenter[0]]; // 高德经纬度顺序为 [lng, lat]
+
+        if (!mapRef.current) {
+          mapRef.current = new AMap.Map(mapContainerRef.current, {
+            center,
+            zoom: mapZoom,
+            viewMode: '3D',
+            zooms: [3, 20],
+          });
+        } else {
+          mapRef.current.setZoomAndCenter(mapZoom, center);
+        }
+
+        // 清理旧标记
+        if (markersRef.current.length) {
+          markersRef.current.forEach((marker) => {
+            mapRef.current.remove(marker);
+          });
+          markersRef.current = [];
+        }
+
+        // 清理旧折线
+        if (polylineRef.current) {
+          mapRef.current.remove(polylineRef.current);
+          polylineRef.current = null;
+        }
+
+        if (!allPoints.length) return;
+
+        const path = allPoints.map((poi) => [poi.lng, poi.lat]);
+
+        polylineRef.current = new AMap.Polyline({
+          path,
+          strokeColor: '#2B6CB0',
+          strokeWeight: 3,
+          strokeOpacity: 0.8,
+          lineJoin: 'round',
+          lineCap: 'round',
+          showDir: true,
+        });
+
+        mapRef.current.add(polylineRef.current);
+
+        allPoints.forEach((poi) => {
+          const isFood = poi.category === '美食';
+
+          const marker = new AMap.Marker({
+            position: [poi.lng, poi.lat],
+            title: poi.name,
+            offset: new AMap.Pixel(-8, -8),
+            content: `
+              <div style="
+                width: 16px;
+                height: 16px;
+                border-radius: 999px;
+                border: 2px solid #ffffff;
+                background-color: ${isFood ? '#F56565' : '#2B6CB0'};
+                box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+              "></div>
+            `,
+          });
+
+          const info = new AMap.InfoWindow({
+            offset: new AMap.Pixel(0, -24),
+            content: `
+              <div style="max-width: 220px; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;">
+                <div style="width: 100%; height: 96px; margin-bottom: 8px; border-radius: 8px; overflow: hidden; background: #e2e8f0;">
+                  <img 
+                    src="https://www.weavefox.cn/api/bolt/unsplash_image?keyword=${encodeURIComponent(
+                      poi.imageKeyword || poi.name,
+                    )}&width=220&height=150&random=${poi.id}"
+                    alt="${poi.name}"
+                    style="width: 100%; height: 100%; object-fit: cover;"
+                  />
+                </div>
+                <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 4px; color: #1e293b;">${poi.name}</h3>
+                <p style="margin: 0; font-size: 12px; color: #64748b;">${poi.category} · 建议停留 ${
+                  poi.duration
+                } 分钟</p>
+                <div style="margin-top: 4px; font-size: 12px; font-weight: 500; color: #f59e0b;">
+                  ★ ${poi.rating}
+                </div>
+              </div>
+            `,
+          });
+
+          marker.on('click', () => {
+            info.open(mapRef.current, marker.getPosition());
+          });
+
+          mapRef.current.add(marker);
+          markersRef.current.push(marker);
+        });
+      })
+      .catch((error) => {
+        // eslint-disable-next-line no-console
+        console.warn('加载高德地图失败:', error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mapCenter, mapZoom, allPoints.length]);
 
   return (
     <div className="h-full w-full relative z-0">
-      <MapContainer 
-        center={mapCenter} 
-        zoom={mapZoom} 
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <MapUpdater center={mapCenter} zoom={mapZoom} />
-
-        {/* 绘制路线 */}
-        <Polyline 
-          positions={polylinePositions} 
-          pathOptions={{ color: '#2B6CB0', weight: 3, dashArray: '10, 10', opacity: 0.6 }} 
-        />
-
-        {/* 绘制 POI 标记 */}
-        {allPoints.map((poi) => (
-          <Marker 
-            key={poi.uniqueId} 
-            position={[poi.lat, poi.lng]}
-            icon={createCustomIcon(poi.category === '美食' ? '#F56565' : '#2B6CB0')}
-          >
-            <Popup className="custom-popup">
-              <div className="p-1">
-                <div className="w-full h-24 mb-2 rounded overflow-hidden bg-slate-100">
-                  <img 
-                    src={`https://www.weavefox.cn/api/bolt/unsplash_image?keyword=${encodeURIComponent(poi.imageKeyword || poi.name)}&width=200&height=150&random=${poi.id}`}
-                    alt={poi.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <h3 className="font-bold text-sm">{poi.name}</h3>
-                <p className="text-xs text-slate-500">{poi.category} · 建议停留 {poi.duration} 分钟</p>
-                <div className="mt-2 flex items-center gap-1 text-xs font-medium text-amber-500">
-                  ★ {poi.rating}
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
+      <div ref={mapContainerRef} className="h-full w-full" />
 
       {/* Map Legend */}
-      <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-3 rounded-lg shadow-md border border-slate-200 text-xs space-y-2 z-[1000]">
-        <div className="font-semibold mb-1">图例</div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#2B6CB0] border border-white shadow-sm"></div>
-          <span>景点</span>
+      {allPoints.length > 0 && (
+        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-3 rounded-lg shadow-md border border-slate-200 text-xs space-y-2 z-[1000]">
+          <div className="font-semibold mb-1">图例</div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#2B6CB0] border border-white shadow-sm" />
+            <span>景点</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#F56565] border border-white shadow-sm" />
+            <span>美食</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#F56565] border border-white shadow-sm"></div>
-          <span>美食</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
