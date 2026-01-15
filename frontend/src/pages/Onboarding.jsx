@@ -118,11 +118,56 @@ const Onboarding = () => {
     });
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < 2) {
       setStep(step + 1);
     } else {
-      navigate('/flights');
+      // 整合表单数据
+      const formData = {
+        destination: preferences.destination,
+        budget: {
+          min: preferences.budget.min,
+          max: preferences.budget.max,
+        },
+        interests: preferences.interests,
+        foodPreferences: preferences.foodPreferences,
+        travelers: preferences.travelers,
+        flights: preferences.flights.map((flight) => ({
+          departureAirport: flight.departureAirport,
+          arrivalAirport: flight.arrivalAirport,
+          departureTime: flight.departureTime ? flight.departureTime.toISOString() : null,
+          returnTime: flight.returnTime ? flight.returnTime.toISOString() : null,
+        })),
+      };
+
+      // 打印整合的接口数据
+      console.log('整合的表单数据:', JSON.stringify(formData, null, 2));
+      console.log('发送到 API 的数据:', formData);
+      return
+      try {
+        // 发送 POST 请求到 API
+        const response = await fetch('/api/createTravel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('API 响应:', result);
+
+        // 请求成功后跳转
+        navigate('/flights');
+      } catch (error) {
+        console.error('发送请求失败:', error);
+        // 即使请求失败，也允许跳转（根据业务需求决定）
+        navigate('/flights');
+      }
     }
   };
 

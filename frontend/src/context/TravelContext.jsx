@@ -33,7 +33,7 @@ export const TravelProvider = ({ children }) => {
     foodPreferences: [],
     flights: [], // 多程航班数组，每个元素: { departureAirport: string, arrivalAirport: string, departureTime: Date, returnTime: Date }
     travelers: 'couple', // solo, couple, family, friends
-    destination: '东京', // 默认目的地
+    destination: '北京', // 默认目的地
   });
 
   // 航班信息
