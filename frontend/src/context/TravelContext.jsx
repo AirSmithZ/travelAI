@@ -33,7 +33,9 @@ export const TravelProvider = ({ children }) => {
     foodPreferences: [],
     flights: [], // 多程航班数组，每个元素: { departureAirport: string, arrivalAirport: string, departureTime: Date, returnTime: Date }
     travelers: 'couple', // solo, couple, family, friends
-    destination: '北京', // 默认目的地
+    destination: ['北京'], // 目的地数组，支持多选
+    xiaohongshuNotes: [], // 小红书笔记链接数组
+    addresses: [], // 居住地址数组，每个元素: { city: object|null (城市对象，包含name等), address: string }
   });
 
   // 航班信息
@@ -74,7 +76,13 @@ export const TravelProvider = ({ children }) => {
 
   // 初始化行程：当目的地变化且尚未生成行程时，根据 POI 数据生成默认行程
   useEffect(() => {
-    if (preferences.destination && Object.keys(itinerary).length === 0) {
+    const destinations = Array.isArray(preferences.destination) 
+      ? preferences.destination 
+      : preferences.destination 
+        ? [preferences.destination] 
+        : [];
+    
+    if (destinations.length > 0 && Object.keys(itinerary).length === 0) {
       // 根据航班信息计算天数
       let days = 5; // 默认值
       if (preferences.flights && preferences.flights.length > 0) {
@@ -89,9 +97,10 @@ export const TravelProvider = ({ children }) => {
           }
         }
       }
+      // 使用第一个目的地生成行程
       const nextItinerary = createInitialItinerary(
         POI_DATA,
-        preferences.destination,
+        destinations[0],
         days,
       );
       setItinerary(nextItinerary);
@@ -139,9 +148,20 @@ export const TravelProvider = ({ children }) => {
         }
       }
     }
+    const destinations = Array.isArray(preferences.destination) 
+      ? preferences.destination 
+      : preferences.destination 
+        ? [preferences.destination] 
+        : [];
+    const destinationName = destinations.length > 0 
+      ? destinations.length === 1 
+        ? destinations[0] 
+        : `${destinations[0]}等${destinations.length}个城市`
+      : '未设置';
+    
     return {
       id: `${Date.now()}`,
-      name: `${preferences.destination} · ${days}天行程`,
+      name: `${destinationName} · ${days}天行程`,
       createdAt: new Date().toISOString(),
       preferences,
       flightInfo,

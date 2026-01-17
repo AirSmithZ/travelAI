@@ -7,8 +7,17 @@ import Button from '../ui/Button';
 const RestaurantDrawer = ({ isOpen, onClose }) => {
   const { preferences, addPoiToDay } = useTravel();
   
-  // 过滤当前城市的餐厅
-  const restaurants = RESTAURANT_DATA.filter(r => r.city === preferences.destination);
+  // 处理目的地（支持多选）
+  const destinations = Array.isArray(preferences.destination) 
+    ? preferences.destination 
+    : preferences.destination 
+      ? [preferences.destination] 
+      : [];
+  
+  // 过滤当前城市的餐厅（显示所有选中城市的餐厅）
+  const restaurants = RESTAURANT_DATA.filter(r => 
+    destinations.length === 0 || destinations.includes(r.city)
+  );
 
   const handleAdd = (restaurant) => {
     // 默认添加到第一天

@@ -9,6 +9,23 @@ const Share = () => {
   const navigate = useNavigate();
   const { preferences, itinerary } = useTravel();
   
+  // 处理目的地（支持多选）
+  const destinations = Array.isArray(preferences.destination) 
+    ? preferences.destination 
+    : preferences.destination 
+      ? [preferences.destination] 
+      : [];
+  const destinationDisplay = destinations.length === 0 
+    ? '未设置' 
+    : destinations.length === 1 
+      ? destinations[0] 
+      : `${destinations.join('、')}`;
+  const destinationTitle = destinations.length === 0 
+    ? '未设置' 
+    : destinations.length === 1 
+      ? `${destinations[0]}深度游` 
+      : `${destinations[0]}等${destinations.length}个城市深度游`;
+  
   // 计算天数
   let days = 5; // 默认值
   if (preferences.flights && preferences.flights.length > 0) {
@@ -31,13 +48,13 @@ const Share = () => {
             <CheckCircle className="text-green-600 w-8 h-8" />
           </div>
           <CardTitle className="text-2xl text-slate-800">行程已准备就绪！</CardTitle>
-          <p className="text-slate-500">您的 {preferences.destination} {days} 日游规划已生成</p>
+          <p className="text-slate-500">您的 {destinationDisplay} {days} 日游规划已生成</p>
         </CardHeader>
         <CardContent className="space-y-8">
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
               <div>
-                <h3 className="font-bold text-lg">{preferences.destination}深度游</h3>
+                <h3 className="font-bold text-lg">{destinationTitle}</h3>
                 <p className="text-sm text-slate-500">
                   共 {Object.values(itinerary).flat().length} 个景点 · 预算 ¥
                   {preferences.budget.min} - ¥{preferences.budget.max}

@@ -4,10 +4,11 @@ import { useTravel } from '../context/TravelContext';
 import { INTEREST_TAGS, CUISINES } from '../data/mockData';
 import Button from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { Plane, Users } from 'lucide-react';
+import { Plane, Users, Plus, X } from 'lucide-react';
 import { Tag, Input } from 'antd';
 import LocationSelect from '../components/plan/LocationSelect';
 import FlightInput from '../components/plan/FlightInput';
+import AddressInput from '../components/plan/AddressInput';
 
 const Onboarding = () => {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ const Onboarding = () => {
   const [newInterest, setNewInterest] = useState('');
   const [foodOptions, setFoodOptions] = useState(CUISINES);
   const [newFood, setNewFood] = useState('');
+  const [newNoteLink, setNewNoteLink] = useState('');
 
   const handleInterestToggle = (tag) => {
     setPreferences((prev) => {
@@ -88,6 +90,25 @@ const Onboarding = () => {
     setNewFood('');
   };
 
+  const handleAddNoteLink = () => {
+    const value = newNoteLink.trim();
+    if (!value) return;
+    setPreferences((prev) => ({
+      ...prev,
+      xiaohongshuNotes: prev.xiaohongshuNotes?.includes(value)
+        ? prev.xiaohongshuNotes
+        : [...(prev.xiaohongshuNotes || []), value],
+    }));
+    setNewNoteLink('');
+  };
+
+  const handleRemoveNoteLink = (link) => {
+    setPreferences((prev) => ({
+      ...prev,
+      xiaohongshuNotes: prev.xiaohongshuNotes?.filter((l) => l !== link) || [],
+    }));
+  };
+
   const handleBudgetMinChange = (e) => {
     const raw = e.target.value;
     const parsed = parseInt(raw, 10);
@@ -124,7 +145,11 @@ const Onboarding = () => {
     } else {
       // 整合表单数据
       const formData = {
-        destination: preferences.destination,
+        destination: Array.isArray(preferences.destination) 
+          ? preferences.destination 
+          : preferences.destination 
+            ? [preferences.destination] 
+            : [],
         budget: {
           min: preferences.budget.min,
           max: preferences.budget.max,
@@ -132,6 +157,11 @@ const Onboarding = () => {
         interests: preferences.interests,
         foodPreferences: preferences.foodPreferences,
         travelers: preferences.travelers,
+        xiaohongshuNotes: preferences.xiaohongshuNotes || [],
+        addresses: (preferences.addresses || []).map((addr) => ({
+          city: addr.city ? (typeof addr.city === 'string' ? addr.city : addr.city.name) : '',
+          address: addr.address || '',
+        })),
         flights: preferences.flights.map((flight) => ({
           departureAirport: flight.departureAirport,
           arrivalAirport: flight.arrivalAirport,
@@ -143,7 +173,6 @@ const Onboarding = () => {
       // 打印整合的接口数据
       console.log('整合的表单数据:', JSON.stringify(formData, null, 2));
       console.log('发送到 API 的数据:', formData);
-      return
       try {
         // 发送 POST 请求到 API
         const response = await fetch('/api/createTravel', {
@@ -203,10 +232,22 @@ const Onboarding = () => {
             <div className="space-y-6">
               <LocationSelect
                 value={preferences.destination}
-                onChange={(city) =>
+                onChange={(cities) =>
                   setPreferences((p) => ({
                     ...p,
-                    destination: city.name,
+                    destination: cities.map(c => c.name || c),
+                  }))
+                }
+              />
+
+              <AddressInput
+                addresses={preferences.addresses && preferences.addresses.length > 0 
+                  ? preferences.addresses 
+                  : [{ city: null, address: '' }]}
+                onChange={(addresses) =>
+                  setPreferences((p) => ({
+                    ...p,
+                    addresses,
                   }))
                 }
               />
@@ -325,6 +366,60 @@ const Onboarding = () => {
                     className="w-32 mt-1"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-3 text-slate-700">
+                  小红书笔记链接（可选）
+                </label>
+                <div className="space-y-2">
+                  {(preferences.xiaohongshuNotes || []).length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {preferences.xiaohongshuNotes.map((link, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200"
+                        >
+                          <a
+                            href={link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline truncate max-w-xs"
+                          >
+                            {link}
+                          </a>
+                          <button
+                            onClick={() => handleRemoveNoteLink(link)}
+                            className="text-slate-400 hover:text-slate-600 transition-colors"
+                            type="button"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="输入小红书笔记链接"
+                      value={newNoteLink}
+                      onChange={(e) => setNewNoteLink(e.target.value)}
+                      onPressEnter={handleAddNoteLink}
+                      className="flex-1"
+                    />
+                    <button
+                      onClick={handleAddNoteLink}
+                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+                      type="button"
+                    >
+                      <Plus size={16} />
+                      添加
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  可以添加多个小红书笔记链接，用于参考和规划行程。
+                </p>
               </div>
 
               <div>
