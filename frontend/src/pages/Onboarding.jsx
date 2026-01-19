@@ -9,16 +9,58 @@ import { Tag, Input } from 'antd';
 import LocationSelect from '../components/plan/LocationSelect';
 import FlightInput from '../components/plan/FlightInput';
 import AddressInput from '../components/plan/AddressInput';
+import { useRequest } from '../utils/useRequest';
+import { travelApi } from '../servers';
 
 const Onboarding = () => {
   const navigate = useNavigate();
-  const { preferences, setPreferences } = useTravel();
+  const { preferences, setPreferences, setItinerary, setCurrentPlanId, setIsGenerating } = useTravel();
   const [step, setStep] = useState(1);
   const [interestOptions, setInterestOptions] = useState(INTEREST_TAGS);
   const [newInterest, setNewInterest] = useState('');
   const [foodOptions, setFoodOptions] = useState(CUISINES);
   const [newFood, setNewFood] = useState('');
   const [newNoteLink, setNewNoteLink] = useState('');
+
+  const { runAsync: createPlan } = useRequest(
+    (payload) => travelApi.createPlan(payload),
+    { manual: true, debounceWait: 400 },
+  );
+
+  const handleMockFill = () => {
+    const mock = {
+      destination: ['新加坡'],
+      budget: { min: 0, max: 20000 },
+      interests: ['自然风光', '动物园'],
+      foodPreferences: ['中餐', '烧烤'],
+      travelers: 'couple',
+      xiaohongshuNotes: [
+        '旅游路线参考 第一天 1.国家博物馆National Museum of... http://xhslink.com/o/2XWnPVDqS50  复制后打开【小红书】查看笔记！',
+      ],
+      addresses: [
+        {
+          // AddressInput 里 city 可能是对象（含 name）或字符串，这里给字符串即可
+          city: '新加坡',
+          address: '武吉士酒店',
+        },
+      ],
+      flights: [
+        {
+          departureAirport: '樟宜机场',
+          arrivalAirport: '樟宜机场',
+          departureTime: new Date('2026-01-18T16:00:00.000Z'),
+          returnTime: new Date('2026-01-22T16:00:00.000Z'),
+        },
+      ],
+    };
+
+    setPreferences((prev) => ({
+      ...prev,
+      ...mock,
+    }));
+    // 方便直接点击生成
+    setStep(2);
+  };
 
   const handleInterestToggle = (tag) => {
     setPreferences((prev) => {
@@ -144,6 +186,16 @@ const Onboarding = () => {
       setStep(step + 1);
     } else {
       // 整合表单数据
+      // 归一化航班：只保留有出发时间的条目，并转成字符串
+      const normalizedFlights = (preferences.flights || [])
+        .filter((f) => f && f.departureTime) // 没有时间的丢弃，避免后端 422
+        .map((flight) => ({
+          departureAirport: flight.departureAirport || '',
+          arrivalAirport: flight.arrivalAirport || '',
+          departureTime: flight.departureTime ? flight.departureTime.toISOString() : null,
+          returnTime: flight.returnTime ? flight.returnTime.toISOString() : null,
+        }));
+
       const formData = {
         destination: Array.isArray(preferences.destination) 
           ? preferences.destination 
@@ -162,40 +214,45 @@ const Onboarding = () => {
           city: addr.city ? (typeof addr.city === 'string' ? addr.city : addr.city.name) : '',
           address: addr.address || '',
         })),
-        flights: preferences.flights.map((flight) => ({
-          departureAirport: flight.departureAirport,
-          arrivalAirport: flight.arrivalAirport,
-          departureTime: flight.departureTime ? flight.departureTime.toISOString() : null,
-          returnTime: flight.returnTime ? flight.returnTime.toISOString() : null,
-        })),
+        flights: normalizedFlights,
       };
 
       // 打印整合的接口数据
       console.log('整合的表单数据:', JSON.stringify(formData, null, 2));
       console.log('发送到 API 的数据:', formData);
       try {
-        // 发送 POST 请求到 API
-        const response = await fetch('/api/createTravel', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
-        });
+        const createdPlan = await createPlan(formData);
+        console.log('创建旅行规划成功:', createdPlan);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        // 缓存当前 planId，后续在地图页触发流式生成
+        setCurrentPlanId(createdPlan.id);
+        // 进入新的一次生成前，清空上一次流式状态，避免 Plan 页误判 done/running
+        setItinerary({});
+
+        // 计算日期范围：优先使用航班时间，否则默认 5 天（在 Plan 页使用）
+        const flights = preferences.flights || [];
+        let startDate = new Date();
+        let endDate = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000);
+        if (flights.length > 0 && flights[0]?.departureTime) {
+          startDate = flights[0].departureTime;
         }
+        if (flights.length > 0 && flights[flights.length - 1]?.returnTime) {
+          endDate = flights[flights.length - 1].returnTime;
+        }
+        // 标记为需要在下一页生成路线
+        setIsGenerating(true);
 
-        const result = await response.json();
-        console.log('API 响应:', result);
-
-        // 请求成功后跳转
-        navigate('/flights');
+        // 请求成功后直接跳转到地图页，由 Plan 页触发流式生成
+        navigate('/plan', {
+          state: {
+            startDate: startDate.toISOString().slice(0, 10),
+            endDate: endDate.toISOString().slice(0, 10),
+          },
+        });
       } catch (error) {
         console.error('发送请求失败:', error);
-        // 即使请求失败，也允许跳转（根据业务需求决定）
-        navigate('/flights');
+        // 即使请求失败，也允许回到首页或保持当前页，这里先简单回首页
+        navigate('/');
       }
     }
   };
@@ -215,7 +272,16 @@ const Onboarding = () => {
         <CardHeader>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-primary">步骤 {step} / 2</span>
-            <Plane className="text-primary h-6 w-6" />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleMockFill}
+                className="text-xs px-2.5 py-1 rounded-md border border-slate-200 bg-white text-slate-600 hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
+              >
+                Mock 填充
+              </button>
+              <Plane className="text-primary h-6 w-6" />
+            </div>
           </div>
           <CardTitle className="text-3xl text-slate-800">
             {step === 1 && '让我们开始规划您的梦想之旅'}

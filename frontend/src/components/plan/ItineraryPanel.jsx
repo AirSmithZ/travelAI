@@ -39,7 +39,9 @@ const ItineraryPanel = () => {
 
   const handlePoiClick = (poi) => {
     setSelectedPoi(poi);
-    setMapCenter([poi.lat, poi.lng]);
+    if (typeof poi.lat === 'number' && typeof poi.lng === 'number') {
+      setMapCenter([poi.lat, poi.lng]);
+    }
   };
 
   return (
@@ -52,7 +54,7 @@ const ItineraryPanel = () => {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="p-4 space-y-6">
           {Object.keys(itinerary).sort().map((dayKey, index) => {
-            const dayItems = itinerary[dayKey];
+            const dayItems = Array.isArray(itinerary[dayKey]) ? itinerary[dayKey] : [];
             return (
               <div key={dayKey} className="space-y-3">
                 <div className="flex items-center justify-between">

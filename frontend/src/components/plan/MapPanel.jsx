@@ -31,13 +31,16 @@ const loadAmapScript = (() => {
 })();
 
 const MapPanel = () => {
-  const { mapCenter, mapZoom, itinerary } = useTravel();
+  const { mapCenter, mapZoom, mapPoints, itinerary } = useTravel();
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const polylineRef = useRef(null);
   const markersRef = useRef([]);
+  const lastSignatureRef = useRef('');
 
-  const allPoints = Object.values(itinerary).flat();
+  // 如果有后端返回的 mapPoints，则优先使用；否则退回到基于 itinerary 的本地模拟数据
+  const fallbackItineraryPoints = Object.values(itinerary || {}).flat();
+  const allPoints = (mapPoints && mapPoints.length > 0) ? mapPoints : fallbackItineraryPoints;
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -54,7 +57,8 @@ const MapPanel = () => {
           mapRef.current = new AMap.Map(mapContainerRef.current, {
             center,
             zoom: mapZoom,
-            viewMode: '3D',
+            // 2D 模式通常更轻量，可减少 canvas 相关 readback 压力提示
+            viewMode: '2D',
             zooms: [3, 20],
           });
         } else {
@@ -75,9 +79,17 @@ const MapPanel = () => {
           polylineRef.current = null;
         }
 
-        if (!allPoints.length) return;
+        const validPoints = (allPoints || []).filter(
+          (poi) => Number.isFinite(poi.lng) && Number.isFinite(poi.lat)
+        );
+        if (!validPoints.length) return;
 
-        const path = allPoints.map((poi) => [poi.lng, poi.lat]);
+        // 点集合没变就不重复清理/重绘（降低 canvas 压力）
+        const signature = validPoints.map((p) => `${p.id || ''}:${p.lng},${p.lat}:${p.category || ''}`).join('|');
+        if (lastSignatureRef.current === signature) return;
+        lastSignatureRef.current = signature;
+
+        const path = validPoints.map((poi) => [poi.lng, poi.lat]);
 
         polylineRef.current = new AMap.Polyline({
           path,
@@ -91,9 +103,15 @@ const MapPanel = () => {
 
         mapRef.current.add(polylineRef.current);
 
-        allPoints.forEach((poi) => {
-          const isFood = poi.category === '美食';
-
+        validPoints.forEach((poi) => {
+          let color = '#2B6CB0'; // 景点：蓝色
+          if (poi.category === '美食') {
+            color = '#F56565'; // 餐厅：红色
+          } else if (poi.category === '机场') {
+            color = '#22C55E'; // 机场：绿色
+          } else if (poi.category === '住宿') {
+            color = '#92400E'; // 住宿：棕色
+          }
           const marker = new AMap.Marker({
             position: [poi.lng, poi.lat],
             title: poi.name,
@@ -104,7 +122,7 @@ const MapPanel = () => {
                 height: 16px;
                 border-radius: 999px;
                 border: 2px solid #ffffff;
-                background-color: ${isFood ? '#F56565' : '#2B6CB0'};
+                background-color: ${color};
                 box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
               "></div>
             `,

@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  # MySQL数据库
+  mysql:
+    image: mysql:8.0
+    container_name: travel_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 19961001
+      MYSQL_DATABASE: travel
+      MYSQL_USER: travel_user
+      MYSQL_PASSWORD: travel_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - travel_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: travel_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - travel_network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # FastAPI应用
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel_api
+    environment:
+      DB_HOST: mysql
+      DB_USER: root
+      DB_PASSWORD: 19961001
+      DB_NAME: travel
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - travel_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel_celery_worker
+    environment:
+      DB_HOST: mysql
+      DB_USER: root
+      DB_PASSWORD: 19961001
+      DB_NAME: travel
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      - mysql
+      - redis
+      - api
+    networks:
+      - travel_network
+    command: celery -A app.tasks.travel_tasks worker --loglevel=info
+
+  # Celery Beat (可选，用于定时任务)
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel_celery_beat
+    environment:
+      DB_HOST: mysql
+      DB_USER: root
+      DB_PASSWORD: 19961001
+      DB_NAME: travel
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - travel_network
+    command: celery -A app.tasks.travel_tasks beat --loglevel=info
+
+networks:
+  travel_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:

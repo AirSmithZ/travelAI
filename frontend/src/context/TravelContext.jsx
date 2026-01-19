@@ -5,6 +5,9 @@ import React, {
   useEffect,
 } from 'react';
 import { POI_DATA } from '../data/mockData';
+import { CITIES } from '../data/mockData';
+import { useRequest } from '../utils/useRequest';
+import { travelApi } from '../servers';
 import {
   createInitialItinerary,
   addPoiToDayInItinerary,
@@ -38,7 +41,7 @@ export const TravelProvider = ({ children }) => {
     addresses: [], // 居住地址数组，每个元素: { city: object|null (城市对象，包含name等), address: string }
   });
 
-  // 航班信息
+  // 航班信息（旧的 Flights 页面模拟用）
   const [flightInfo, setFlightInfo] = useState(null);
 
   // 行程数据结构: { day1: [poi1, poi2], day2: [...] }
@@ -53,6 +56,11 @@ export const TravelProvider = ({ children }) => {
   const [mapCenter, setMapCenter] = useState([35.6762, 139.6503]);
   const [mapZoom, setMapZoom] = useState(12);
   const [selectedPoi, setSelectedPoi] = useState(null);
+
+  // 后端生成相关状态
+  const [currentPlanId, setCurrentPlanId] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [mapPoints, setMapPoints] = useState([]); // 后端返回的景点/餐厅节点，用于地图
 
   // 会话列表与当前会话
   const [sessions, setSessions] = useState([]);
@@ -74,7 +82,12 @@ export const TravelProvider = ({ children }) => {
     }
   }, []);
 
-  // 初始化行程：当目的地变化且尚未生成行程时，根据 POI 数据生成默认行程
+  // 目的地变化时：更新地图中心（优先本地城市表；否则向后端 geocode）
+  const { runAsync: geocodeAsync } = useRequest(
+    (address, location) => travelApi.geocode(address, location),
+    { manual: true, debounceWait: 300 },
+  );
+
   useEffect(() => {
     const destinations = Array.isArray(preferences.destination) 
       ? preferences.destination 
@@ -82,6 +95,26 @@ export const TravelProvider = ({ children }) => {
         ? [preferences.destination] 
         : [];
     
+    const dest0 = destinations[0];
+    if (dest0) {
+      const cityGeo = CITIES?.[dest0];
+      if (cityGeo?.lat && cityGeo?.lng) {
+        setMapCenter([cityGeo.lat, cityGeo.lng]);
+        setMapZoom(12);
+      } else {
+        // 若本地城市表没有（例如新加坡未收录/名称不一致），调用后端 geocode 获取坐标（统一走 servers + useRequest）
+        geocodeAsync(dest0, dest0)
+          .then((geo) => {
+            if (geo?.latitude && geo?.longitude) {
+              setMapCenter([geo.latitude, geo.longitude]);
+              setMapZoom(12);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+
+    // 初始化行程：当目的地变化且尚未生成行程时，根据 POI 数据生成默认行程
     if (destinations.length > 0 && Object.keys(itinerary).length === 0) {
       // 根据航班信息计算天数
       let days = 5; // 默认值
@@ -217,6 +250,9 @@ export const TravelProvider = ({ children }) => {
       saveCurrentSession,
       loadSessionById,
       deleteSessionById,
+      currentPlanId, setCurrentPlanId,
+      isGenerating, setIsGenerating,
+      mapPoints, setMapPoints,
     }}>
       {children}
     </TravelContext.Provider>
