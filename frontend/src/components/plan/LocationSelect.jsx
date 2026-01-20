@@ -77,8 +77,8 @@ const LocationSelect = ({ value, onChange }) => {
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium mb-1 text-slate-700">
-        目的地（可多选）
+      <label className="block text-sm font-medium mb-1 text-slate-200/90">
+        🌍 目的地（可多选）
       </label>
       
       {/* 已选城市标签 */}
@@ -89,12 +89,12 @@ const LocationSelect = ({ value, onChange }) => {
             return (
               <div
                 key={index}
-                className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg border border-primary/20"
+                className="flex items-center gap-2 px-3 py-1.5 bg-sky-500/15 text-sky-200 rounded-xl border border-sky-400/40"
               >
                 <span className="text-sm font-medium">{cityName}</span>
                 <button
                   onClick={() => handleRemove(city)}
-                  className="text-primary hover:text-primary/70 transition-colors"
+                  className="text-sky-200 hover:text-sky-100 transition-colors"
                   type="button"
                 >
                   <X size={14} />
@@ -116,10 +116,10 @@ const LocationSelect = ({ value, onChange }) => {
             setTimeout(() => setIsOpen(false), 200);
           }}
           placeholder="输入城市名称，如 东京 / Paris / New York..."
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          className="w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
         />
         {isOpen && (hasKeyword || options.length > 0) && (
-          <div className="absolute mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-10">
+          <div className="absolute mt-2 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-700/70 bg-slate-900/95 backdrop-blur shadow-2xl z-10">
             {options.map((city) => {
               return (
                 <button
@@ -130,7 +130,7 @@ const LocationSelect = ({ value, onChange }) => {
                     e.preventDefault();
                     handleSelect(city);
                   }}
-                  className="w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-2 hover:bg-slate-50 text-slate-700"
+                  className="w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-2 hover:bg-slate-800/60 text-slate-100"
                 >
                   <div>
                     <div className="font-medium truncate">

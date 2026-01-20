@@ -65,11 +65,11 @@ const CitySelect = ({ value, onChange, excludeCities = [] }) => {
     <div className="relative">
       {selectedCity && (
         <div className="mb-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg border border-primary/20 inline-flex">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-sky-500/15 text-sky-200 rounded-xl border border-sky-400/40 inline-flex">
             <span className="text-sm font-medium">{selectedCity.name || selectedCity}</span>
             <button
               onClick={handleRemove}
-              className="text-primary hover:text-primary/70 transition-colors"
+              className="text-sky-200 hover:text-sky-100 transition-colors"
               type="button"
             >
               <X size={14} />
@@ -86,10 +86,10 @@ const CitySelect = ({ value, onChange, excludeCities = [] }) => {
           setTimeout(() => setIsOpen(false), 200);
         }}
         placeholder="输入城市名称，如 北京 / Paris / New York..."
-        className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+        className="w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
       />
       {isOpen && (hasKeyword || options.length > 0) && (
-        <div className="absolute mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-10">
+        <div className="absolute mt-2 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-700/70 bg-slate-900/95 backdrop-blur shadow-2xl z-10">
           {options.map((city) => {
             return (
               <button
@@ -99,7 +99,7 @@ const CitySelect = ({ value, onChange, excludeCities = [] }) => {
                   e.preventDefault();
                   handleSelect(city);
                 }}
-                className="w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-2 hover:bg-slate-50 text-slate-700"
+                className="w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-2 hover:bg-slate-800/60 text-slate-100"
               >
                 <div>
                   <div className="font-medium truncate">
@@ -169,8 +169,8 @@ const AddressInput = ({ addresses, onChange }) => {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="block text-sm font-medium text-slate-700">
-          居住地址（多地）
+        <label className="block text-sm font-medium text-slate-200/90">
+          🏠 居住地址（多地）
         </label>
         <Button
           type="button"
@@ -185,7 +185,7 @@ const AddressInput = ({ addresses, onChange }) => {
       </div>
       
       {addresses.length === 0 && (
-        <div className="text-sm text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">
+        <div className="text-sm text-slate-400 text-center py-4 border border-dashed border-slate-700/70 rounded-xl bg-slate-950/20">
           请添加至少一个居住地址
         </div>
       )}
@@ -200,10 +200,10 @@ const AddressInput = ({ addresses, onChange }) => {
         return (
           <div
             key={index}
-            className="p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3"
+            className="p-4 border border-slate-700/70 rounded-2xl bg-slate-950/20 space-y-3"
           >
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-slate-700">
+              <h4 className="text-sm font-medium text-slate-100">
                 地址 {index + 1}
               </h4>
               <button
@@ -222,7 +222,7 @@ const AddressInput = ({ addresses, onChange }) => {
             
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">
+                <label className="block text-xs text-slate-400 mb-1">
                   城市
                 </label>
                 <CitySelect
@@ -234,7 +234,7 @@ const AddressInput = ({ addresses, onChange }) => {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">
+                <label className="block text-xs text-slate-400 mb-1">
                   详细地址
                 </label>
                 <input
@@ -244,7 +244,7 @@ const AddressInput = ({ addresses, onChange }) => {
                     handleAddressChange(index, 'address', e.target.value)
                   }
                   placeholder="如：朝阳区xxx街道xxx号"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  className="w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
                 />
               </div>
             </div>

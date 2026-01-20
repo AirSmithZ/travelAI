@@ -4,7 +4,7 @@ import { useTravel } from '../context/TravelContext';
 import { INTEREST_TAGS, CUISINES } from '../data/mockData';
 import Button from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { Plane, Users, Plus, X } from 'lucide-react';
+import { Plane, Users, Plus, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { Tag, Input } from 'antd';
 import LocationSelect from '../components/plan/LocationSelect';
 import FlightInput from '../components/plan/FlightInput';
@@ -21,6 +21,12 @@ const Onboarding = () => {
   const [foodOptions, setFoodOptions] = useState(CUISINES);
   const [newFood, setNewFood] = useState('');
   const [newNoteLink, setNewNoteLink] = useState('');
+
+  // 统一的深色表单样式（仅 Onboarding 使用）
+  const labelCls = 'block text-sm font-medium text-slate-200/90';
+  const hintCls = 'mt-1 text-xs text-slate-400';
+  const inputCls = 'w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20';
+  const inputSmCls = 'w-full rounded-lg border border-slate-700/70 bg-slate-950/30 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20';
 
   const { runAsync: createPlan } = useRequest(
     (payload) => travelApi.createPlan(payload),
@@ -60,6 +66,12 @@ const Onboarding = () => {
     }));
     // 方便直接点击生成
     setStep(2);
+  };
+
+  const handleJumpToPlan = () => {
+    // 仅预览地图页：不发起后端生成请求
+    setIsGenerating(false);
+    navigate('/plan');
   };
 
   const handleInterestToggle = (tag) => {
@@ -181,6 +193,64 @@ const Onboarding = () => {
     });
   };
 
+  const setBudgetMin = (value) => {
+    const parsed = parseInt(String(value ?? ''), 10);
+    let v = Number.isNaN(parsed) ? 0 : parsed;
+    if (v < 0) v = 0;
+    setPreferences((prev) => {
+      const next = { ...prev.budget };
+      next.min = v;
+      if (next.min > next.max) next.max = next.min;
+      return { ...prev, budget: next };
+    });
+  };
+
+  const setBudgetMax = (value) => {
+    const parsed = parseInt(String(value ?? ''), 10);
+    let v = Number.isNaN(parsed) ? 0 : parsed;
+    if (v < 0) v = 0;
+    setPreferences((prev) => {
+      const next = { ...prev.budget };
+      next.max = v;
+      if (next.max < next.min) next.min = next.max;
+      return { ...prev, budget: next };
+    });
+  };
+
+  const BudgetStepper = ({ value, onChange }) => {
+    return (
+      <div className="relative">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${inputCls} pr-10`}
+        />
+        <div className="absolute right-1 top-1 bottom-1 flex flex-col gap-1">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onChange((parseInt(value || 0, 10) || 0) + 1)}
+            className="flex-1 w-8 rounded-lg border border-slate-800/70 bg-slate-950/35 hover:bg-slate-950/55 text-slate-200 flex items-center justify-center transition"
+            aria-label="increase"
+          >
+            <ChevronUp size={14} />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onChange(Math.max(0, (parseInt(value || 0, 10) || 0) - 1))}
+            className="flex-1 w-8 rounded-lg border border-slate-800/70 bg-slate-950/35 hover:bg-slate-950/55 text-slate-200 flex items-center justify-center transition"
+            aria-label="decrease"
+          >
+            <ChevronDown size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const handleNext = async () => {
     if (step < 2) {
       setStep(step + 1);
@@ -258,41 +328,66 @@ const Onboarding = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Image */}
-      <div className="absolute inset-0 z-0 opacity-10">
-        <img 
-          src="https://www.weavefox.cn/api/bolt/unsplash_image?keyword=travel,map&width=1920&height=1080&random=bg" 
-          alt="background" 
-          className="w-full h-full object-cover"
-        />
+    <div className="tp-onboarding min-h-screen bg-slate-950 relative overflow-hidden flex items-center justify-center px-4 py-6">
+      {/* Atmospheric Background */}
+      <div className="pointer-events-none absolute inset-0 opacity-60">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.25),_transparent_55%),radial-gradient(circle_at_bottom,_rgba(244,114,182,0.2),_transparent_55%)]" />
+        <div className="absolute -top-32 -right-24 w-72 h-72 bg-primary/20 rounded-full blur-3xl" />
+        <div className="absolute -bottom-32 -left-24 w-80 h-80 bg-emerald-400/10 rounded-full blur-3xl" />
       </div>
 
-      <Card className="w-full max-w-2xl z-10 shadow-xl border-t-4 border-primary">
-        <CardHeader>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-primary">步骤 {step} / 2</span>
+      <Card className="relative w-full max-w-3xl md:max-w-4xl z-10 shadow-2xl border border-slate-800/60 bg-slate-900/80 backdrop-blur-xl">
+        <CardHeader className="pb-4 border-b border-slate-800/80">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <span className="text-xs font-medium tracking-widest text-slate-400 uppercase">
+                Travel Setup
+              </span>
+              <div className="mt-1 text-sm font-medium text-sky-300">
+                步骤 {step} / 2
+              </div>
+            </div>
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={handleMockFill}
-                className="text-xs px-2.5 py-1 rounded-md border border-slate-200 bg-white text-slate-600 hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
+                className="text-xs rounded-full px-4"
               >
-                Mock 填充
-              </button>
-              <Plane className="text-primary h-6 w-6" />
+                一键示例
+              </Button>
+              <div className="h-8 w-8 rounded-full bg-sky-500/20 flex items-center justify-center border border-sky-400/40">
+                <Plane className="text-sky-300 h-4 w-4" />
+              </div>
             </div>
           </div>
-          <CardTitle className="text-3xl text-slate-800">
+
+          {/* Step progress bar */}
+          <div className="flex items-center gap-2 mb-3">
+            {[1, 2].map((idx) => {
+              const active = step >= idx;
+              return (
+                <div
+                  key={idx}
+                  className={`h-1.5 flex-1 rounded-full transition-all ${
+                    active ? 'bg-gradient-to-r from-sky-400 to-emerald-400' : 'bg-slate-700'
+                  }`}
+                />
+              );
+            })}
+          </div>
+
+          <CardTitle className="text-3xl md:text-4xl text-slate-50 tracking-tight leading-tight">
             {step === 1 && '让我们开始规划您的梦想之旅'}
             {step === 2 && '完善您的旅行偏好'}
           </CardTitle>
-          <p className="text-slate-500 mt-2">
+          <p className="text-slate-300/90 mt-3 text-sm md:text-base leading-relaxed max-w-2xl">
             {step === 1 && '请选择目的地、出行时间和航班信息，AI 将为您定制行程。'}
             {step === 2 && '最后确认预算、兴趣和同行人员。'}
           </p>
         </CardHeader>
-        <CardContent className="space-y-8 mt-4">
+        <CardContent className="space-y-8 mt-4 text-slate-100">
           
           {step === 1 && (
             <div className="space-y-6">
@@ -335,40 +430,27 @@ const Onboarding = () => {
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-4 text-slate-700">
-                  预算范围（¥）
+                <label className={`${labelCls} mb-4`}>
+                  💰 预算范围（¥）
                 </label>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-500">最少</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={preferences.budget.min}
-                      onChange={handleBudgetMinChange}
-                      className="w-28 rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                    />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[11px] text-slate-300/80 mb-1">最少</div>
+                    <BudgetStepper value={preferences.budget.min} onChange={setBudgetMin} />
                   </div>
-                  <span className="text-slate-400">-</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-500">最多</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={preferences.budget.max}
-                      onChange={handleBudgetMaxChange}
-                      className="w-28 rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                    />
+                  <div>
+                    <div className="text-[11px] text-slate-300/80 mb-1">最多</div>
+                    <BudgetStepper value={preferences.budget.max} onChange={setBudgetMax} />
                   </div>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  将会用于估算整体行程的消费水平。
+                <p className={hintCls}>
+                  用于估算整体行程消费水平（可随时调整）。
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-3 text-slate-700">
-                  兴趣标签（多选，可自定义）
+                <label className={`${labelCls} mb-3`}>
+                  ✨ 兴趣标签（多选，可自定义）
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {interestOptions.map((tag) => {
@@ -376,13 +458,16 @@ const Onboarding = () => {
                     return (
                       <Tag
                         key={tag}
-                        color={isSelected ? 'processing' : undefined}
                         closable
                         onClose={(e) => {
                           e.preventDefault();
                           handleInterestRemove(tag);
                         }}
-                        className="cursor-pointer px-3 py-1 text-sm"
+                        className={`cursor-pointer px-3 py-1 text-sm border ${
+                          isSelected
+                            ? 'border-sky-400/60 bg-sky-500/15 text-sky-200'
+                            : 'border-slate-700 bg-slate-950/30 text-slate-200 hover:border-slate-500'
+                        }`}
                         onClick={() => handleInterestToggle(tag)}
                       >
                         {tag}
@@ -395,14 +480,14 @@ const Onboarding = () => {
                     value={newInterest}
                     onChange={(e) => setNewInterest(e.target.value)}
                     onPressEnter={handleAddInterest}
-                    className="w-32 mt-1"
+                    className="w-36 mt-1"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-3 text-slate-700">
-                  美食偏好（多选，可自定义）
+                <label className={`${labelCls} mb-3`}>
+                  🍜 美食偏好（多选，可自定义）
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {foodOptions.map((tag) => {
@@ -410,13 +495,16 @@ const Onboarding = () => {
                     return (
                       <Tag
                         key={tag}
-                        color={isSelected ? 'magenta' : undefined}
                         closable
                         onClose={(e) => {
                           e.preventDefault();
                           handleFoodRemove(tag);
                         }}
-                        className="cursor-pointer px-3 py-1 text-sm"
+                        className={`cursor-pointer px-3 py-1 text-sm border ${
+                          isSelected
+                            ? 'border-fuchsia-400/60 bg-fuchsia-500/15 text-fuchsia-200'
+                            : 'border-slate-700 bg-slate-950/30 text-slate-200 hover:border-slate-500'
+                        }`}
                         onClick={() => handleFoodToggle(tag)}
                       >
                         {tag}
@@ -429,14 +517,14 @@ const Onboarding = () => {
                     value={newFood}
                     onChange={(e) => setNewFood(e.target.value)}
                     onPressEnter={handleAddFood}
-                    className="w-32 mt-1"
+                    className="w-36 mt-1"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-3 text-slate-700">
-                  小红书笔记链接（可选）
+                <label className={`${labelCls} mb-3`}>
+                  📌 小红书笔记链接（可选）
                 </label>
                 <div className="space-y-2">
                   {(preferences.xiaohongshuNotes || []).length > 0 && (
@@ -444,19 +532,19 @@ const Onboarding = () => {
                       {preferences.xiaohongshuNotes.map((link, index) => (
                         <div
                           key={index}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-slate-950/30 rounded-xl border border-slate-700/70"
                         >
                           <a
                             href={link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sm text-primary hover:underline truncate max-w-xs"
+                            className="text-sm text-sky-300 hover:underline truncate max-w-xs"
                           >
                             {link}
                           </a>
                           <button
                             onClick={() => handleRemoveNoteLink(link)}
-                            className="text-slate-400 hover:text-slate-600 transition-colors"
+                            className="text-slate-400 hover:text-slate-200 transition-colors"
                             type="button"
                           >
                             <X size={14} />
@@ -473,23 +561,24 @@ const Onboarding = () => {
                       onPressEnter={handleAddNoteLink}
                       className="flex-1"
                     />
-                    <button
+                    <Button
                       onClick={handleAddNoteLink}
-                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+                      variant="default"
                       type="button"
+                      className="px-5"
                     >
                       <Plus size={16} />
                       添加
-                    </button>
+                    </Button>
                   </div>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  可以添加多个小红书笔记链接，用于参考和规划行程。
+                <p className={hintCls}>
+                  可添加多个链接，用于让 AI 更贴近你的偏好与路线参考。
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-3 text-slate-700">同行人员</label>
+                <label className={`${labelCls} mb-3`}>👥 同行人员</label>
                 <div className="grid grid-cols-2 gap-4">
                   {[
                     { id: 'solo', label: '独自一人', icon: Users },
@@ -500,10 +589,10 @@ const Onboarding = () => {
                     <button
                       key={type.id}
                       onClick={() => setPreferences(p => ({ ...p, travelers: type.id }))}
-                      className={`p-4 rounded-lg border flex items-center gap-3 transition-all ${
+                      className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
                         preferences.travelers === type.id
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-slate-200 hover:bg-slate-50'
+                          ? 'border-sky-400/70 bg-sky-500/10 text-sky-100'
+                          : 'border-slate-700/70 bg-slate-950/20 hover:bg-slate-950/35 text-slate-200'
                       }`}
                     >
                       <type.icon size={20} />
@@ -515,7 +604,7 @@ const Onboarding = () => {
             </div>
           )}
 
-          <div className="flex justify-between pt-4 border-t">
+          <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-800/80">
             <Button 
               variant="ghost" 
               onClick={() => setStep(s => Math.max(1, s - 1))}
@@ -523,6 +612,11 @@ const Onboarding = () => {
             >
               上一步
             </Button>
+            {step === 1 && (
+              <Button variant="outline" onClick={handleJumpToPlan} className="px-6">
+                🗺️ 直接进入地图页
+              </Button>
+            )}
             <Button onClick={handleNext} variant="accent" className="px-8">
               {step === 2 ? '生成行程' : '下一步'}
             </Button>

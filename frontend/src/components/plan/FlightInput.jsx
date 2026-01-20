@@ -34,8 +34,8 @@ const FlightInput = ({ flights, onChange }) => {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="block text-sm font-medium text-slate-700">
-          航班信息（多程）
+        <label className="block text-sm font-medium text-slate-200/90">
+          ✈️ 航班信息（多程）
         </label>
         <Button
           type="button"
@@ -50,7 +50,7 @@ const FlightInput = ({ flights, onChange }) => {
       </div>
       
       {flights.length === 0 && (
-        <div className="text-sm text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">
+        <div className="text-sm text-slate-400 text-center py-4 border border-dashed border-slate-700/70 rounded-xl bg-slate-950/20">
           请添加至少一个航班信息
         </div>
       )}
@@ -58,10 +58,10 @@ const FlightInput = ({ flights, onChange }) => {
       {flights.map((flight, index) => (
         <div
           key={index}
-          className="p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3"
+          className="p-4 border border-slate-700/70 rounded-2xl bg-slate-950/20 space-y-3"
         >
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-slate-700">
+            <h4 className="text-sm font-medium text-slate-100">
               航班 {index + 1}
             </h4>
             <button
@@ -80,7 +80,7 @@ const FlightInput = ({ flights, onChange }) => {
           
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">
+              <label className="block text-xs text-slate-400 mb-1">
                 起飞机场
               </label>
               <input
@@ -90,11 +90,11 @@ const FlightInput = ({ flights, onChange }) => {
                   handleFlightChange(index, 'departureAirport', e.target.value)
                 }
                 placeholder="如：PEK"
-                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                className="w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">
+              <label className="block text-xs text-slate-400 mb-1">
                 落地机场
               </label>
               <input
@@ -104,14 +104,14 @@ const FlightInput = ({ flights, onChange }) => {
                   handleFlightChange(index, 'arrivalAirport', e.target.value)
                 }
                 placeholder="如：NRT"
-                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                className="w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">
+              <label className="block text-xs text-slate-400 mb-1">
                 出发时间
               </label>
               <DatePicker
@@ -127,7 +127,7 @@ const FlightInput = ({ flights, onChange }) => {
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">
+              <label className="block text-xs text-slate-400 mb-1">
                 返回时间
               </label>
               <DatePicker

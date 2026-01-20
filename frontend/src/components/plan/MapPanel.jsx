@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTravel } from '../../context/TravelContext';
+import { Compass, MapPin, Utensils, Plane, Hotel } from 'lucide-react';
 
 // 简单的脚本加载工具，避免重复加载高德 SDK
 const loadAmapScript = (() => {
@@ -37,6 +38,7 @@ const MapPanel = () => {
   const polylineRef = useRef(null);
   const markersRef = useRef([]);
   const lastSignatureRef = useRef('');
+  const [mapReady, setMapReady] = useState(false);
 
   // 如果有后端返回的 mapPoints，则优先使用；否则退回到基于 itinerary 的本地模拟数据
   const fallbackItineraryPoints = Object.values(itinerary || {}).flat();
@@ -61,6 +63,7 @@ const MapPanel = () => {
             viewMode: '2D',
             zooms: [3, 20],
           });
+          setMapReady(true);
         } else {
           mapRef.current.setZoomAndCenter(mapZoom, center);
         }
@@ -68,14 +71,22 @@ const MapPanel = () => {
         // 清理旧标记
         if (markersRef.current.length) {
           markersRef.current.forEach((marker) => {
-            mapRef.current.remove(marker);
+            try {
+              mapRef.current.remove(marker);
+            } catch (e) {
+              // ignore
+            }
           });
           markersRef.current = [];
         }
 
         // 清理旧折线
         if (polylineRef.current) {
-          mapRef.current.remove(polylineRef.current);
+          try {
+            mapRef.current.remove(polylineRef.current);
+          } catch (e) {
+            // ignore
+          }
           polylineRef.current = null;
         }
 
@@ -167,24 +178,82 @@ const MapPanel = () => {
 
     return () => {
       isMounted = false;
+      // 关键：销毁地图实例，避免 React 卸载时 DOM 已被第三方改动导致 removeChild 报错
+      try {
+        if (polylineRef.current && mapRef.current) {
+          mapRef.current.remove(polylineRef.current);
+          polylineRef.current = null;
+        }
+      } catch (e) {
+        // ignore
+      }
+      try {
+        if (markersRef.current.length && mapRef.current) {
+          markersRef.current.forEach((m) => {
+            try { mapRef.current.remove(m); } catch (e) { /* ignore */ }
+          });
+          markersRef.current = [];
+        }
+      } catch (e) {
+        // ignore
+      }
+      try {
+        if (mapRef.current) {
+          mapRef.current.destroy();
+          mapRef.current = null;
+        }
+      } catch (e) {
+        // ignore
+      }
+      lastSignatureRef.current = '';
+      setMapReady(false);
     };
   }, [mapCenter, mapZoom, allPoints.length]);
 
   return (
-    <div className="h-full w-full relative z-0">
+    <div className="h-full w-full relative z-0 bg-slate-950">
       <div ref={mapContainerRef} className="h-full w-full" />
 
       {/* Map Legend */}
       {allPoints.length > 0 && (
-        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-3 rounded-lg shadow-md border border-slate-200 text-xs space-y-2 z-[1000]">
-          <div className="font-semibold mb-1">图例</div>
+        <div className="absolute top-4 right-4 bg-slate-900/75 backdrop-blur-xl p-3 rounded-xl shadow-2xl border border-slate-800/70 text-xs space-y-2 text-slate-100 z-[1000]">
+          <div className="font-semibold mb-1 flex items-center gap-2 text-slate-100">
+            <Compass size={14} className="text-sky-300" />
+            图例
+          </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-[#2B6CB0] border border-white shadow-sm" />
-            <span>景点</span>
+            <span className="flex items-center gap-1">
+              <MapPin size={12} className="text-slate-300" /> 景点
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-[#F56565] border border-white shadow-sm" />
-            <span>美食</span>
+            <span className="flex items-center gap-1">
+              <Utensils size={12} className="text-slate-300" /> 美食
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#22C55E] border border-white shadow-sm" />
+            <span className="flex items-center gap-1">
+              <Plane size={12} className="text-slate-300" /> 机场
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#92400E] border border-white shadow-sm" />
+            <span className="flex items-center gap-1">
+              <Hotel size={12} className="text-slate-300" /> 住宿
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Map Loading（更透明 + 深色主题） */}
+      {!mapReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/35 backdrop-blur-[2px]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-2 border-slate-700/80 border-t-sky-400 rounded-full animate-spin" />
+            <div className="text-xs text-slate-300">地图加载中…</div>
           </div>
         </div>
       )}

@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 流式渲染淡入动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* 隐藏滚动条 */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -35,6 +61,106 @@
     @apply bg-background text-foreground;
     font-family: 'Inter', sans-serif;
   }
+}
+
+/* ===== Onboarding Dark Theme (scoped) ===== */
+.tp-onboarding .ant-input,
+.tp-onboarding .ant-input-affix-wrapper,
+.tp-onboarding .ant-input-affix-wrapper > input.ant-input {
+  background: rgba(2, 6, 23, 0.35) !important;
+  border-color: rgba(51, 65, 85, 0.7) !important;
+  color: rgba(226, 232, 240, 0.98) !important;
+}
+.tp-onboarding .ant-input::placeholder,
+.tp-onboarding .ant-input-affix-wrapper > input.ant-input::placeholder {
+  color: rgba(148, 163, 184, 0.9) !important;
+}
+.tp-onboarding .ant-input-affix-wrapper:focus,
+.tp-onboarding .ant-input-affix-wrapper-focused,
+.tp-onboarding .ant-input:focus {
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.18) !important;
+  border-color: rgba(56, 189, 248, 0.7) !important;
+}
+
+.tp-onboarding .ant-picker {
+  background: rgba(2, 6, 23, 0.35) !important;
+  border-color: rgba(51, 65, 85, 0.7) !important;
+  border-radius: 0.75rem !important;
+}
+.tp-onboarding .ant-picker input {
+  color: rgba(226, 232, 240, 0.98) !important;
+}
+.tp-onboarding .ant-picker .ant-picker-suffix,
+.tp-onboarding .ant-picker .ant-picker-clear {
+  color: rgba(148, 163, 184, 0.95) !important;
+}
+.tp-onboarding .ant-picker-focused {
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.18) !important;
+  border-color: rgba(56, 189, 248, 0.7) !important;
+}
+
+.tp-onboarding .ant-tag {
+  border-radius: 9999px !important;
+  border-color: rgba(51, 65, 85, 0.9) !important;
+}
+.tp-onboarding .ant-tag .ant-tag-close-icon {
+  color: rgba(226, 232, 240, 0.75) !important;
+}
+.tp-onboarding .ant-tag .ant-tag-close-icon:hover {
+  color: rgba(226, 232, 240, 0.95) !important;
+}
+
+/* ===== Plan Dark Modal (scoped) ===== */
+.tp-plan .ant-modal-mask {
+  background: rgba(2, 6, 23, 0.78) !important;
+  backdrop-filter: blur(6px);
+}
+.tp-plan .ant-modal-content {
+  background: rgba(15, 23, 42, 0.88) !important;
+  border: 1px solid rgba(51, 65, 85, 0.7) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55) !important;
+}
+.tp-plan .ant-modal-confirm-title,
+.tp-plan .ant-modal-title {
+  color: rgba(226, 232, 240, 0.98) !important;
+}
+.tp-plan .ant-modal-confirm-content,
+.tp-plan .ant-modal-body {
+  color: rgba(148, 163, 184, 0.95) !important;
+}
+.tp-plan .ant-modal-close-x {
+  color: rgba(148, 163, 184, 0.95) !important;
+}
+.tp-plan .ant-modal-confirm .anticon {
+  color: rgba(56, 189, 248, 0.85) !important;
+}
+.tp-plan .ant-btn {
+  border-radius: 12px !important;
+  border-color: rgba(51, 65, 85, 0.8) !important;
+  background: rgba(2, 6, 23, 0.25) !important;
+  color: rgba(226, 232, 240, 0.96) !important;
+}
+.tp-plan .ant-btn:hover {
+  border-color: rgba(100, 116, 139, 0.9) !important;
+  background: rgba(2, 6, 23, 0.35) !important;
+}
+.tp-plan .ant-btn-primary {
+  border: none !important;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 1), rgba(52, 211, 153, 1)) !important;
+  color: rgba(2, 6, 23, 0.98) !important;
+}
+.tp-plan .ant-btn-primary:hover {
+  filter: brightness(1.02);
+}
+.tp-plan .ant-btn-dangerous {
+  border-color: rgba(248, 113, 113, 0.55) !important;
+  color: rgba(254, 202, 202, 0.98) !important;
+  background: rgba(127, 29, 29, 0.25) !important;
+}
+.tp-plan .ant-btn-dangerous:hover {
+  border-color: rgba(248, 113, 113, 0.8) !important;
+  background: rgba(127, 29, 29, 0.35) !important;
 }
 
 /* Leaflet Map Styles Fix */

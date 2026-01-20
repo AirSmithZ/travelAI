@@ -21,7 +21,8 @@ class TravelService:
             api_key=settings.DEEPSEEK_API_KEY,
             base_url="https://api.deepseek.com/v1",
             temperature=0.7,
-            max_tokens=2000
+            # 行程 JSON 很长，2000 容易被截断导致解析失败；提高上限以确保输出完整
+            max_tokens=6000
         )
         self.location_client = LocationAPIClient()
         self.xiaohongshu_client = XiaohongshuClient()
@@ -235,8 +236,36 @@ class TravelService:
             itinerary_details = []
             for day_num in range(1, days + 1):
                 day_itinerary = itinerary_data.get(f"day_{day_num}", {})
-                day_spots = day_itinerary.get("spots", [])
-                day_restaurants = day_itinerary.get("restaurants", [])
+                
+                # 兼容新结构 schedule：派生 spots/restaurants，避免下游结果为空
+                day_spots = day_itinerary.get("spots", []) or []
+                day_restaurants = day_itinerary.get("restaurants", []) or []
+                schedule = day_itinerary.get("schedule") or {}
+                if (not day_spots and not day_restaurants) and schedule:
+                    def _norm_list(v):
+                        if not v:
+                            return []
+                        if isinstance(v, list):
+                            return v
+                        if isinstance(v, dict) and isinstance(v.get("items"), list):
+                            return v.get("items")
+                        if isinstance(v, dict):
+                            return [v]
+                        return []
+                    merged = []
+                    merged += _norm_list(schedule.get("morning"))
+                    merged += _norm_list(schedule.get("afternoon"))
+                    merged += _norm_list(schedule.get("evening"))
+                    # 简单按 type/cuisine 判断
+                    for p in merged:
+                        ptype = p.get("type") or ("restaurant" if (p.get("cuisine") or p.get("cuisine_type") or p.get("price_range")) else "spot")
+                        if ptype == "restaurant":
+                            day_restaurants.append(p)
+                        else:
+                            day_spots.append(p)
+                    # 回写到 itinerary，便于前端/DB 兼容读取
+                    day_itinerary["spots"] = day_spots
+                    day_itinerary["restaurants"] = day_restaurants
 
                 travel_crud.create_itinerary_detail(
                     travel_plan_id=travel_plan_id,
@@ -255,8 +284,74 @@ class TravelService:
                     }
                 )
 
-                # 逐天推送进度，前端可实时渲染
-                yield sse("day", {"day_number": day_num, "itinerary": day_itinerary})
+                # 由后端直接组装前端可用的 items，减轻前端解析逻辑
+                def _num(v):
+                    if v is None:
+                        return None
+                    if isinstance(v, (int, float)):
+                        return float(v)
+                    try:
+                        return float(v)
+                    except Exception:
+                        return None
+
+                def _dur(v, default=60):
+                    if v is None:
+                        return default
+                    if isinstance(v, (int, float)):
+                        return int(v)
+                    try:
+                        return int(float(v))
+                    except Exception:
+                        return default
+
+                items = []
+                for idx, s in enumerate(day_spots or []):
+                    items.append({
+                        "uniqueId": f"spot_{day_num}_{idx}",
+                        "name": s.get("name") or s.get("location") or f"景点{idx + 1}",
+                        "category": "景点",
+                        "duration": _dur(s.get("play_time_minutes"), _dur(s.get("recommended_time"), 60)),
+                        "lat": _num(s.get("latitude")),
+                        "lng": _num(s.get("longitude")),
+                        "description": s.get("description"),
+                        "notes": s.get("notes"),
+                        "commute_from_prev": s.get("commute_from_prev"),
+                    })
+                for idx, r in enumerate(day_restaurants or []):
+                    items.append({
+                        "uniqueId": f"rest_{day_num}_{idx}",
+                        "name": r.get("name") or f"餐厅{idx + 1}",
+                        "category": "美食",
+                        "duration": _dur(r.get("play_time_minutes"), 60),
+                        "lat": _num(r.get("latitude")),
+                        "lng": _num(r.get("longitude")),
+                        "description": r.get("description"),
+                        "notes": r.get("notes"),
+                        "commute_from_prev": r.get("commute_from_prev"),
+                        "cuisine": r.get("cuisine"),
+                        "price_range": r.get("price_range"),
+                    })
+
+                # 逐天推送：直接给 items，并附带 stats 方便前端定位“为何为空”
+                def _safe_len(v):
+                    if isinstance(v, list):
+                        return len(v)
+                    if isinstance(v, dict) and isinstance(v.get("items"), list):
+                        return len(v.get("items"))
+                    return 0
+
+                stats = {
+                    "spots": len(day_spots) if isinstance(day_spots, list) else 0,
+                    "restaurants": len(day_restaurants) if isinstance(day_restaurants, list) else 0,
+                    "schedule": {
+                        "morning": _safe_len((day_itinerary.get("schedule") or {}).get("morning")),
+                        "afternoon": _safe_len((day_itinerary.get("schedule") or {}).get("afternoon")),
+                        "evening": _safe_len((day_itinerary.get("schedule") or {}).get("evening")),
+                    },
+                }
+
+                yield sse("day", {"day_number": day_num, "items": items, "stats": stats})
 
             result = {
                 "success": True,
@@ -302,35 +397,47 @@ class TravelService:
 
 {f"参考的小红书笔记内容：{xhs_content}" if xhs_content else ""}
 
-请按照以下JSON格式返回路线规划：
+请按照以下JSON格式返回路线规划（重点：按早/中/晚分段，并给出“点到点通勤”细节、游玩时长、注意事项）：
 {{
     "day_1": {{
         "date": "{start_date}",
         "theme": "主题描述",
-        "morning": {{
-            "time": "09:00-12:00",
-            "activity": "活动描述",
-            "location": "地点名称",
-            "description": "详细描述"
+        "schedule": {{
+            "morning": [
+                {{
+                    "type": "spot",
+                    "name": "景点名称",
+                    "description": "景点简介/看点",
+                    "play_time_minutes": 90,
+                    "recommended_time": "建议游览时间（例如 1-2小时）",
+                    "notes": ["注意事项1", "注意事项2"],
+                    "commute_from_prev": {{
+                        "mode": "步行/地铁/公交/打车",
+                        "duration_minutes": 15,
+                        "transfers": 1,
+                        "details": "是否换乘、建议线路/站点等提示"
+                    }}
+                }}
+            ],
+            "afternoon": [
+                {{
+                    "type": "restaurant",
+                    "name": "餐厅名称",
+                    "cuisine": "菜系",
+                    "description": "餐厅特色与推荐菜",
+                    "price_range": "人均/价格范围",
+                    "play_time_minutes": 60,
+                    "notes": ["注意事项（例如需排队/预约）"],
+                    "commute_from_prev": {{
+                        "mode": "地铁",
+                        "duration_minutes": 25,
+                        "transfers": 1,
+                        "details": "换乘站点、出站口建议等"
+                    }}
+                }}
+            ],
+            "evening": []
         }},
-        "afternoon": {{
-            "time": "14:00-18:00",
-            "activity": "活动描述",
-            "location": "地点名称",
-            "description": "详细描述"
-        }},
-        "evening": {{
-            "time": "19:00-21:00",
-            "activity": "活动描述",
-            "location": "地点名称",
-            "description": "详细描述"
-        }},
-        "spots": [
-            {{"name": "景点名称", "description": "景点描述", "recommended_time": "建议游览时间"}}
-        ],
-        "restaurants": [
-            {{"name": "餐厅名称", "cuisine": "菜系", "description": "餐厅描述", "price_range": "价格范围"}}
-        ],
         "tips": "当日旅行小贴士"
     }},
     "day_2": {{...}},
@@ -342,8 +449,11 @@ class TravelService:
 2. 考虑交通便利性和时间合理性
 3. 结合用户的旅行偏好和饮食偏好
 4. 控制预算在指定范围内
-5. 提供实用的旅行建议和注意事项
-6. 确保路线连贯，避免重复路线
+5. 对每个活动给出合理的 play_time_minutes（分钟）
+6. 对每个活动尽量给出 notes（注意事项），没有则给空数组 []
+7. 对 morning/afternoon/evening 每个列表中，从第二个点开始给出 commute_from_prev（通勤方式/耗时/换乘次数/提示）
+8. 确保路线连贯，避免重复路线
+9. 不要输出除 JSON 外的任何文字
 
 请直接返回JSON格式，不要包含其他文字说明。"""
 
@@ -353,13 +463,48 @@ class TravelService:
         """解析LLM返回的路线文本"""
         import json
         import re
-        
+
+        def _strip_code_fences(text: str) -> str:
+            """移除 ```json ... ``` / ``` ... ``` 等代码块包裹。"""
+            if not text:
+                return text
+            # 去掉常见 ```json / ``` 包裹
+            text = re.sub(r"^\s*```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+            text = re.sub(r"\s*```\s*$", "", text)
+            return text.strip()
+
+        raw = (response_text or "").strip()
+        raw = _strip_code_fences(raw)
+
+        # 1) 先尝试整段直接 json.loads（有些模型会严格返回 JSON）
         try:
-            # 尝试提取JSON部分
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
-                return json.loads(json_str)
+            obj = json.loads(raw)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
+
+        # 2) 使用 JSONDecoder.raw_decode 从任意位置提取“第一段合法 JSON 对象”
+        #    能容忍前后夹杂文本、以及 JSON 后还有多余字符
+        decoder = json.JSONDecoder()
+        start = raw.find("{")
+        while start != -1:
+            try:
+                obj, end = decoder.raw_decode(raw[start:])
+                if isinstance(obj, dict):
+                    return obj
+            except Exception:
+                pass
+            start = raw.find("{", start + 1)
+
+        # 3) 兜底：尝试用最外层大括号截取（尽量修复模型在 JSON 前后夹杂的情况）
+        try:
+            first = raw.find("{")
+            last = raw.rfind("}")
+            if first != -1 and last != -1 and last > first:
+                obj = json.loads(raw[first:last + 1])
+                if isinstance(obj, dict):
+                    return obj
         except Exception as e:
             print(f"❌ 解析路线JSON失败：{e}")
         
@@ -368,11 +513,11 @@ class TravelService:
         for day in range(1, days + 1):
             default_itinerary[f"day_{day}"] = {
                 "theme": f"第{day}天行程",
-                "morning": {"time": "09:00-12:00", "activity": "待规划", "location": "", "description": ""},
-                "afternoon": {"time": "14:00-18:00", "activity": "待规划", "location": "", "description": ""},
-                "evening": {"time": "19:00-21:00", "activity": "待规划", "location": "", "description": ""},
-                "spots": [],
-                "restaurants": [],
+                "schedule": {
+                    "morning": [],
+                    "afternoon": [],
+                    "evening": [],
+                },
                 "tips": ""
             }
         

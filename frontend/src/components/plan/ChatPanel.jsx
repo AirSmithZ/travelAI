@@ -47,21 +47,21 @@ const ChatPanel = () => {
   ];
 
   return (
-    <div className={`bg-white border-b border-slate-200 flex flex-col transition-all duration-300 ${isCollapsed ? 'h-16' : 'h-[35vh] min-h-[250px]'}`}>
+    <div className={`bg-transparent flex flex-col transition-all duration-300 ${isCollapsed ? 'h-16' : 'h-[35vh] min-h-[250px]'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/70 bg-slate-900/50">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <Sparkles size={16} className="text-primary" />
+          <div className="w-8 h-8 rounded-full bg-sky-500/15 border border-sky-400/30 flex items-center justify-center">
+            <Sparkles size={16} className="text-sky-200" />
           </div>
           <div>
-            <h3 className="font-semibold text-sm text-slate-800">AI 旅行助手</h3>
-            {!isCollapsed && <p className="text-xs text-slate-500">随时告诉我您的想法，我会帮您调整</p>}
+            <h3 className="font-semibold text-sm text-slate-100">🤖 AI 旅行助手</h3>
+            {!isCollapsed && <p className="text-xs text-slate-400">随时告诉我你的想法，我会帮你调整路线</p>}
           </div>
         </div>
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 hover:bg-slate-200 rounded text-slate-500"
+          className="p-1 hover:bg-slate-950/30 rounded text-slate-300"
         >
           {isCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
         </button>
@@ -69,13 +69,13 @@ const ChatPanel = () => {
 
       {/* Chat Area */}
       {!isCollapsed && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30" ref={scrollRef}>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/20" ref={scrollRef}>
           {chatHistory.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
                 msg.role === 'user' 
-                  ? 'bg-primary text-white rounded-br-none' 
-                  : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm'
+                  ? 'bg-gradient-to-r from-sky-400 to-emerald-400 text-slate-950 rounded-br-none' 
+                  : 'bg-slate-950/25 border border-slate-800/70 text-slate-100 rounded-bl-none shadow-sm'
               }`}>
                 {msg.content}
               </div>
@@ -86,13 +86,13 @@ const ChatPanel = () => {
 
       {/* Input Area */}
       {!isCollapsed && (
-        <div className="p-4 bg-white border-t border-slate-100">
+        <div className="p-4 bg-slate-900/40 border-t border-slate-800/70">
           <div className="flex gap-2 mb-3 overflow-x-auto pb-1 no-scrollbar">
             {suggestions.map((s, i) => (
               <button 
                 key={i}
                 onClick={() => setInput(s)}
-                className="whitespace-nowrap px-3 py-1 rounded-full bg-slate-100 text-xs text-slate-600 hover:bg-primary/10 hover:text-primary transition-colors"
+                className="whitespace-nowrap px-3 py-1 rounded-full bg-slate-950/25 border border-slate-800/70 text-xs text-slate-200 hover:bg-sky-500/10 hover:border-sky-400/40 transition-colors"
               >
                 {s}
               </button>
@@ -104,12 +104,13 @@ const ChatPanel = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="输入您的需求，例如：'帮我找一家附近的咖啡馆'..."
-              className="w-full pl-4 pr-12 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary focus:border-transparent text-sm shadow-sm"
+              placeholder="✨ 输入你的需求，例如：帮我找一家附近的咖啡馆…"
+              className="w-full pl-4 pr-12 py-3 rounded-xl border border-slate-800/70 bg-slate-950/25 text-slate-100 placeholder:text-slate-500 focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400/50 text-sm shadow-sm outline-none"
             />
             <Button 
               size="icon" 
-              className="absolute right-1 top-1 h-8 w-8 bg-primary hover:bg-primary/90"
+              variant="default"
+              className="absolute right-1 top-1 h-9 w-9"
               onClick={handleSend}
             >
               <Send size={14} />

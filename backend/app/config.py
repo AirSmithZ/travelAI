@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
     
     # API Keys
-    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "sk-37818ed797e14b0ea756c07641cd3edb")
+    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "sk-773e340753794beda3e207512402ab6a")
     AMAP_API_KEY: str = os.getenv("AMAP_API_KEY", "31d12ccab5b38ae944d01977a0d37cc1")
     AMAP_SECURITY_KEY: str = os.getenv("AMAP_SECURITY_KEY", "28c7a106d5debb23bf94f58056466abb")
     GOOGLE_PLACES_API_KEY: Optional[str] = os.getenv("GOOGLE_PLACES_API_KEY", None)

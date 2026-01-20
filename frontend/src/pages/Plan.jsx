@@ -54,44 +54,48 @@ const Plan = () => {
     const decoder = new TextDecoder('utf-8');
 
     return new Promise((resolve, reject) => {
+      let tokenCount = 0;
+      let lastTokenPreview = '';
+      let tokenLogTimer = null;
+      let streamingActive = true;
       const parser = createSSEParser((eventName, payload) => {
-        if (eventName === 'day') {
-          const items = [];
-          const dayIt = payload.itinerary || {};
-          const spots = Array.isArray(dayIt.spots) ? dayIt.spots : [];
-          spots.forEach((s, idx) => {
-            items.push({
-              id: s.id || `spot_${payload.day_number}_${idx}`,
-              uniqueId: `spot_${payload.day_number}_${idx}_${Date.now()}`,
-              name: s.name || s.location || `景点${idx + 1}`,
-              category: '景点',
-              // 游玩时间：优先后端/LLM 给的 play_time_minutes，其次解析 recommended_time
-              duration: typeof s.play_time_minutes === 'number'
-                ? s.play_time_minutes
-                : (s.recommended_time ? parseInt(s.recommended_time, 10) || 60 : 60),
-              lat: typeof s.latitude === 'number' ? s.latitude : undefined,
-              lng: typeof s.longitude === 'number' ? s.longitude : undefined,
-            });
-          });
-          const rests = Array.isArray(dayIt.restaurants) ? dayIt.restaurants : [];
-          rests.forEach((r, idx) => {
-            items.push({
-              id: r.id || `rest_${payload.day_number}_${idx}`,
-              uniqueId: `rest_${payload.day_number}_${idx}_${Date.now()}`,
-              name: r.name || `餐厅${idx + 1}`,
-              category: '美食',
-              duration: typeof r.play_time_minutes === 'number' ? r.play_time_minutes : 60,
-              lat: typeof r.latitude === 'number' ? r.latitude : undefined,
-              lng: typeof r.longitude === 'number' ? r.longitude : undefined,
-            });
-          });
+        // 调试：token 非常多，console.log 会显著拖慢主线程（DevTools 渲染/格式化很重）
+        // 这里改为“按时间节流”打印，避免控制台成为瓶颈
+        if (eventName === 'token') {
+          tokenCount += 1;
+          lastTokenPreview = String(payload?.delta ?? '').replace(/\s+/g, ' ').slice(0, 60);
+          if (!tokenLogTimer) {
+            tokenLogTimer = setTimeout(() => {
+              tokenLogTimer = null;
+              if (!streamingActive) return;
+              // eslint-disable-next-line no-console
+              console.log('[SSE token]', `count=${tokenCount}`, `last="${lastTokenPreview}"`);
+            }, 800);
+          }
+          return;
+        }
+        if (eventName === 'heartbeat') return;
 
+        // eslint-disable-next-line no-console
+        console.log('[SSE]', eventName, payload);
+        if (eventName === 'day') {
+          // 后端已直接返回 items，无需再解析 itinerary.spots/restaurants
+          const items = Array.isArray(payload.items) ? payload.items : [];
+          // eslint-disable-next-line no-console
+          console.log('[SSE day]', { day_number: payload.day_number, itemsCount: items.length, stats: payload.stats, items });
           setItinerary((prev) => ({
             ...(prev || {}),
             [`day${payload.day_number}`]: items,
           }));
         }
         if (eventName === 'result') {
+          streamingActive = false;
+          if (tokenLogTimer) {
+            clearTimeout(tokenLogTimer);
+            tokenLogTimer = null;
+          }
+          // eslint-disable-next-line no-console
+          console.log('[SSE result]', payload);
           // 构造地图节点：景点(蓝色) + 餐厅(红色) + 机场(绿色) + 住宿(棕色)
           const points = [];
           (payload.attractions || []).forEach((a, idx) => {
@@ -158,6 +162,11 @@ const Plan = () => {
           resolve({ success: true });
         }
         if (eventName === 'error') {
+          streamingActive = false;
+          if (tokenLogTimer) {
+            clearTimeout(tokenLogTimer);
+            tokenLogTimer = null;
+          }
           // 出错也结束 loading
           // eslint-disable-next-line no-console
           console.error('行程生成出错:', payload);
@@ -333,57 +342,72 @@ const Plan = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white overflow-hidden relative">
+    <div className="h-screen flex flex-col bg-slate-950 overflow-hidden relative">
       {isGenerating && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
-          <div className="w-10 h-10 border-4 border-primary/40 border-t-primary rounded-full animate-spin mb-4" />
-          <div className="text-slate-700 text-sm">AI 正在为你生成路线，请稍候...</div>
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/55 backdrop-blur-md">
+          <div className="bg-slate-900/80 rounded-3xl p-8 shadow-2xl border border-slate-800/70 text-center max-w-sm">
+            <div className="w-16 h-16 border-4 border-slate-700/80 border-t-sky-400 rounded-full animate-spin mx-auto mb-6" />
+            <h3 className="text-lg font-bold text-slate-50 mb-2">AI 正在规划行程</h3>
+            <p className="text-sm text-slate-300">正在为您生成个性化旅行路线...</p>
+            <div className="mt-6 flex items-center justify-center gap-1">
+              <div className="w-2 h-2 bg-sky-400/90 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-sky-400/90 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-sky-400/90 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
         </div>
       )}
-      {/* Header */}
-      <header className="h-14 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-20 shadow-sm">
-        <div className="flex items-center gap-3">
+      {/* Header - 深色模式 */}
+      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/90 backdrop-blur-md z-20 shadow-md">
+        <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="sm"
-            className="text-slate-600"
+            className="text-slate-300 hover:text-slate-50 hover:bg-slate-800 transition-colors"
             onClick={handleBack}
           >
-            <ArrowLeft size={16} className="mr-1" />
-            返回首页
+            <ArrowLeft size={18} className="mr-1.5" />
+            <span className="font-medium">返回</span>
           </Button>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold">
+          <div className="h-8 w-px bg-slate-800" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-sky-900/40">
               TP
             </div>
-            <h1 className="font-bold text-slate-800 hidden sm:block">TravelPlanner AI</h1>
+            <div className="hidden sm:block">
+              <h1 className="font-bold text-slate-50 text-lg leading-none">TravelPlanner</h1>
+              <p className="text-xs text-slate-400 mt-0.5">AI 智能规划</p>
+            </div>
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
-            className="text-slate-600"
+            className="text-slate-300 hover:text-slate-50 hover:bg-slate-800"
             onClick={handleOpenRestaurant}
           >
-            <Utensils size={18} className="mr-2" /> <span className="hidden sm:inline">附近美食</span>
+            <Utensils size={18} className="mr-1.5" /> 
+            <span className="hidden sm:inline font-medium">附近美食</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="text-slate-600"
+            className="text-slate-300 hover:text-slate-50 hover:bg-slate-800"
             onClick={handleToggleSessionDrawer}
           >
-            <List size={18} className="mr-1" />
-            会话
+            <List size={18} className="mr-1.5" />
+            <span className="font-medium">会话</span>
           </Button>
           <Button
             variant="accent"
             size="sm"
+            className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-medium shadow-lg shadow-sky-900/40 transition-all"
             onClick={handleGoShare}
           >
-            <Share2 size={16} className="mr-2" /> 保存分享
+            <Share2 size={16} className="mr-1.5" /> 
+            <span>保存分享</span>
           </Button>
         </div>
       </header>
@@ -391,19 +415,19 @@ const Plan = () => {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Panel: Itinerary */}
-        <div className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block absolute md:relative z-10 h-full w-full md:w-auto bg-white`}>
+        <div className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block absolute md:relative z-10 h-full w-full md:w-auto`}>
            <ItineraryPanel />
         </div>
 
         {/* Center/Right Panel: Chat & Map */}
         <div className="flex-1 flex flex-col min-w-0 relative">
           {/* Chat Overlay */}
-          <div className="absolute top-4 left-4 right-4 md:left-10 md:right-auto md:w-[400px] z-[400] shadow-xl rounded-xl overflow-hidden border border-slate-200/50">
+          <div className="absolute top-4 left-4 right-4 md:left-10 md:right-auto md:w-[400px] z-[400] shadow-2xl rounded-xl overflow-hidden border border-slate-800/70 bg-slate-900/90 backdrop-blur">
             <ChatPanel />
           </div>
 
           {/* Map */}
-          <div className="flex-1 bg-slate-100">
+          <div className="flex-1 bg-slate-950">
             <MapPanel />
           </div>
         </div>
@@ -413,30 +437,30 @@ const Plan = () => {
 
         {/* Session Drawer - 右侧会话抽屉 */}
         <div
-          className={`fixed inset-y-14 right-0 w-72 bg-white border-l border-slate-200 shadow-2xl z-30 transform transition-transform duration-300 ${
+          className={`fixed inset-y-16 right-0 w-72 bg-slate-900/95 border-l border-slate-800 shadow-2xl z-30 transform transition-transform duration-300 ${
             isSessionDrawerOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
           <div className="h-full flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-2">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between gap-2 bg-slate-900">
               <div className="flex items-center gap-2">
-                <List size={16} className="text-slate-600" />
-                <span className="text-sm font-semibold text-slate-800">会话列表</span>
+                <List size={16} className="text-slate-300" />
+                <span className="text-sm font-semibold text-slate-100">会话列表</span>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs"
+                  className="h-7 text-xs border-slate-700 text-slate-200 hover:bg-slate-800"
                   onClick={handleSaveSession}
                 >
                   保存当前
                 </Button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-900/95">
               {sessions.length === 0 && (
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-slate-500">
                   暂无会话，点击「保存当前」创建一个。
                 </div>
               )}
@@ -445,8 +469,8 @@ const Plan = () => {
                   key={session.id}
                   className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md border text-xs transition-colors ${
                     currentSessionId === session.id
-                      ? 'border-primary bg-primary/5 text-primary'
-                      : 'border-slate-200 hover:border-primary/40 hover:bg-slate-50 text-slate-700'
+                      ? 'border-sky-400 bg-sky-500/10 text-sky-200'
+                      : 'border-slate-700 hover:border-sky-400/60 hover:bg-slate-800 text-slate-200'
                   }`}
                 >
                   <button

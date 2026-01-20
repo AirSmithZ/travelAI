@@ -45,10 +45,10 @@ const ItineraryPanel = () => {
   };
 
   return (
-    <div className="h-full bg-slate-50 border-r border-slate-200 overflow-y-auto w-full md:w-[320px] flex-shrink-0">
-      <div className="p-4 border-b border-slate-200 bg-white sticky top-0 z-10">
-        <h2 className="font-bold text-lg text-slate-800">行程安排</h2>
-        <p className="text-xs text-slate-500 mt-1">拖拽卡片调整顺序</p>
+    <div className="h-full bg-slate-950/80 border-r border-slate-800 overflow-y-auto w-full md:w-[320px] flex-shrink-0 backdrop-blur-xl">
+      <div className="p-4 border-b border-slate-800 bg-slate-900/80 sticky top-0 z-10">
+        <h2 className="font-bold text-lg text-slate-50">行程安排</h2>
+        <p className="text-xs text-slate-400 mt-1">拖拽卡片调整顺序</p>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -58,13 +58,13 @@ const ItineraryPanel = () => {
             return (
               <div key={dayKey} className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                    <span className="bg-slate-200 text-slate-600 w-6 h-6 rounded flex items-center justify-center text-xs">
+                  <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                    <span className="bg-slate-800 text-slate-200 w-6 h-6 rounded flex items-center justify-center text-xs">
                       {index + 1}
                     </span>
                     第 {index + 1} 天
                   </h3>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-slate-500">
                     {dayItems.length} 个地点
                   </span>
                 </div>
@@ -75,7 +75,7 @@ const ItineraryPanel = () => {
                       {...provided.droppableProps}
                       ref={provided.innerRef}
                       className={`space-y-2 min-h-[50px] rounded-lg transition-colors ${
-                        snapshot.isDraggingOver ? 'bg-primary/5 ring-2 ring-primary/20' : ''
+                        snapshot.isDraggingOver ? 'bg-sky-500/10 ring-2 ring-sky-500/40' : 'bg-slate-900/40'
                       }`}
                     >
                       {dayItems.map((poi, idx) => (
@@ -84,33 +84,35 @@ const ItineraryPanel = () => {
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
-                              className={`bg-white p-3 rounded-lg border shadow-sm group hover:shadow-md transition-all ${
-                                snapshot.isDragging ? 'shadow-lg ring-2 ring-primary rotate-1' : 'border-slate-200'
+                              className={`bg-slate-900/80 p-3 rounded-lg border shadow-sm group hover:shadow-lg transition-all ${
+                                snapshot.isDragging
+                                  ? 'shadow-xl ring-2 ring-sky-500/80 border-transparent scale-[1.02]'
+                                  : 'border-slate-800'
                               }`}
                               onClick={() => handlePoiClick(poi)}
                             >
                               <div className="flex gap-3">
-                                <div 
+                                <div
                                   {...provided.dragHandleProps}
-                                  className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing flex items-center"
+                                  className="text-slate-600 hover:text-slate-300 cursor-grab active:cursor-grabbing flex items-center"
                                 >
                                   <GripVertical size={16} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex justify-between items-start">
-                                    <h4 className="font-semibold text-sm text-slate-800 truncate">{poi.name}</h4>
-                                    <button 
+                                    <h4 className="font-semibold text-sm text-slate-50 truncate">{poi.name}</h4>
+                                    <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         removePoi(dayKey, poi.uniqueId);
                                       }}
-                                      className="text-slate-300 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                      className="text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                     >
                                       <Trash2 size={14} />
                                     </button>
                                   </div>
-                                  <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
-                                    <span className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                                  <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                                    <span className="flex items-center gap-1 bg-slate-800/80 px-1.5 py-0.5 rounded">
                                       <MapPin size={10} /> {poi.category}
                                     </span>
                                     <span className="flex items-center gap-1">
@@ -124,9 +126,9 @@ const ItineraryPanel = () => {
                         </Draggable>
                       ))}
                       {provided.placeholder}
-                      
+
                       {/* Add Button Placeholder */}
-                      <button className="w-full py-2 border border-dashed border-slate-300 rounded-lg text-slate-400 text-xs hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-1">
+                      <button className="w-full py-2 border border-dashed border-slate-700 rounded-lg text-slate-500 text-xs hover:border-sky-500 hover:text-sky-400 hover:bg-sky-500/10 transition-colors flex items-center justify-center gap-1">
                         <Plus size={14} /> 添加地点
                       </button>
                     </div>
