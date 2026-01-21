@@ -305,33 +305,201 @@ class TravelService:
                     except Exception:
                         return default
 
-                items = []
-                for idx, s in enumerate(day_spots or []):
-                    items.append({
-                        "uniqueId": f"spot_{day_num}_{idx}",
-                        "name": s.get("name") or s.get("location") or f"景点{idx + 1}",
-                        "category": "景点",
-                        "duration": _dur(s.get("play_time_minutes"), _dur(s.get("recommended_time"), 60)),
-                        "lat": _num(s.get("latitude")),
-                        "lng": _num(s.get("longitude")),
-                        "description": s.get("description"),
-                        "notes": s.get("notes"),
-                        "commute_from_prev": s.get("commute_from_prev"),
-                    })
-                for idx, r in enumerate(day_restaurants or []):
-                    items.append({
-                        "uniqueId": f"rest_{day_num}_{idx}",
-                        "name": r.get("name") or f"餐厅{idx + 1}",
-                        "category": "美食",
-                        "duration": _dur(r.get("play_time_minutes"), 60),
-                        "lat": _num(r.get("latitude")),
-                        "lng": _num(r.get("longitude")),
-                        "description": r.get("description"),
-                        "notes": r.get("notes"),
-                        "commute_from_prev": r.get("commute_from_prev"),
-                        "cuisine": r.get("cuisine"),
-                        "price_range": r.get("price_range"),
-                    })
+                def _norm_notes(v) -> List[str]:
+                    if not v:
+                        return []
+                    if isinstance(v, list):
+                        return [str(x) for x in v if x is not None and str(x).strip()]
+                    if isinstance(v, str):
+                        vv = v.strip()
+                        return [vv] if vv else []
+                    return [str(v)]
+
+                def _cost_for(item: Dict[str, Any], category: str) -> Dict[str, Any]:
+                    """
+                    费用估算（尽量轻量 & 可读）：
+                    - 美食：优先用 price_range（可能是“人均 80-120”/“¥120”/“80-120”）
+                    - 景点：若有 ticket_price/ticket/price 字段则用，否则给一个 0~80 的保守区间
+                    - 机场/住宿：默认 0（此处更多用于地图点）
+                    返回：{ cost: str, cost_yuan: Optional[float] }
+                    """
+                    def _to_float(s: Any) -> Optional[float]:
+                        if s is None:
+                            return None
+                        if isinstance(s, (int, float)):
+                            try:
+                                return float(s)
+                            except Exception:
+                                return None
+                        try:
+                            import re
+                            m = re.findall(r"\d+(?:\.\d+)?", str(s))
+                            if not m:
+                                return None
+                            # 取第一个数作为代表值
+                            return float(m[0])
+                        except Exception:
+                            return None
+
+                    if category == "美食":
+                        pr = item.get("price_range") or item.get("price") or item.get("avg_price")
+                        if pr:
+                            label = str(pr).strip()
+                            # 如果模型已经带了 “¥/人均”等前缀，就直接用；否则补充“人均 ¥xx”
+                            if "¥" in label or "人均" in label:
+                                text = label
+                            else:
+                                text = f"人均 ¥{label}"
+                            return {"cost": text, "cost_yuan": _to_float(pr)}
+                        return {"cost": "¥60-120 /人", "cost_yuan": 90.0}
+
+                    if category == "景点":
+                        tp = item.get("ticket_price") or item.get("ticket") or item.get("price")
+                        if tp:
+                            label = str(tp).strip()
+                            text = label if "¥" in label else f"约 ¥{label}"
+                            return {"cost": text, "cost_yuan": _to_float(tp)}
+                        return {"cost": "¥0-80", "cost_yuan": 40.0}
+
+                    return {"cost": "¥0", "cost_yuan": 0.0}
+
+                # 逐天推送给前端：按早/中/晚分组，确保拖拽只影响分组内部排序
+                schedule = day_itinerary.get("schedule") or {}
+                segments = ["morning", "afternoon", "evening"]
+
+                def _as_list(v) -> List[Dict[str, Any]]:
+                    if not v:
+                        return []
+                    if isinstance(v, list):
+                        return [x for x in v if isinstance(x, dict)]
+                    if isinstance(v, dict) and isinstance(v.get("items"), list):
+                        return [x for x in v.get("items") if isinstance(x, dict)]
+                    if isinstance(v, dict):
+                        return [v]
+                    return []
+
+                grouped_items: Dict[str, List[Dict[str, Any]]] = {k: [] for k in segments}
+                # 优先使用 schedule（模型按早/中/晚输出）
+                has_schedule = any(_as_list(schedule.get(k)) for k in segments)
+                if has_schedule:
+                    for seg in segments:
+                        raw_items = _as_list(schedule.get(seg))
+                        for idx, act in enumerate(raw_items):
+                            ptype = act.get("type") or ("restaurant" if (act.get("cuisine") or act.get("cuisine_type") or act.get("price_range")) else "spot")
+                            category = "美食" if ptype == "restaurant" else "景点"
+                            base = {
+                                "uniqueId": f"{'rest' if category == '美食' else 'spot'}_{day_num}_{seg}_{idx}",
+                                "timeOfDay": seg,
+                                "name": act.get("name") or act.get("location") or (f"餐厅{idx + 1}" if category == "美食" else f"景点{idx + 1}"),
+                                "category": category,
+                                "duration": _dur(act.get("play_time_minutes"), _dur(act.get("recommended_time"), 60)),
+                                "lat": _num(act.get("latitude")),
+                                "lng": _num(act.get("longitude")),
+                                "description": act.get("description"),
+                                "notes": _norm_notes(act.get("notes")),
+                                "commute_from_prev": act.get("commute_from_prev"),
+                            }
+                            if category == "美食":
+                                base["cuisine"] = act.get("cuisine")
+                                base["price_range"] = act.get("price_range")
+                            base.update(_cost_for(act, category))
+                            grouped_items[seg].append(base)
+                else:
+                    # 无 schedule 的兼容：把 spots/restaurants 简单打散到 morning/afternoon/evening
+                    merged = []
+                    for s in (day_spots or []):
+                        merged.append(("spot", s))
+                    for r in (day_restaurants or []):
+                        merged.append(("restaurant", r))
+                    for idx, (ptype, act) in enumerate(merged):
+                        seg = "morning" if idx % 3 == 0 else ("afternoon" if idx % 3 == 1 else "evening")
+                        category = "美食" if ptype == "restaurant" else "景点"
+                        base = {
+                            "uniqueId": f"{'rest' if category == '美食' else 'spot'}_{day_num}_{seg}_{idx}",
+                            "timeOfDay": seg,
+                            "name": act.get("name") or act.get("location") or (f"餐厅{idx + 1}" if category == "美食" else f"景点{idx + 1}"),
+                            "category": category,
+                            "duration": _dur(act.get("play_time_minutes"), _dur(act.get("recommended_time"), 60)),
+                            "lat": _num(act.get("latitude")),
+                            "lng": _num(act.get("longitude")),
+                            "description": act.get("description"),
+                            "notes": _norm_notes(act.get("notes")),
+                            "commute_from_prev": act.get("commute_from_prev"),
+                        }
+                        if category == "美食":
+                            base["cuisine"] = act.get("cuisine") or act.get("cuisine_type")
+                            base["price_range"] = act.get("price_range")
+                        base.update(_cost_for(act, category))
+                        grouped_items[seg].append(base)
+
+                # 如果 LLM 行程为空（既没有 schedule，又没有 spots/restaurants），
+                # 则基于推荐的景点/餐厅按天兜底生成简单行程，避免前端收到完全空的 day。
+                if not any(grouped_items[seg] for seg in segments):
+                    per_day_spots = 2
+                    per_day_restaurants = 1
+                    spot_start = (day_num - 1) * per_day_spots
+                    rest_start = (day_num - 1) * per_day_restaurants
+                    spot_slice = attractions[spot_start: spot_start + per_day_spots]
+                    rest_slice = restaurants[rest_start: rest_start + per_day_restaurants]
+
+                    if spot_slice or rest_slice:
+                        grouped_items = {k: [] for k in segments}
+
+                        # 早上：主要景点 1
+                        if len(spot_slice) >= 1:
+                            s0 = spot_slice[0]
+                            base = {
+                                "uniqueId": f"spot_{day_num}_morning_fallback_0",
+                                "timeOfDay": "morning",
+                                "name": s0.get("name") or s0.get("location") or "景点",
+                                "category": "景点",
+                                "duration": _dur(s0.get("play_time_minutes"), 120),
+                                "lat": _num(s0.get("latitude")),
+                                "lng": _num(s0.get("longitude")),
+                                "description": s0.get("description"),
+                                "notes": _norm_notes(s0.get("notes")),
+                                "commute_from_prev": s0.get("commute_from_prev"),
+                            }
+                            base.update(_cost_for(s0, "景点"))
+                            grouped_items["morning"].append(base)
+
+                        # 下午：餐厅 1
+                        if len(rest_slice) >= 1:
+                            r0 = rest_slice[0]
+                            base = {
+                                "uniqueId": f"rest_{day_num}_afternoon_fallback_0",
+                                "timeOfDay": "afternoon",
+                                "name": r0.get("name") or "推荐餐厅",
+                                "category": "美食",
+                                "duration": _dur(r0.get("play_time_minutes"), 60),
+                                "lat": _num(r0.get("latitude")),
+                                "lng": _num(r0.get("longitude")),
+                                "description": r0.get("description"),
+                                "notes": _norm_notes(r0.get("notes")),
+                                "commute_from_prev": r0.get("commute_from_prev"),
+                                "cuisine": r0.get("cuisine") or r0.get("cuisine_type"),
+                                "price_range": r0.get("price_range"),
+                            }
+                            base.update(_cost_for(r0, "美食"))
+                            grouped_items["afternoon"].append(base)
+
+                        # 晚上：次要景点（如果有）
+                        if len(spot_slice) >= 2:
+                            s1 = spot_slice[1]
+                            base = {
+                                "uniqueId": f"spot_{day_num}_evening_fallback_1",
+                                "timeOfDay": "evening",
+                                "name": s1.get("name") or "夜间景点",
+                                "category": "景点",
+                                "duration": _dur(s1.get("play_time_minutes"), 90),
+                                "lat": _num(s1.get("latitude")),
+                                "lng": _num(s1.get("longitude")),
+                                "description": s1.get("description"),
+                                "notes": _norm_notes(s1.get("notes")),
+                                "commute_from_prev": s1.get("commute_from_prev"),
+                            }
+                            base.update(_cost_for(s1, "景点"))
+                            grouped_items["evening"].append(base)
 
                 # 逐天推送：直接给 items，并附带 stats 方便前端定位“为何为空”
                 def _safe_len(v):
@@ -349,9 +517,14 @@ class TravelService:
                         "afternoon": _safe_len((day_itinerary.get("schedule") or {}).get("afternoon")),
                         "evening": _safe_len((day_itinerary.get("schedule") or {}).get("evening")),
                     },
+                    "grouped_items": {
+                        "morning": len(grouped_items.get("morning") or []),
+                        "afternoon": len(grouped_items.get("afternoon") or []),
+                        "evening": len(grouped_items.get("evening") or []),
+                    }
                 }
 
-                yield sse("day", {"day_number": day_num, "items": items, "stats": stats})
+                yield sse("day", {"day_number": day_num, "items": grouped_items, "stats": stats})
 
             result = {
                 "success": True,

@@ -17,7 +17,7 @@ pip install -r requirements.txt
 
 ### 2. 配置环境变量
 
-创建 `.env` 文件（可选，默认配置已包含在代码中）：
+创建 `backend/.env`（必需，密钥不再硬编码在代码中）：
 
 ```bash
 # 数据库配置
@@ -31,10 +31,10 @@ DB_PORT=3306
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
-# API Keys (已在代码中配置)
-DEEPSEEK_API_KEY=sk-37818ed797e14b0ea756c07641cd3edb
-AMAP_API_KEY=31d12ccab5b38ae944d01977a0d37cc1
-AMAP_SECURITY_KEY=28c7a106d5debb23bf94f58056466abb
+# API Keys
+DEEPSEEK_API_KEY=sk_your_deepseek_key_here
+AMAP_API_KEY=your_amap_server_key_here
+AMAP_SECURITY_KEY=your_amap_security_key_here
 ```
 
 ### 3. 初始化数据库
