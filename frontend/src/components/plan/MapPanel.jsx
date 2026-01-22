@@ -114,6 +114,8 @@ const MapPanel = () => {
   const mapRef = useRef(null);
   const polylineRef = useRef(null); // 高德地图：存储所有折线
   const polylinesRef = useRef([]); // 高德地图：按天存储多条折线
+  const amapOverlaysByDayRef = useRef({}); // 高德地图：按天归档 overlays，便于 show/hide
+  const mapboxRoutesByDayRef = useRef({}); // Mapbox：按天归档路线数据，便于流式渲染
   const markersRef = useRef([]);
   const lastSignatureRef = useRef('');
   const [mapReady, setMapReady] = useState(false);
@@ -121,6 +123,24 @@ const MapPanel = () => {
   const [mapError, setMapError] = useState(null);
   const loadTimeoutRef = useRef(null);
   const [selectedDay, setSelectedDay] = useState(null); // null 表示显示所有天
+  const [completedDays, setCompletedDays] = useState(new Set()); // 记录已完成渲染的天数
+  
+  // 监听流式渲染完成事件
+  useEffect(() => {
+    const handleDayCompleted = (event) => {
+      const { dayNumber } = event.detail;
+      setCompletedDays((prev) => {
+        const next = new Set(prev);
+        next.add(dayNumber);
+        return next;
+      });
+    };
+    
+    window.addEventListener('dayCompleted', handleDayCompleted);
+    return () => {
+      window.removeEventListener('dayCompleted', handleDayCompleted);
+    };
+  }, []);
   
   // 每天路线颜色（渐变色系，确保区分度）
   const dayColors = [
@@ -135,18 +155,28 @@ const MapPanel = () => {
   ];
 
   // 从 itinerary 中提取每天的路线点（按天分组），包含起始点和终止点
+  // 流式渲染：只渲染已完成的天数（completedDays）
   const dailyRoutes = useMemo(() => {
     const routes = [];
     const dayKeys = Object.keys(itinerary || {}).filter(key => key.startsWith('day')).sort();
     
     dayKeys.forEach((dayKey, dayIndex) => {
-      // 如果选择了特定天数，只处理选中的那一天
-      if (selectedDay !== null && dayIndex + 1 !== selectedDay) {
-        return;
-      }
-      
+      const dayNum = dayIndex + 1;
       const day = itinerary[dayKey];
       if (!day) return;
+      
+      // 流式渲染：只处理已完成的天数（如果 completedDays 不为空）
+      // 判断标准：该天有 start_point 或 end_point，且至少有一个时间段有数据
+      const hasStartOrEnd = day.start_point || day.end_point;
+      const hasItems = (Array.isArray(day.morning) && day.morning.length > 0) ||
+                       (Array.isArray(day.afternoon) && day.afternoon.length > 0) ||
+                       (Array.isArray(day.evening) && day.evening.length > 0);
+      const isDayComplete = hasStartOrEnd && hasItems;
+      
+      // 如果 completedDays 不为空，只渲染已完成的天
+      if (completedDays.size > 0 && !completedDays.has(dayNum) && !isDayComplete) {
+        return; // 该天的数据还未完成，跳过渲染
+      }
       
       // 新结构：{ morning:[], afternoon:[], evening:[] }
       let dayPoints = [];
@@ -199,7 +229,7 @@ const MapPanel = () => {
     });
     
     return routes;
-  }, [itinerary, selectedDay]);
+  }, [itinerary, completedDays]);
   
   // 所有点（用于标记显示），包括起始点和终止点
   const allPoints = useMemo(() => {
@@ -291,6 +321,17 @@ const MapPanel = () => {
           } catch (e) { /* ignore */ }
         });
         polylinesRef.current = [];
+      }
+      // 清理高德地图按天归档的 overlays
+      if (mapRef.current && mapProvider === 'amap' && amapOverlaysByDayRef.current) {
+        Object.values(amapOverlaysByDayRef.current).forEach((arr) => {
+          (arr || []).forEach((ov) => {
+            try {
+              if (ov) mapRef.current.remove(ov);
+            } catch (e) { /* ignore */ }
+          });
+        });
+        amapOverlaysByDayRef.current = {};
       }
       // 兼容旧代码
       if (polylineRef.current && mapRef.current) {
@@ -518,9 +559,14 @@ const MapPanel = () => {
               markersRef.current.push(marker);
             });
 
-            // 为每天添加不同颜色的路线
+            // 为每天添加不同颜色的路线（流式渲染：只渲染已完成的天）
             dailyRoutes.forEach((route) => {
               if (route.points.length < 2) return;
+              
+              // 流式渲染：如果该天还未完成，跳过
+              if (completedDays.size > 0 && !completedDays.has(route.dayNumber)) {
+                return;
+              }
 
               const sourceId = `route_day${route.dayNumber}`;
               const layerId = `route_day${route.dayNumber}`;
@@ -738,6 +784,15 @@ const MapPanel = () => {
             } catch (e) { /* ignore */ }
           });
           polylinesRef.current = [];
+          // 清理按天归档 overlays
+          try {
+            Object.values(amapOverlaysByDayRef.current || {}).forEach((arr) => {
+              (arr || []).forEach((ov) => {
+                try { mapRef.current.remove(ov); } catch (e) { /* ignore */ }
+              });
+            });
+          } catch (e) { /* ignore */ }
+          amapOverlaysByDayRef.current = {};
           if (polylineRef.current) {
             try { mapRef.current.remove(polylineRef.current); } catch (e) { /* ignore */ }
             polylineRef.current = null;
@@ -782,9 +837,20 @@ const MapPanel = () => {
             markersRef.current.push(marker);
           });
 
-          // 为每天添加不同颜色的路线
+          // 为每天添加不同颜色的路线（流式渲染：只渲染已完成的天）
           dailyRoutes.forEach((route) => {
             if (route.points.length < 2) return;
+            
+            // 流式渲染：如果该天还未完成，跳过
+            if (completedDays.size > 0 && !completedDays.has(route.dayNumber)) {
+              return;
+            }
+
+            // 检查是否已经渲染过该天的路线（避免重复添加）
+            if (amapOverlaysByDayRef.current[route.dayNumber] && 
+                amapOverlaysByDayRef.current[route.dayNumber].length > 0) {
+              return; // 该天已渲染，跳过
+            }
 
             const path = route.points.map((poi) => [poi.lng, poi.lat]);
             const polyline = new AMap.Polyline({
@@ -799,6 +865,10 @@ const MapPanel = () => {
 
             mapRef.current.add(polyline);
             polylinesRef.current.push(polyline);
+            if (!amapOverlaysByDayRef.current[route.dayNumber]) {
+              amapOverlaysByDayRef.current[route.dayNumber] = [];
+            }
+            amapOverlaysByDayRef.current[route.dayNumber].push(polyline);
 
             // 添加路线标签（显示天数）- 高德地图使用自定义 HTML 标记
             if (route.points.length > 0) {
@@ -828,6 +898,7 @@ const MapPanel = () => {
               
               mapRef.current.add(labelMarker);
               polylinesRef.current.push(labelMarker);
+              amapOverlaysByDayRef.current[route.dayNumber].push(labelMarker);
             }
           });
         }
@@ -851,7 +922,54 @@ const MapPanel = () => {
       }
       cleanupMap();
     };
-  }, [mapCenter, mapZoom, dailyRoutes, allPoints.length, shouldUseMapbox]);
+  }, [mapCenter, mapZoom, dailyRoutes, allPoints.length, shouldUseMapbox, completedDays]);
+
+  // 选天：不重建地图，仅隐藏/显示对应路线图层
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !mapProvider) return;
+
+    const dayKeys = Object.keys(itinerary || {}).filter(key => key.startsWith('day')).sort();
+    const dayNumbers = dayKeys.map((_, idx) => idx + 1);
+
+    if (mapProvider === 'mapbox') {
+      dayNumbers.forEach((dayNum) => {
+        const visible = selectedDay == null || selectedDay === dayNum;
+        const layerId = `route_day${dayNum}`;
+        const labelLayerId = `${layerId}_label`;
+        const arrowLayerId = `${layerId}_arrows`;
+        try {
+          if (mapRef.current.getLayer(layerId)) {
+            mapRef.current.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+          }
+          if (mapRef.current.getLayer(labelLayerId)) {
+            mapRef.current.setLayoutProperty(labelLayerId, 'visibility', visible ? 'visible' : 'none');
+          }
+          if (mapRef.current.getLayer(arrowLayerId)) {
+            mapRef.current.setLayoutProperty(arrowLayerId, 'visibility', visible ? 'visible' : 'none');
+          }
+        } catch (e) { /* ignore */ }
+      });
+    }
+
+    if (mapProvider === 'amap') {
+      // AMap: 通过按天归档的 overlays 做 show/hide，不重建地图
+      dayNumbers.forEach((dayNum) => {
+        const visible = selectedDay == null || selectedDay === dayNum;
+        const overlays = amapOverlaysByDayRef.current?.[dayNum] || [];
+        overlays.forEach((ov) => {
+          try {
+            if (visible) {
+              if (typeof ov.show === 'function') ov.show();
+              else if (typeof ov.setOptions === 'function') ov.setOptions({ visible: true });
+            } else {
+              if (typeof ov.hide === 'function') ov.hide();
+              else if (typeof ov.setOptions === 'function') ov.setOptions({ visible: false });
+            }
+          } catch (e) { /* ignore */ }
+        });
+      });
+    }
+  }, [selectedDay, mapReady, mapProvider, itinerary]);
 
   // 获取所有天数
   const allDays = useMemo(() => {

@@ -8,7 +8,7 @@ import {
 import { Tooltip } from 'antd';
 
 const ItineraryPanel = () => {
-  const { itinerary, updateItineraryOrder, removePoi, setSelectedPoi, setMapCenter } = useTravel();
+  const { itinerary, updateItineraryOrder, removePoi, setSelectedPoi } = useTravel();
 
   // 折叠状态：{ day1: false, day1::morning: false, ... }
   const [collapsed, setCollapsed] = useState({});
@@ -68,9 +68,29 @@ const ItineraryPanel = () => {
 
   const handlePoiClick = (poi) => {
     setSelectedPoi(poi);
-    if (typeof poi.lat === 'number' && typeof poi.lng === 'number') {
-      setMapCenter([poi.lat, poi.lng]);
-    }
+  };
+
+  const renderFixedPoint = (point, labelFallback) => {
+    if (!point) return null;
+    return (
+      <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/60 opacity-80">
+        <div className="flex gap-2.5">
+          <div className="text-slate-600 flex items-center pt-0.5">
+            <MapPin size={14} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between items-start gap-2">
+              <h4 className="font-semibold text-[13px] text-slate-100 truncate leading-tight">
+                {point.name || labelFallback}
+              </h4>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                {point.category || labelFallback}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const SEGMENTS = [
@@ -189,49 +209,28 @@ const ItineraryPanel = () => {
                 {/* Day Content */}
                 {!isDayCollapsed && (
                   <div className="p-2 space-y-2">
-                    {/* 起始点和终止点（不可拖拽） */}
-                    {(itinerary[dayKey]?.start_point || itinerary[dayKey]?.end_point) && (
-                      <div className="mb-2 space-y-2">
-                        {itinerary[dayKey]?.start_point && (
-                          <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/60 opacity-75">
-                            <div className="flex gap-2.5">
-                              <div className="text-slate-600 flex items-center pt-0.5">
-                                <MapPin size={14} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-start gap-2">
-                                  <h4 className="font-semibold text-[13px] text-slate-100 truncate leading-tight">
-                                    {itinerary[dayKey].start_point.name || '起始点'}
-                                  </h4>
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                    {itinerary[dayKey].start_point.category || '起点'}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {itinerary[dayKey]?.end_point && (
-                          <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/60 opacity-75">
-                            <div className="flex gap-2.5">
-                              <div className="text-slate-600 flex items-center pt-0.5">
-                                <MapPin size={14} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-start gap-2">
-                                  <h4 className="font-semibold text-[13px] text-slate-100 truncate leading-tight">
-                                    {itinerary[dayKey].end_point.name || '终止点'}
-                                  </h4>
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                    {itinerary[dayKey].end_point.category || '终点'}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {(() => {
+                      const sp = itinerary?.[dayKey]?.start_point || null;
+                      const ep = itinerary?.[dayKey]?.end_point || null;
+                      const same =
+                        sp &&
+                        ep &&
+                        typeof sp.lat === 'number' &&
+                        typeof sp.lng === 'number' &&
+                        typeof ep.lat === 'number' &&
+                        typeof ep.lng === 'number' &&
+                        sp.lat === ep.lat &&
+                        sp.lng === ep.lng;
+
+                      // 顶部：start_point（若与 end_point 同点，则只渲染一次）
+                      if (!sp) return null;
+                      return (
+                        <div className="mb-2">
+                          {renderFixedPoint(sp, '起点')}
+                          {same ? null : null}
+                        </div>
+                      );
+                    })()}
                     {SEGMENTS.map((seg) => {
                       const segItems = day[seg.key] || [];
                       const Icon = seg.icon;
@@ -412,6 +411,23 @@ const ItineraryPanel = () => {
                         </div>
                       );
                     })}
+
+                    {(() => {
+                      const sp = itinerary?.[dayKey]?.start_point || null;
+                      const ep = itinerary?.[dayKey]?.end_point || null;
+                      if (!ep) return null;
+                      const same =
+                        sp &&
+                        typeof sp.lat === 'number' &&
+                        typeof sp.lng === 'number' &&
+                        typeof ep.lat === 'number' &&
+                        typeof ep.lng === 'number' &&
+                        sp.lat === ep.lat &&
+                        sp.lng === ep.lng;
+                      // 底部：end_point（同点不重复渲染）
+                      if (same) return null;
+                      return <div className="mt-2">{renderFixedPoint(ep, '终点')}</div>;
+                    })()}
                   </div>
                 )}
               </div>

@@ -32,6 +32,7 @@ requests==2.31.0
 python-dateutil==2.8.2
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+tenacity==8.2.3  # For retry mechanism in function calling
 
 # Environment
 python-dotenv==1.0.0
@@ -39,3 +40,19 @@ python-dotenv==1.0.0
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
+
+
+# XHS2Downloader dependencies (for Xiaohongshu note extraction)
+# Note: rookiepy is optional (only needed for browser cookie reading, which we don't use)
+aiofiles==24.1.0
+aiosqlite==0.21.0
+lxml>=5.3.2  # 使用 >= 允许 pip 选择更新的版本（可能有 Python 3.14 的预编译 wheel）
+pyperclip==1.9.0
+pyyaml==6.0.2
+click==8.1.8  # Required by XHS2Downloader CLI module
+rich>=13.0.0  # Required by XHS2Downloader (used in CLI and other modules)
+emoji==2.14.1  # Required by XHS2Downloader
+# rookiepy==0.5.6  # Optional: only needed for browser cookie reading
+# textual==3.1.0  # Optional: only needed for TUI mode
+# fastapi==0.115.12  # Optional: only needed for API server mode (we already have fastapi)
+# uvicorn==0.34.2  # Optional: only needed for API server mode (we already have uvicorn)

@@ -84,7 +84,9 @@ const Onboarding = () => {
       foodPreferences: ['中餐', '烧烤'],
       travelers: 'couple',
       xiaohongshuNotes: [
-        '更新了！一年一度成都攻略2.0版（干货） http://xhslink.com/o/67fB5TKwENk 复制后打开【小红书】查看笔记',
+        // '成都春熙路一日citywalk📸美食➕拍照 如果你只有一天... http://xhslink.com/o/7yak36fwfLG 复制后打开【小红书】查看笔记！',
+        'https://www.xiaohongshu.com/explore/68c935a100000000130104af?xsec_token=ABlS-P1OVpw5cZRfLlIay2_6Vb4a_3rudknD8pYT5TZYE=&xsec_source=pc_search&source=unknown'
+        // '50 【第一次去成都怎么玩，看这一篇就够了~ - 🌍暴走地球｜攻略库 | 小红书 - 你的生活兴趣社区】 😆 FWkVZBFJkdYUnIu 😆 https://www.xiaohongshu.com/discovery/item/68c935a100000000130104af?source=webshare&xhsshare=pc_web&xsec_token=ABlS-P1OVpw5cZRfLlIay2_6Vb4a_3rudknD8pYT5TZYE=&xsec_source=pc_share'
       ],
       addresses: [
         {

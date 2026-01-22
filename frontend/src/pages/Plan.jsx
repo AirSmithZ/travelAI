@@ -55,24 +55,10 @@ const Plan = () => {
     const decoder = new TextDecoder('utf-8');
 
     return new Promise((resolve, reject) => {
-      let tokenCount = 0;
-      let lastTokenPreview = '';
-      let tokenLogTimer = null;
-      let streamingActive = true;
       const parser = createSSEParser((eventName, payload) => {
         // 调试：token 非常多，console.log 会显著拖慢主线程（DevTools 渲染/格式化很重）
         // 这里改为“按时间节流”打印，避免控制台成为瓶颈
         if (eventName === 'token') {
-          tokenCount += 1;
-          lastTokenPreview = String(payload?.delta ?? '').replace(/\s+/g, ' ').slice(0, 60);
-          if (!tokenLogTimer) {
-            tokenLogTimer = setTimeout(() => {
-              tokenLogTimer = null;
-              if (!streamingActive) return;
-              // eslint-disable-next-line no-console
-              console.log('[SSE token]', `count=${tokenCount}`, `last="${lastTokenPreview}"`);
-            }, 800);
-          }
           return;
         }
         if (eventName === 'heartbeat') return;
@@ -101,17 +87,28 @@ const Plan = () => {
             start_point: nextDay.start_point,
             end_point: nextDay.end_point,
           });
+          
+          // 更新行程数据
           setItinerary((prev) => ({
             ...(prev || {}),
             [`day${payload.day_number}`]: nextDay,
           }));
+          
+          // 标记该天已完成：当天的数据包含 start_point 或 end_point，且至少有一个时间段有数据
+          // 注意：即使只有 start_point 或只有 end_point，也算完成（确保每天都有起止点）
+          const hasItems = nextDay.morning.length > 0 || nextDay.afternoon.length > 0 || nextDay.evening.length > 0;
+          const hasStartOrEnd = nextDay.start_point || nextDay.end_point;
+          const isDayComplete = hasItems && hasStartOrEnd;
+          
+          if (isDayComplete) {
+            // 通知 MapPanel 该天已完成，可以渲染
+            // 通过自定义事件通知 MapPanel
+            window.dispatchEvent(new CustomEvent('dayCompleted', { 
+              detail: { dayNumber: payload.day_number } 
+            }));
+          }
         }
         if (eventName === 'result') {
-          streamingActive = false;
-          if (tokenLogTimer) {
-            clearTimeout(tokenLogTimer);
-            tokenLogTimer = null;
-          }
           // eslint-disable-next-line no-console
           console.log('[SSE result]', payload);
           // 构造地图节点：景点(蓝色) + 餐厅(红色) + 机场(绿色) + 住宿(棕色)
@@ -180,11 +177,6 @@ const Plan = () => {
           resolve({ success: true });
         }
         if (eventName === 'error') {
-          streamingActive = false;
-          if (tokenLogTimer) {
-            clearTimeout(tokenLogTimer);
-            tokenLogTimer = null;
-          }
           // 出错也结束 loading
           // eslint-disable-next-line no-console
           console.error('行程生成出错:', payload);

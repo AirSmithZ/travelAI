@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from app.config import settings
 from app.utils.api_clients import LocationAPIClient, XiaohongshuClient
 from app.crud import travel_crud
+from app.services.tools import get_xiaohongshu_cdata
 import json
 import time
 from datetime import datetime
@@ -24,6 +25,15 @@ class TravelService:
             # 行程 JSON 很长，2000 容易被截断导致解析失败；提高上限以确保输出完整
             max_tokens=6000
         )
+        # 保留“模型可调用工具”的形态：使用 bind_tools 生成可序列化的 tool schema
+        # 注意：不要把 tools 直接塞进 ChatOpenAI 构造参数，否则会把 Pydantic 的 ModelMetaclass 一并序列化发给上游，导致报错
+        try:
+            if hasattr(self.llm, "bind_tools"):
+                self.llm_tools = self.llm.bind_tools([get_xiaohongshu_cdata])
+            else:
+                self.llm_tools = None
+        except Exception:
+            self.llm_tools = None
         self.location_client = LocationAPIClient()
         self.xiaohongshu_client = XiaohongshuClient()
     
@@ -186,48 +196,81 @@ class TravelService:
         # 小红书内容（可选）- 优先使用CDATA作为关键数据
         xhs_content = ""
         xhs_cdata_list = []
-        if xiaohongshu_notes:
-            for note_url in xiaohongshu_notes:
-                # 优先获取CDATA（更详细的结构化数据）
-                cdata = self.xiaohongshu_client.get_note_cdata(note_url)
-                if cdata and isinstance(cdata, dict):
-                    xhs_cdata_list.append(cdata)
-                    # 构建详细的CDATA内容描述
-                    title = cdata.get('title', '')
-                    content = cdata.get('content', '')
-                    raw_content = cdata.get('raw_content', '')
-                    cdata_info = cdata.get('cdata', {})
+
+        # TODO: 需要重新实现小红书笔记的处理
+        # 1. 从输入中提取纯URL（如果包含描述文字）
+        # 2. 优先获取CDATA（更详细的结构化数据）
+        # 3. 构建详细的CDATA内容描述（用于LLM提示词）
+        # 4. 从内容中提取可能的推荐信息（通过关键词识别）
+        # 5. 如果CDATA获取失败，回退到普通内容获取
+        # 6. 如果普通内容获取失败，跳过
+        # 7. 将处理后的笔记内容添加到知识库
+        # 8. 将知识库内容传递给LLM
+        # if xiaohongshu_notes:
+            # print(f"\n{'='*80}")
+            # print(f"📚 开始处理小红书笔记，共 {len(xiaohongshu_notes)} 条")
+            # print(f"{'='*80}\n")
+            
+            # for idx, note_url in enumerate(xiaohongshu_notes, 1):
+            #     print(f"\n📖 处理第 {idx}/{len(xiaohongshu_notes)} 条笔记：{note_url}")
+                
+            #     # 从输入中提取纯URL（如果包含描述文字）
+            #     from app.utils.url_extractor import extract_xiaohongshu_url, clean_url
+            #     clean_note_url = extract_xiaohongshu_url(note_url) or clean_url(note_url) or note_url
+            #     if clean_note_url != note_url:
+            #         print(f"🔍 从输入中提取到URL：{clean_note_url}")
+                
+            #     # 优先获取CDATA（更详细的结构化数据）
+            #     cdata = self.xiaohongshu_client.get_note_cdata(clean_note_url)
+            #     if cdata and isinstance(cdata, dict):
+            #         xhs_cdata_list.append(cdata)
                     
-                    # 提取关键信息
-                    recommendations = cdata_info.get('recommendations', {}) if isinstance(cdata_info, dict) else {}
-                    tips = cdata_info.get('tips', []) if isinstance(cdata_info, dict) else []
-                    tags = cdata_info.get('tags', []) if isinstance(cdata_info, dict) else []
+            #         # 构建详细的CDATA内容描述（用于LLM提示词）
+            #         title = cdata.get('title', '')
+            #         content = cdata.get('content', '')
+            #         cdata_info = cdata.get('cdata', {})
                     
-                    # 构建详细的笔记内容描述
-                    note_desc = f"\n【小红书笔记 - 关键数据】\n"
-                    note_desc += f"标题：{title}\n"
-                    if content:
-                        note_desc += f"内容摘要：{content}\n"
-                    if raw_content:
-                        note_desc += f"详细内容：{raw_content}\n"
-                    if recommendations:
-                        if recommendations.get('attractions'):
-                            note_desc += f"推荐景点：{', '.join(recommendations['attractions'])}\n"
-                        if recommendations.get('restaurants'):
-                            note_desc += f"推荐餐厅：{', '.join(recommendations['restaurants'])}\n"
-                        if recommendations.get('accommodations'):
-                            note_desc += f"推荐住宿：{', '.join(recommendations['accommodations'])}\n"
-                    if tips:
-                        note_desc += f"旅行Tips：{'; '.join(tips)}\n"
-                    if tags:
-                        note_desc += f"标签：{', '.join(tags)}\n"
+            #         # 提取关键信息
+            #         tags = cdata_info.get('tags', []) if isinstance(cdata_info, dict) else []
+            #         topics = cdata_info.get('topics', []) if isinstance(cdata_info, dict) else []
+            #         location = cdata_info.get('location') if isinstance(cdata_info, dict) else None
                     
-                    xhs_content += note_desc
-                else:
-                    # 如果CDATA获取失败，回退到普通内容获取
-                    note_content = self.xiaohongshu_client.get_note_content(note_url)
-                    if note_content and isinstance(note_content, dict):
-                        xhs_content += f"\n笔记：{note_content.get('title', '')}\n{note_content.get('content', '')}\n"
+            #         # 构建详细的笔记内容描述（作为知识库传递给LLM）
+            #         note_desc = f"\n【小红书笔记 {idx} - 关键数据（作为知识库使用）】\n"
+            #         note_desc += f"标题：{title}\n"
+            #         if content:
+            #             # 完整内容作为最重要的知识库数据
+            #             note_desc += f"完整内容：{content}\n"
+            #         if location:
+            #             note_desc += f"地理位置：{location}\n"
+            #         if tags:
+            #             note_desc += f"标签：{', '.join(tags)}\n"
+            #         if topics:
+            #             note_desc += f"话题：{', '.join(topics)}\n"
+                    
+            #         # 从内容中提取可能的推荐信息（通过关键词识别）
+            #         # 注意：真实的小红书API返回的数据中，推荐信息通常在content中，需要LLM自行提取
+            #         note_desc += f"\n⚠️ 重要提示：请仔细分析上述笔记内容，提取其中的景点推荐、美食推荐、住宿建议、旅行Tips等关键信息，并应用到路线规划中。\n"
+                    
+            #         xhs_content += note_desc
+                    
+            #         print(f"✅ 第 {idx} 条笔记已添加到知识库，内容长度：{len(content)} 字符")
+            #     else:
+            #         print(f"⚠️ 第 {idx} 条笔记CDATA获取失败，尝试使用普通内容获取")
+            #         # 如果CDATA获取失败，回退到普通内容获取
+            #         note_content = self.xiaohongshu_client.get_note_content(note_url)
+            #         if note_content and isinstance(note_content, dict):
+            #             xhs_content += f"\n【小红书笔记 {idx}】\n"
+            #             xhs_content += f"标题：{note_content.get('title', '')}\n"
+            #             xhs_content += f"内容：{note_content.get('content', '')}\n"
+            #             print(f"✅ 第 {idx} 条笔记已使用普通内容添加到知识库")
+            #         else:
+            #             print(f"❌ 第 {idx} 条笔记获取失败，跳过")
+            
+            # print(f"\n{'='*80}")
+            # print(f"📚 小红书笔记处理完成，共成功获取 {len(xhs_cdata_list)} 条CDATA数据")
+            # print(f"📝 知识库内容总长度：{len(xhs_content)} 字符")
+            # print(f"{'='*80}\n")
 
         prompt = self._build_itinerary_prompt(
             destination=destination,
@@ -272,16 +315,27 @@ class TravelService:
                 itinerary_data = {}
             
             print(f"📊 解析结果：共 {len(itinerary_data)} 天的数据")
+            if len(itinerary_data) == 0:
+                print(f"⚠️ 警告：解析后的 itinerary_data 为空，可能是 LLM 返回的数据格式不正确")
             for day_key, day_data in itinerary_data.items():
                 # 确保 day_data 是字典类型
                 if not isinstance(day_data, dict):
                     print(f"⚠️ 警告：{day_key} 的数据不是字典类型：{type(day_data)}")
                     continue
+                
+                # 注意：date、theme、tips 字段可能是字符串类型，这是正常的，不需要检查
+                # LLM返回的JSON中，这些字段通常是字符串类型，不需要类型检查
+                
                 schedule = day_data.get("schedule", {})
                 # 确保 schedule 是字典类型
                 if not isinstance(schedule, dict):
                     schedule = {}
-                print(f"  {day_key}: schedule.morning={len(schedule.get('morning', []))}, afternoon={len(schedule.get('afternoon', []))}, evening={len(schedule.get('evening', []))}")
+                morning_count = len(schedule.get('morning', [])) if isinstance(schedule.get('morning'), list) else 0
+                afternoon_count = len(schedule.get('afternoon', [])) if isinstance(schedule.get('afternoon'), list) else 0
+                evening_count = len(schedule.get('evening', [])) if isinstance(schedule.get('evening'), list) else 0
+                print(f"  {day_key}: schedule.morning={morning_count}, afternoon={afternoon_count}, evening={evening_count}")
+                # 打印完整的 day_data 结构，便于调试
+                print(f"  {day_key} 完整数据结构：keys={list(day_data.keys())}")
 
             yield sse("progress", {"stage": "fetch_recommendations"})
             print(f"🔍 开始搜索景点和餐厅：destination={destination}")
@@ -480,13 +534,102 @@ class TravelService:
                         end_point = acc_point.copy()
                 
                 # 处理航班逻辑（单程和多程）
-                # 1. 检查当天是否有航班到达（到达机场作为起始点）
+                # 1) 单程（往返同一条记录）规则：
+                #    - 第一天：用到达机场作为起点（arrival_airport）
+                #    - 最后一天：用返程起飞机场作为终点（arrival_airport，时间用 return_time）
+                # 2) 多程：若某天有 departure_time，出发机场作为“当天终点”（离开该城市）；
+                #          若某天有 arrival_time（若未来扩展），到达机场作为“当天起点”
+
+                # 第一天：优先强制起点为到达机场（符合“落地第一天就是第一天的起始点”）
+                if day_num == 1 and flights:
+                    f0 = next((f for f in flights if isinstance(f, dict)), None)
+                    if f0:
+                        lat = f0.get("arrival_latitude")
+                        lng = f0.get("arrival_longitude")
+                        airport_name = f0.get("arrival_airport", "")
+                        if lat and lng and airport_name:
+                            start_point = {
+                                "lat": float(lat),
+                                "lng": float(lng),
+                                "name": airport_name,
+                                "category": "机场",
+                                "type": "airport",
+                            }
+
+                # 最后一天：优先使用返程起飞机场作为终点
+                # 规则：如果最后一天有 return_time，使用 departure_airport（返程起飞的机场）
+                # 如果没有 return_time 匹配当天，则使用最后一个航班的 departure_airport（返程起飞机场）
+                if day_num == days:
+                    # 先尝试匹配 return_time 等于当天的航班
+                    for flight in flights:
+                        if not isinstance(flight, dict):
+                            continue
+                        rt = _to_date(flight.get("return_time"))
+                        if rt and rt == current_date:
+                            # 返程起飞机场：使用 departure_airport（从目的地起飞）
+                            lat = flight.get("departure_latitude") or flight.get("latitude")
+                            lng = flight.get("departure_longitude") or flight.get("longitude")
+                            airport_name = flight.get("departure_airport", "")
+                            if lat and lng and airport_name:
+                                end_point = {
+                                    "lat": float(lat),
+                                    "lng": float(lng),
+                                    "name": airport_name,
+                                    "category": "机场",
+                                    "type": "airport",
+                                }
+                                print(f"✅ 第{days}天：使用返程起飞机场作为终止点（return_time匹配当天） - {airport_name}")
+                                break
+                    
+                    # 如果没有匹配到 return_time 等于当天，使用最后一个有 return_time 的航班的 departure_airport
+                    if not end_point:
+                        last_return_flight = None
+                        for flight in flights:
+                            if not isinstance(flight, dict):
+                                continue
+                            rt = _to_date(flight.get("return_time"))
+                            if rt:
+                                if last_return_flight is None or rt > _to_date(last_return_flight.get("return_time")):
+                                    last_return_flight = flight
+                        
+                        if last_return_flight:
+                            lat = last_return_flight.get("departure_latitude") or last_return_flight.get("latitude")
+                            lng = last_return_flight.get("departure_longitude") or last_return_flight.get("longitude")
+                            airport_name = last_return_flight.get("departure_airport", "")
+                            if lat and lng and airport_name:
+                                end_point = {
+                                    "lat": float(lat),
+                                    "lng": float(lng),
+                                    "name": airport_name,
+                                    "category": "机场",
+                                    "type": "airport",
+                                }
+                                print(f"✅ 第{days}天：使用返程起飞机场作为终止点（最后返程航班） - {airport_name}")
+                    
+                    # 如果还是没有，尝试使用最后一个航班的 departure_airport（作为兜底）
+                    if not end_point and flights:
+                        last_flight = flights[-1]
+                        if isinstance(last_flight, dict):
+                            lat = last_flight.get("departure_latitude") or last_flight.get("latitude")
+                            lng = last_flight.get("departure_longitude") or last_flight.get("longitude")
+                            airport_name = last_flight.get("departure_airport", "")
+                            if lat and lng and airport_name:
+                                end_point = {
+                                    "lat": float(lat),
+                                    "lng": float(lng),
+                                    "name": airport_name,
+                                    "category": "机场",
+                                    "type": "airport",
+                                }
+                                print(f"✅ 第{days}天：使用最后一个航班的起飞机场作为终止点（兜底） - {airport_name}")
+
+                # 兼容：若未来扩展 arrival_time，则按 arrival_time 匹配当天起点
                 for flight in flights:
                     if not isinstance(flight, dict):
                         continue
                     
-                    # 检查到达时间（arrival_time 或 return_time）
-                    arrival_time = _to_date(flight.get("arrival_time")) or _to_date(flight.get("return_time"))
+                    # 检查到达时间（arrival_time）
+                    arrival_time = _to_date(flight.get("arrival_time"))
                     if arrival_time and arrival_time == current_date:
                         # 使用到达机场的经纬度
                         lat = flight.get("arrival_latitude") or flight.get("latitude")
@@ -542,30 +685,75 @@ class TravelService:
                                 print(f"✅ 第1天：使用出发机场作为起始点（单程航班） - {flight.get('departure_airport', '')}")
                                 break
                 
-                # 3. 单程航班特殊处理：如果没有找到终止点且是最后一天，使用最后一个航班的到达机场
-                if not end_point and day_num == days:
-                    # 找到最后一个有到达时间的航班
-                    last_arrival_flight = None
-                    for flight in flights:
-                        if not isinstance(flight, dict):
-                            continue
-                        arrival_time = _to_date(flight.get("arrival_time")) or _to_date(flight.get("return_time"))
-                        if arrival_time:
-                            if last_arrival_flight is None or arrival_time > _to_date(last_arrival_flight.get("arrival_time") or last_arrival_flight.get("return_time")):
-                                last_arrival_flight = flight
-                    
-                    if last_arrival_flight:
-                        lat = last_arrival_flight.get("arrival_latitude") or last_arrival_flight.get("latitude")
-                        lng = last_arrival_flight.get("arrival_longitude") or last_arrival_flight.get("longitude")
-                        if lat and lng:
-                            end_point = {
-                                "lat": float(lat),
-                                "lng": float(lng),
-                                "name": last_arrival_flight.get("arrival_airport", ""),
-                                "category": "机场",
-                                "type": "airport"
+                # 兜底逻辑：确保每天都有起始点和终止点
+                # 如果没有起始点，使用第一个景点/餐厅或住宿
+                if not start_point:
+                    # 尝试从当天的景点/餐厅中找第一个有经纬度的点
+                    day_spots = day_itinerary.get("spots", []) or []
+                    day_restaurants = day_itinerary.get("restaurants", []) or []
+                    all_day_items = day_spots + day_restaurants
+                    for item in all_day_items:
+                        if isinstance(item, dict):
+                            lat = item.get("latitude") or item.get("lat")
+                            lng = item.get("longitude") or item.get("lng")
+                            if lat and lng:
+                                start_point = {
+                                    "lat": float(lat),
+                                    "lng": float(lng),
+                                    "name": item.get("name", "起始点"),
+                                    "category": "景点" if item.get("type") != "restaurant" else "美食",
+                                    "type": "spot"
+                                }
+                                print(f"⚠️ 第{day_num}天：使用第一个景点/餐厅作为起始点（兜底）")
+                                break
+                
+                # 如果没有终止点，使用最后一个景点/餐厅或住宿
+                if not end_point:
+                    day_spots = day_itinerary.get("spots", []) or []
+                    day_restaurants = day_itinerary.get("restaurants", []) or []
+                    all_day_items = day_spots + day_restaurants
+                    if all_day_items:
+                        last_item = all_day_items[-1]
+                        if isinstance(last_item, dict):
+                            lat = last_item.get("latitude") or last_item.get("lat")
+                            lng = last_item.get("longitude") or last_item.get("lng")
+                            if lat and lng:
+                                end_point = {
+                                    "lat": float(lat),
+                                    "lng": float(lng),
+                                    "name": last_item.get("name", "终止点"),
+                                    "category": "景点" if last_item.get("type") != "restaurant" else "美食",
+                                    "type": "spot"
+                                }
+                                print(f"⚠️ 第{day_num}天：使用最后一个景点/餐厅作为终止点（兜底）")
+                
+                # 如果仍然没有起始点，使用住宿（如果存在）
+                if not start_point and accommodations:
+                    for acc in accommodations:
+                        if isinstance(acc, dict) and acc.get("latitude") and acc.get("longitude"):
+                            start_point = {
+                                "lat": float(acc["latitude"]),
+                                "lng": float(acc["longitude"]),
+                                "name": acc.get("address", "住宿"),
+                                "category": "住宿",
+                                "type": "accommodation"
                             }
-                            print(f"✅ 第{days}天：使用到达机场作为终止点（单程航班） - {last_arrival_flight.get('arrival_airport', '')}")
+                            print(f"⚠️ 第{day_num}天：使用住宿作为起始点（兜底）")
+                            break
+                
+                # 如果仍然没有终止点，使用住宿（如果存在）
+                if not end_point and accommodations:
+                    for acc in accommodations:
+                        if isinstance(acc, dict) and acc.get("latitude") and acc.get("longitude"):
+                            end_point = {
+                                "lat": float(acc["latitude"]),
+                                "lng": float(acc["longitude"]),
+                                "name": acc.get("address", "住宿"),
+                                "category": "住宿",
+                                "type": "accommodation"
+                            }
+                            print(f"⚠️ 第{day_num}天：使用住宿作为终止点（兜底）")
+                            break
                 
                 return {"start": start_point, "end": end_point}
 
@@ -588,9 +776,6 @@ class TravelService:
                     }
                 else:
                     day_itinerary = day_itinerary_raw
-                
-                # 获取当天的起始点和终止点
-                day_points = _get_day_start_end_points(day_num, current_date)
                 
                 # 兼容新结构 schedule：派生 spots/restaurants，避免下游结果为空
                 day_spots = day_itinerary.get("spots", []) or []
@@ -629,6 +814,22 @@ class TravelService:
                     # 回写到 itinerary，便于前端/DB 兼容读取
                     day_itinerary["spots"] = day_spots
                     day_itinerary["restaurants"] = day_restaurants
+                
+                # 获取当天的起始点和终止点（在解析完 day_itinerary 之后调用，确保可以使用其中的数据）
+                day_points = _get_day_start_end_points(day_num, current_date)
+                
+                # 确保每天都有起始点和终止点（如果还没有，使用兜底逻辑）
+                if not day_points.get("start") or not day_points.get("end"):
+                    print(f"⚠️ 第{day_num}天：起始点或终止点缺失，使用兜底逻辑")
+                    # 兜底逻辑已在 _get_day_start_end_points 内部实现
+                
+                # 获取当天的起始点和终止点（在解析完 day_itinerary 之后调用，确保可以使用其中的数据）
+                day_points = _get_day_start_end_points(day_num, current_date)
+                
+                # 确保每天都有起始点和终止点（如果还没有，使用兜底逻辑）
+                if not day_points.get("start") or not day_points.get("end"):
+                    print(f"⚠️ 第{day_num}天：起始点或终止点缺失，使用兜底逻辑")
+                    # 兜底逻辑已在 _get_day_start_end_points 内部实现
 
                 travel_crud.create_itinerary_detail(
                     travel_plan_id=travel_plan_id,
@@ -758,31 +959,31 @@ class TravelService:
                             ptype = act.get("type") or ("restaurant" if (act.get("cuisine") or act.get("cuisine_type") or act.get("price_range")) else "spot")
                             category = "美食" if ptype == "restaurant" else "景点"
                             
-                    # 确保经纬度存在：优先使用 act 中的，否则从推荐列表中匹配
-                    # 注意：如果是住宿或机场类型，应该已经在 start_point/end_point 中处理，这里主要是景点和餐厅
-                    lat = _num(act.get("latitude"))
-                    lng = _num(act.get("longitude"))
-                    act_name = act.get("name") or act.get("location") or ""
-                    
-                    # 如果缺少经纬度，尝试从推荐列表中匹配
-                    if (lat is None or lng is None) and act_name:
-                        # 在 attractions 或 restaurants 中查找匹配项
-                        search_list = attractions if category == "景点" else restaurants
-                        for rec_item in search_list:
-                            rec_name = rec_item.get("name", "")
-                            if rec_name and (act_name.lower() in rec_name.lower() or rec_name.lower() in act_name.lower()):
-                                if rec_item.get("latitude") is not None and rec_item.get("longitude") is not None:
-                                    lat = _num(rec_item.get("latitude"))
-                                    lng = _num(rec_item.get("longitude"))
-                                    break
-                        
-                        # 如果仍然没有，尝试地理编码（但不要对住宿和机场进行地理编码，它们应该已经在 start_point/end_point 中）
-                        if (lat is None or lng is None) and act_name and category not in ["住宿", "机场"]:
-                            geo = self.location_client.geocode(f"{destination} {act_name}", location=destination)
-                            if geo and isinstance(geo, dict) and geo.get("latitude") is not None and geo.get("longitude") is not None:
-                                lat = _num(geo.get("latitude"))
-                                lng = _num(geo.get("longitude"))
+                            # 确保经纬度存在：优先使用 act 中的，否则从推荐列表中匹配
+                            # 注意：如果是住宿或机场类型，应该已经在 start_point/end_point 中处理，这里主要是景点和餐厅
+                            lat = _num(act.get("latitude"))
+                            lng = _num(act.get("longitude"))
+                            act_name = act.get("name") or act.get("location") or ""
                             
+                            # 如果缺少经纬度，尝试从推荐列表中匹配
+                            if (lat is None or lng is None) and act_name:
+                                # 在 attractions 或 restaurants 中查找匹配项
+                                search_list = attractions if category == "景点" else restaurants
+                                for rec_item in search_list:
+                                    rec_name = rec_item.get("name", "")
+                                    if rec_name and (act_name.lower() in rec_name.lower() or rec_name.lower() in act_name.lower()):
+                                        if rec_item.get("latitude") is not None and rec_item.get("longitude") is not None:
+                                            lat = _num(rec_item.get("latitude"))
+                                            lng = _num(rec_item.get("longitude"))
+                                            break
+                                
+                                # 如果仍然没有，尝试地理编码（但不要对住宿和机场进行地理编码，它们应该已经在 start_point/end_point 中）
+                                if (lat is None or lng is None) and act_name and category not in ["住宿", "机场"]:
+                                    geo = self.location_client.geocode(f"{destination} {act_name}", location=destination)
+                                    if geo and isinstance(geo, dict) and geo.get("latitude") is not None and geo.get("longitude") is not None:
+                                        lat = _num(geo.get("latitude"))
+                                        lng = _num(geo.get("longitude"))
+                                
                             base = {
                                 "uniqueId": f"{'rest' if category == '美食' else 'spot'}_{day_num}_{seg}_{idx}",
                                 "timeOfDay": seg,
@@ -1018,15 +1219,21 @@ class TravelService:
         # 构建小红书CDATA关键数据说明
         xhs_cdata_section = ""
         if xhs_cdata_list and len(xhs_cdata_list) > 0:
-            xhs_cdata_section = "\n\n【⚠️ 重要：小红书笔记关键数据（CDATA）】\n"
-            xhs_cdata_section += "以下是从小红书笔记中提取的结构化关键数据，这些数据应该作为生成路线的重要参考依据：\n"
-            xhs_cdata_section += "- 优先考虑CDATA中推荐的景点、餐厅、住宿\n"
-            xhs_cdata_section += "- 参考CDATA中的旅行Tips和注意事项\n"
-            xhs_cdata_section += "- 结合CDATA中的标签和话题信息\n"
-            xhs_cdata_section += "- CDATA数据比普通笔记内容更详细、更准确，应优先使用\n\n"
+            xhs_cdata_section = "\n\n【⚠️⚠️⚠️ 极其重要：小红书笔记关键数据（CDATA）- 必须优先使用】\n"
+            xhs_cdata_section += "以下是从小红书笔记中提取的真实结构化数据，这些数据来自真实用户分享的旅行经验，\n"
+            xhs_cdata_section += "**必须作为生成路线的核心参考依据，优先于其他任何信息源**：\n\n"
+            xhs_cdata_section += "使用规则：\n"
+            xhs_cdata_section += "1. **优先提取并使用**：从CDATA的content（完整内容）中提取景点名称、餐厅名称、住宿推荐等\n"
+            xhs_cdata_section += "2. **地理位置匹配**：如果CDATA中有location字段，确保路线规划与该位置相关\n"
+            xhs_cdata_section += "3. **标签和话题**：参考tags和topics，了解用户关注的重点（如美食、拍照、文化等）\n"
+            xhs_cdata_section += "4. **内容分析**：仔细分析content中的文字描述，提取具体的推荐地点、时间安排、注意事项等\n"
+            xhs_cdata_section += "5. **数据优先级**：CDATA数据 > 普通笔记内容 > 通用推荐\n\n"
+            xhs_cdata_section += "以下是完整的CDATA数据结构（包含所有详细信息）：\n"
             for idx, cdata in enumerate(xhs_cdata_list, 1):
-                xhs_cdata_section += f"笔记 {idx} CDATA数据：\n"
-                xhs_cdata_section += json.dumps(cdata, ensure_ascii=False, indent=2) + "\n\n"
+                xhs_cdata_section += f"\n--- 笔记 {idx} 完整CDATA数据 ---\n"
+                xhs_cdata_section += json.dumps(cdata, ensure_ascii=False, indent=2) + "\n"
+            xhs_cdata_section += "\n⚠️ 请务必仔细分析上述CDATA数据，特别是content字段中的完整内容，\n"
+            xhs_cdata_section += "提取其中的景点、餐厅、住宿、时间安排、注意事项等关键信息，并应用到路线规划中。\n\n"
         
         prompt = f"""你是一位专业的旅行规划师。请为以下旅行需求生成详细的{days}天旅行路线规划。
 
