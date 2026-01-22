@@ -217,21 +217,38 @@ const Onboarding = () => {
     });
   };
 
+  const formatNumber = (v) => {
+    if (typeof v !== 'number') return v;
+    return v.toLocaleString('zh-CN');
+  };
+
+  const parseNumber = (raw) => {
+    if (raw === '' || raw === null || raw === undefined) return 0;
+    const cleaned = String(raw).replace(/[^0-9.-]/g, '');
+    const parsed = parseInt(cleaned, 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
   const BudgetStepper = ({ value, onChange }) => {
+    const display = formatNumber(typeof value === 'number' ? value : parseNumber(value));
     return (
       <div className="relative">
+        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">
+          ¥
+        </div>
         <input
           type="text"
           inputMode="numeric"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={`${inputCls} pr-10`}
+          value={display}
+          onChange={(e) => onChange(parseNumber(e.target.value))}
+          placeholder="0"
+          className={`${inputCls} pr-10 pl-7 text-right`}
         />
         <div className="absolute right-1 top-1 bottom-1 flex flex-col gap-1">
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onChange((parseInt(value || 0, 10) || 0) + 1)}
+            onClick={() => onChange(parseNumber(value) + 100)}
             className="flex-1 w-8 rounded-lg border border-slate-800/70 bg-slate-950/35 hover:bg-slate-950/55 text-slate-200 flex items-center justify-center transition"
             aria-label="increase"
           >
@@ -240,7 +257,7 @@ const Onboarding = () => {
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onChange(Math.max(0, (parseInt(value || 0, 10) || 0) - 1))}
+            onClick={() => onChange(Math.max(0, parseNumber(value) - 100))}
             className="flex-1 w-8 rounded-lg border border-slate-800/70 bg-slate-950/35 hover:bg-slate-950/55 text-slate-200 flex items-center justify-center transition"
             aria-label="decrease"
           >

@@ -9,7 +9,7 @@ import ItineraryPanel from '../components/plan/ItineraryPanel';
 import MapPanel from '../components/plan/MapPanel';
 import RestaurantDrawer from '../components/plan/RestaurantDrawer';
 import Button from '../components/ui/Button';
-import { Utensils, Share2, Menu, ArrowLeft, List, Trash2 } from 'lucide-react';
+import { Utensils, Share2, ArrowLeft, FolderOpen, Trash2, X, Compass, Sparkles, Bookmark } from 'lucide-react';
 import { Modal } from 'antd';
 
 const Plan = () => {
@@ -79,13 +79,26 @@ const Plan = () => {
         // eslint-disable-next-line no-console
         console.log('[SSE]', eventName, payload);
         if (eventName === 'day') {
-          // 后端已直接返回 items，无需再解析 itinerary.spots/restaurants
-          const items = Array.isArray(payload.items) ? payload.items : [];
+          // 后端返回 items（按早/中/晚分组）：{ morning:[], afternoon:[], evening:[] }
+          const grouped = payload.items && typeof payload.items === 'object' ? payload.items : {};
+          const nextDay = {
+            morning: Array.isArray(grouped.morning) ? grouped.morning : [],
+            afternoon: Array.isArray(grouped.afternoon) ? grouped.afternoon : [],
+            evening: Array.isArray(grouped.evening) ? grouped.evening : [],
+          };
           // eslint-disable-next-line no-console
-          console.log('[SSE day]', { day_number: payload.day_number, itemsCount: items.length, stats: payload.stats, items });
+          console.log('[SSE day]', {
+            day_number: payload.day_number,
+            groupedCount: {
+              morning: nextDay.morning.length,
+              afternoon: nextDay.afternoon.length,
+              evening: nextDay.evening.length,
+            },
+            stats: payload.stats,
+          });
           setItinerary((prev) => ({
             ...(prev || {}),
-            [`day${payload.day_number}`]: items,
+            [`day${payload.day_number}`]: nextDay,
           }));
         }
         if (eventName === 'result') {
@@ -317,8 +330,8 @@ const Plan = () => {
 
   const handleBack = () => {
     Modal.confirm({
-      title: '确认返回',
-      content: '确认返回到初始设置页？',
+      title: '🔙 确认返回',
+      content: '确认返回到初始设置页？（未保存的修改将不会保留）',
       okText: '确认',
       cancelText: '取消',
       onOk: () => {
@@ -330,7 +343,7 @@ const Plan = () => {
   const handleDeleteSession = (sessionId) => {
     const target = sessions.find((item) => item.id === sessionId);
     Modal.confirm({
-      title: '删除会话',
+      title: '🗑️ 删除会话',
       content: `确定要删除「${target?.name || '该会话'}」吗？删除后将无法恢复。`,
       okText: '删除',
       okButtonProps: { danger: true },
@@ -342,9 +355,9 @@ const Plan = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-950 overflow-hidden relative">
+    <div className="tp-plan h-screen flex flex-col bg-slate-950 overflow-hidden relative">
       {isGenerating && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/55 backdrop-blur-md">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/55 backdrop-blur-md opacity-80">
           <div className="bg-slate-900/80 rounded-3xl p-8 shadow-2xl border border-slate-800/70 text-center max-w-sm">
             <div className="w-16 h-16 border-4 border-slate-700/80 border-t-sky-400 rounded-full animate-spin mx-auto mb-6" />
             <h3 className="text-lg font-bold text-slate-50 mb-2">AI 正在规划行程</h3>
@@ -357,58 +370,72 @@ const Plan = () => {
           </div>
         </div>
       )}
-      {/* Header - 深色模式 */}
-      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/90 backdrop-blur-md z-20 shadow-md">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-slate-300 hover:text-slate-50 hover:bg-slate-800 transition-colors"
+      {/* Header - 精致深色玻璃风格 */}
+      <header className="h-14 border-b border-slate-800/60 flex items-center justify-between px-4 bg-gradient-to-r from-slate-900/95 via-slate-900/90 to-slate-950/95 backdrop-blur-xl z-20 shadow-lg shadow-slate-950/30">
+        {/* Left: Back + Logo */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
             onClick={handleBack}
+            className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-all duration-200"
           >
-            <ArrowLeft size={18} className="mr-1.5" />
-            <span className="font-medium">返回</span>
-          </Button>
-          <div className="h-8 w-px bg-slate-800" />
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-sky-900/40">
-              TP
+            <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+            <span className="text-xs font-medium hidden sm:inline">返回</span>
+          </button>
+
+          <div className="h-6 w-px bg-gradient-to-b from-transparent via-slate-700/60 to-transparent" />
+
+          <div className="flex items-center gap-2.5">
+            {/* Logo */}
+            <div className="relative">
+              <div className="w-9 h-9 bg-gradient-to-br from-sky-400 via-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-sky-500/25 ring-1 ring-white/10">
+                <Compass size={18} className="text-white" />
+              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-900 flex items-center justify-center">
+                <Sparkles size={6} className="text-slate-900" />
+              </div>
             </div>
             <div className="hidden sm:block">
-              <h1 className="font-bold text-slate-50 text-lg leading-none">TravelPlanner</h1>
-              <p className="text-xs text-slate-400 mt-0.5">AI 智能规划</p>
+              <h1 className="text-sm font-bold text-slate-50 tracking-tight leading-none">TravelPlanner</h1>
+              <p className="text-[10px] text-slate-500 mt-0.5 font-medium">✨ AI 智能规划</p>
             </div>
           </div>
         </div>
-        
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-slate-300 hover:text-slate-50 hover:bg-slate-800"
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1.5">
+          {/* 附近美食 */}
+          <button
+            type="button"
             onClick={handleOpenRestaurant}
+            className="group flex items-center gap-1.5 px-3 py-2 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20 transition-all duration-200"
           >
-            <Utensils size={18} className="mr-1.5" /> 
-            <span className="hidden sm:inline font-medium">附近美食</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-slate-300 hover:text-slate-50 hover:bg-slate-800"
+            <Utensils size={16} className="group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-medium hidden md:inline">附近美食</span>
+          </button>
+
+          {/* 会话 */}
+          <button
+            type="button"
             onClick={handleToggleSessionDrawer}
+            className="group flex items-center gap-1.5 px-3 py-2 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-sky-500/10 border border-transparent hover:border-sky-500/20 transition-all duration-200"
           >
-            <List size={18} className="mr-1.5" />
-            <span className="font-medium">会话</span>
-          </Button>
-          <Button
-            variant="accent"
-            size="sm"
-            className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-medium shadow-lg shadow-sky-900/40 transition-all"
+            <FolderOpen size={16} className="group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-medium hidden md:inline">会话</span>
+          </button>
+
+          <div className="h-5 w-px bg-slate-800/80 mx-1" />
+
+          {/* 保存分享 - CTA */}
+          <button
+            type="button"
             onClick={handleGoShare}
+            className="group relative flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-medium text-xs bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 shadow-lg shadow-sky-500/25 hover:shadow-sky-400/30 transition-all duration-200 overflow-hidden"
           >
-            <Share2 size={16} className="mr-1.5" /> 
-            <span>保存分享</span>
-          </Button>
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+            <Bookmark size={14} className="relative z-10" />
+            <span className="relative z-10">保存分享</span>
+          </button>
         </div>
       </header>
 
@@ -435,42 +462,69 @@ const Plan = () => {
         {/* Restaurant Drawer */}
         <RestaurantDrawer isOpen={isRestaurantOpen} onClose={handleCloseRestaurant} />
 
+        {/* Backdrop for session drawer */}
+        <div
+          className={`fixed inset-0 z-20 transition-opacity duration-300 ${
+            isSessionDrawerOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+          onClick={() => setIsSessionDrawerOpen(false)}
+          role="button"
+          tabIndex={-1}
+          aria-label="close session drawer"
+        >
+          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" />
+        </div>
+
         {/* Session Drawer - 右侧会话抽屉 */}
         <div
-          className={`fixed inset-y-16 right-0 w-72 bg-slate-900/95 border-l border-slate-800 shadow-2xl z-30 transform transition-transform duration-300 ${
+          className={`fixed inset-y-14 right-0 w-80 bg-slate-900/95 border-l border-slate-800/50 shadow-2xl z-30 transform transition-transform duration-300 backdrop-blur-xl ${
             isSessionDrawerOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
           <div className="h-full flex flex-col">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between gap-2 bg-slate-900">
-              <div className="flex items-center gap-2">
-                <List size={16} className="text-slate-300" />
-                <span className="text-sm font-semibold text-slate-100">会话列表</span>
+            <div className="p-4 border-b border-slate-800/60 flex items-center justify-between gap-2 bg-gradient-to-r from-sky-500/8 to-indigo-500/8">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-500/25 flex items-center justify-center">
+                  <FolderOpen size={16} className="text-sky-400" />
+                </div>
+                <div>
+                  <span className="text-sm font-semibold text-slate-100">会话列表</span>
+                  <div className="text-[10px] text-slate-500 mt-0.5">保存/切换不同的行程版本</div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs border-slate-700 text-slate-200 hover:bg-slate-800"
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className="h-7 px-3 rounded-lg text-[11px] font-medium text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 transition-colors"
                   onClick={handleSaveSession}
                 >
-                  保存当前
-                </Button>
+                  + 保存当前
+                </button>
+                <button
+                  type="button"
+                  className="h-7 w-7 rounded-lg bg-slate-800/50 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors grid place-items-center"
+                  onClick={() => setIsSessionDrawerOpen(false)}
+                  aria-label="close"
+                >
+                  <X size={14} />
+                </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-900/95">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {sessions.length === 0 && (
-                <div className="text-xs text-slate-500">
-                  暂无会话，点击「保存当前」创建一个。
+                <div className="text-center py-8">
+                  <FolderOpen size={32} className="text-slate-700 mx-auto mb-3" />
+                  <div className="text-xs text-slate-500">暂无保存的会话</div>
+                  <div className="text-[10px] text-slate-600 mt-1">点击上方「保存当前」创建</div>
                 </div>
               )}
               {sessions.map((session) => (
                 <div
                   key={session.id}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md border text-xs transition-colors ${
+                  className={`group w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border text-xs transition-all duration-200 ${
                     currentSessionId === session.id
-                      ? 'border-sky-400 bg-sky-500/10 text-sky-200'
-                      : 'border-slate-700 hover:border-sky-400/60 hover:bg-slate-800 text-slate-200'
+                      ? 'border-sky-500/50 bg-sky-500/10 text-sky-200 shadow-lg shadow-sky-500/10'
+                      : 'border-slate-800/70 hover:border-slate-700 bg-slate-900/50 hover:bg-slate-800/50 text-slate-300'
                   }`}
                 >
                   <button
@@ -479,13 +533,13 @@ const Plan = () => {
                     onClick={() => handleSelectSession(session.id)}
                   >
                     <div className="truncate font-medium">{session.name}</div>
-                    <div className="text-[10px] text-slate-400 mt-1">
+                    <div className="text-[10px] text-slate-500 mt-1">
                       {new Date(session.createdAt).toLocaleString()}
                     </div>
                   </button>
                   <button
                     type="button"
-                    className="shrink-0 text-red-400 hover:text-red-600"
+                    className="shrink-0 p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
                     onClick={() => handleDeleteSession(session.id)}
                   >
                     <Trash2 size={14} />

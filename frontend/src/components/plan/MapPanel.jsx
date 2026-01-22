@@ -1,6 +1,26 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useTravel } from '../../context/TravelContext';
-import { Compass, MapPin, Utensils, Plane, Hotel } from 'lucide-react';
+import { Compass, MapPin, Utensils, Plane, Hotel, AlertTriangle } from 'lucide-react';
+import { requireEnv } from '../../config/env';
+
+// 中国大陆 + 港澳台经纬度范围（高德地图仅支持这些区域的详细底图）
+const CHINA_BOUNDS = {
+  latMin: 3.5,
+  latMax: 53.5,
+  lngMin: 73.5,
+  lngMax: 135.5,
+};
+
+// 判断坐标是否在中国区域内
+const isInChina = (lat, lng) => {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true; // 默认中国
+  return (
+    lat >= CHINA_BOUNDS.latMin &&
+    lat <= CHINA_BOUNDS.latMax &&
+    lng >= CHINA_BOUNDS.lngMin &&
+    lng <= CHINA_BOUNDS.lngMax
+  );
+};
 
 // 简单的脚本加载工具，避免重复加载高德 SDK
 const loadAmapScript = (() => {
@@ -9,7 +29,7 @@ const loadAmapScript = (() => {
     if (window.AMap) return Promise.resolve(window.AMap);
     if (loadingPromise) return loadingPromise;
 
-    const key = import.meta.env.VITE_AMAP_WEB_KEY || '31d12ccab5b38ae944d01977a0d37cc1';
+    const key = requireEnv('AMAP_WEB_KEY', '缺少高德地图 Key：请配置 VITE_AMAP_WEB_KEY（用于国内地图）。');
     const script = document.createElement('script');
     script.type = 'text/javascript';
     script.async = true;
@@ -31,6 +51,43 @@ const loadAmapScript = (() => {
   };
 })();
 
+// Mapbox 脚本加载（国外地图）
+const loadMapboxScript = (() => {
+  let loadingPromise = null;
+  return () => {
+    if (window.mapboxgl) return Promise.resolve(window.mapboxgl);
+    if (loadingPromise) return loadingPromise;
+
+    const token = requireEnv('MAPBOX_TOKEN', '缺少 Mapbox Token：请配置 VITE_MAPBOX_TOKEN（用于国外地图）。');
+
+    // 加载 CSS
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css';
+    document.head.appendChild(link);
+
+    // 加载 JS
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js';
+
+    loadingPromise = new Promise((resolve, reject) => {
+      script.onload = () => {
+        if (window.mapboxgl) {
+          window.mapboxgl.accessToken = token;
+          resolve(window.mapboxgl);
+        } else {
+          reject(new Error('Mapbox 加载失败'));
+        }
+      };
+      script.onerror = () => reject(new Error('Mapbox 脚本加载出错'));
+    });
+
+    document.body.appendChild(script);
+    return loadingPromise;
+  };
+})();
+
 const MapPanel = () => {
   const { mapCenter, mapZoom, mapPoints, itinerary } = useTravel();
   const mapContainerRef = useRef(null);
@@ -39,176 +96,307 @@ const MapPanel = () => {
   const markersRef = useRef([]);
   const lastSignatureRef = useRef('');
   const [mapReady, setMapReady] = useState(false);
+  const [mapProvider, setMapProvider] = useState(null); // 'amap' | 'mapbox'
+  const [mapError, setMapError] = useState(null);
 
   // 如果有后端返回的 mapPoints，则优先使用；否则退回到基于 itinerary 的本地模拟数据
-  const fallbackItineraryPoints = Object.values(itinerary || {}).flat();
+  const fallbackItineraryPoints = Object.values(itinerary || {}).flatMap((day) => {
+    // 新结构：{ morning:[], afternoon:[], evening:[] }
+    if (day && typeof day === 'object' && !Array.isArray(day)) {
+      const m = Array.isArray(day.morning) ? day.morning : [];
+      const a = Array.isArray(day.afternoon) ? day.afternoon : [];
+      const e = Array.isArray(day.evening) ? day.evening : [];
+      return [...m, ...a, ...e];
+    }
+    // 旧结构：数组
+    if (Array.isArray(day)) return day;
+    return [];
+  });
   const allPoints = (mapPoints && mapPoints.length > 0) ? mapPoints : fallbackItineraryPoints;
+
+  // 根据 mapCenter 判断使用哪个地图提供商
+  const shouldUseMapbox = useMemo(() => {
+    const [lat, lng] = mapCenter || [];
+    return !isInChina(lat, lng);
+  }, [mapCenter]);
+
+  // 清理地图实例的通用函数
+  const cleanupMap = () => {
+    try {
+      if (polylineRef.current && mapRef.current) {
+        if (mapProvider === 'amap') {
+          mapRef.current.remove(polylineRef.current);
+        }
+        polylineRef.current = null;
+      }
+    } catch (e) { /* ignore */ }
+
+    try {
+      if (markersRef.current.length && mapRef.current) {
+        markersRef.current.forEach((m) => {
+          try {
+            if (mapProvider === 'amap') {
+              mapRef.current.remove(m);
+            } else if (m.remove) {
+              m.remove();
+            }
+          } catch (e) { /* ignore */ }
+        });
+        markersRef.current = [];
+      }
+    } catch (e) { /* ignore */ }
+
+    try {
+      if (mapRef.current) {
+        if (mapProvider === 'amap') {
+          mapRef.current.destroy();
+        } else if (mapRef.current.remove) {
+          mapRef.current.remove();
+        }
+        mapRef.current = null;
+      }
+    } catch (e) { /* ignore */ }
+
+    lastSignatureRef.current = '';
+    setMapReady(false);
+  };
+
+  // 获取标记颜色
+  const getMarkerColor = (category) => {
+    if (category === '美食') return '#F56565';
+    if (category === '机场') return '#22C55E';
+    if (category === '住宿') return '#92400E';
+    return '#2B6CB0'; // 景点默认蓝色
+  };
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     let isMounted = true;
 
-    loadAmapScript()
-      .then((AMap) => {
-        if (!isMounted || !AMap) return;
-
-        const center = [mapCenter[1], mapCenter[0]]; // 高德经纬度顺序为 [lng, lat]
-
-        if (!mapRef.current) {
-          mapRef.current = new AMap.Map(mapContainerRef.current, {
-            center,
-            zoom: mapZoom,
-            // 2D 模式通常更轻量，可减少 canvas 相关 readback 压力提示
-            viewMode: '2D',
-            zooms: [3, 20],
-          });
-          setMapReady(true);
-        } else {
-          mapRef.current.setZoomAndCenter(mapZoom, center);
-        }
-
-        // 清理旧标记
-        if (markersRef.current.length) {
-          markersRef.current.forEach((marker) => {
-            try {
-              mapRef.current.remove(marker);
-            } catch (e) {
-              // ignore
-            }
-          });
-          markersRef.current = [];
-        }
-
-        // 清理旧折线
-        if (polylineRef.current) {
-          try {
-            mapRef.current.remove(polylineRef.current);
-          } catch (e) {
-            // ignore
-          }
-          polylineRef.current = null;
+    const initMap = async () => {
+      try {
+        // 切换地图提供商时，先清理旧地图
+        if (mapRef.current && ((shouldUseMapbox && mapProvider === 'amap') || (!shouldUseMapbox && mapProvider === 'mapbox'))) {
+          cleanupMap();
         }
 
         const validPoints = (allPoints || []).filter(
           (poi) => Number.isFinite(poi.lng) && Number.isFinite(poi.lat)
         );
-        if (!validPoints.length) return;
 
-        // 点集合没变就不重复清理/重绘（降低 canvas 压力）
-        const signature = validPoints.map((p) => `${p.id || ''}:${p.lng},${p.lat}:${p.category || ''}`).join('|');
-        if (lastSignatureRef.current === signature) return;
-        lastSignatureRef.current = signature;
+        if (shouldUseMapbox) {
+          // 使用 Mapbox（国外地图）
+          const mapboxgl = await loadMapboxScript();
+          if (!isMounted) return;
 
-        const path = validPoints.map((poi) => [poi.lng, poi.lat]);
+          setMapProvider('mapbox');
+          setMapError(null);
 
-        polylineRef.current = new AMap.Polyline({
-          path,
-          strokeColor: '#2B6CB0',
-          strokeWeight: 3,
-          strokeOpacity: 0.8,
-          lineJoin: 'round',
-          lineCap: 'round',
-          showDir: true,
-        });
+          const center = [mapCenter[1], mapCenter[0]]; // [lng, lat]
 
-        mapRef.current.add(polylineRef.current);
+          if (!mapRef.current) {
+            mapRef.current = new mapboxgl.Map({
+              container: mapContainerRef.current,
+              style: 'mapbox://styles/mapbox/dark-v11',
+              center,
+              zoom: mapZoom,
+            });
 
-        validPoints.forEach((poi) => {
-          let color = '#2B6CB0'; // 景点：蓝色
-          if (poi.category === '美食') {
-            color = '#F56565'; // 餐厅：红色
-          } else if (poi.category === '机场') {
-            color = '#22C55E'; // 机场：绿色
-          } else if (poi.category === '住宿') {
-            color = '#92400E'; // 住宿：棕色
+            // 捕获 Mapbox 的网络/鉴权错误（例如 401 invalid token）
+            mapRef.current.on('error', (e) => {
+              const status = e?.error?.status || e?.error?.statusCode;
+              if (status === 401) {
+                setMapError('Mapbox 鉴权失败（401）：请检查 VITE_MAPBOX_TOKEN 是否有效、是否有 styles:read 等权限。');
+              }
+            });
+
+            mapRef.current.on('load', () => {
+              if (isMounted) setMapReady(true);
+            });
+          } else {
+            mapRef.current.setCenter(center);
+            mapRef.current.setZoom(mapZoom);
           }
-          const marker = new AMap.Marker({
-            position: [poi.lng, poi.lat],
-            title: poi.name,
-            offset: new AMap.Pixel(-8, -8),
-            content: `
-              <div style="
-                width: 16px;
-                height: 16px;
-                border-radius: 999px;
-                border: 2px solid #ffffff;
-                background-color: ${color};
-                box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
-              "></div>
-            `,
-          });
 
-          const info = new AMap.InfoWindow({
-            offset: new AMap.Pixel(0, -24),
-            content: `
-              <div style="max-width: 220px; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;">
-                <div style="width: 100%; height: 96px; margin-bottom: 8px; border-radius: 8px; overflow: hidden; background: #e2e8f0;">
-                  <img 
-                    src="https://www.weavefox.cn/api/bolt/unsplash_image?keyword=${encodeURIComponent(
-                      poi.imageKeyword || poi.name,
-                    )}&width=220&height=150&random=${poi.id}"
-                    alt="${poi.name}"
-                    style="width: 100%; height: 100%; object-fit: cover;"
-                  />
-                </div>
+          // 清理旧标记
+          markersRef.current.forEach((m) => {
+            try { m.remove(); } catch (e) { /* ignore */ }
+          });
+          markersRef.current = [];
+
+          if (!validPoints.length) return;
+
+          const signature = validPoints.map((p) => `${p.id || ''}:${p.lng},${p.lat}:${p.category || ''}`).join('|');
+          if (lastSignatureRef.current === signature) return;
+          lastSignatureRef.current = signature;
+
+          // 添加标记
+          validPoints.forEach((poi) => {
+            const color = getMarkerColor(poi.category);
+            const el = document.createElement('div');
+            el.style.cssText = `
+              width: 20px;
+              height: 20px;
+              border-radius: 999px;
+              border: 2px solid #ffffff;
+              background-color: ${color};
+              box-shadow: 0 2px 8px rgba(15, 23, 42, 0.4);
+              cursor: pointer;
+            `;
+
+            const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+              <div style="max-width: 220px; font-family: system-ui, sans-serif; padding: 4px;">
                 <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 4px; color: #1e293b;">${poi.name}</h3>
-                <p style="margin: 0; font-size: 12px; color: #64748b;">${poi.category} · 建议停留 ${
-                  poi.duration
-                } 分钟</p>
-                <div style="margin-top: 4px; font-size: 12px; font-weight: 500; color: #f59e0b;">
-                  ★ ${poi.rating}
-                </div>
+                <p style="margin: 0; font-size: 12px; color: #64748b;">${poi.category} · 建议停留 ${poi.duration || 60} 分钟</p>
               </div>
-            `,
+            `);
+
+            const marker = new mapboxgl.Marker(el)
+              .setLngLat([poi.lng, poi.lat])
+              .setPopup(popup)
+              .addTo(mapRef.current);
+
+            markersRef.current.push(marker);
           });
 
-          marker.on('click', () => {
-            info.open(mapRef.current, marker.getPosition());
+          // 添加路线
+          if (validPoints.length > 1 && mapRef.current.isStyleLoaded()) {
+            const coordinates = validPoints.map((p) => [p.lng, p.lat]);
+            
+            if (mapRef.current.getSource('route')) {
+              mapRef.current.getSource('route').setData({
+                type: 'Feature',
+                properties: {},
+                geometry: { type: 'LineString', coordinates },
+              });
+            } else {
+              mapRef.current.addSource('route', {
+                type: 'geojson',
+                data: {
+                  type: 'Feature',
+                  properties: {},
+                  geometry: { type: 'LineString', coordinates },
+                },
+              });
+              mapRef.current.addLayer({
+                id: 'route',
+                type: 'line',
+                source: 'route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#38bdf8', 'line-width': 3 },
+              });
+            }
+          }
+
+        } else {
+          // 使用高德地图（国内）
+          const AMap = await loadAmapScript();
+          if (!isMounted) return;
+
+          setMapProvider('amap');
+          setMapError(null);
+
+          const center = [mapCenter[1], mapCenter[0]]; // 高德经纬度顺序为 [lng, lat]
+
+          if (!mapRef.current) {
+            mapRef.current = new AMap.Map(mapContainerRef.current, {
+              center,
+              zoom: mapZoom,
+              viewMode: '2D',
+              zooms: [3, 20],
+            });
+            setMapReady(true);
+          } else {
+            mapRef.current.setZoomAndCenter(mapZoom, center);
+          }
+
+          // 清理旧标记
+          if (markersRef.current.length) {
+            markersRef.current.forEach((marker) => {
+              try { mapRef.current.remove(marker); } catch (e) { /* ignore */ }
+            });
+            markersRef.current = [];
+          }
+
+          // 清理旧折线
+          if (polylineRef.current) {
+            try { mapRef.current.remove(polylineRef.current); } catch (e) { /* ignore */ }
+            polylineRef.current = null;
+          }
+
+          if (!validPoints.length) return;
+
+          const signature = validPoints.map((p) => `${p.id || ''}:${p.lng},${p.lat}:${p.category || ''}`).join('|');
+          if (lastSignatureRef.current === signature) return;
+          lastSignatureRef.current = signature;
+
+          const path = validPoints.map((poi) => [poi.lng, poi.lat]);
+
+          polylineRef.current = new AMap.Polyline({
+            path,
+            strokeColor: '#38bdf8',
+            strokeWeight: 3,
+            strokeOpacity: 0.8,
+            lineJoin: 'round',
+            lineCap: 'round',
+            showDir: true,
           });
 
-          mapRef.current.add(marker);
-          markersRef.current.push(marker);
-        });
-      })
-      .catch((error) => {
+          mapRef.current.add(polylineRef.current);
+
+          validPoints.forEach((poi) => {
+            const color = getMarkerColor(poi.category);
+            const marker = new AMap.Marker({
+              position: [poi.lng, poi.lat],
+              title: poi.name,
+              offset: new AMap.Pixel(-8, -8),
+              content: `
+                <div style="
+                  width: 16px;
+                  height: 16px;
+                  border-radius: 999px;
+                  border: 2px solid #ffffff;
+                  background-color: ${color};
+                  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+                "></div>
+              `,
+            });
+
+            const info = new AMap.InfoWindow({
+              offset: new AMap.Pixel(0, -24),
+              content: `
+                <div style="max-width: 220px; font-family: system-ui, sans-serif;">
+                  <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 4px; color: #1e293b;">${poi.name}</h3>
+                  <p style="margin: 0; font-size: 12px; color: #64748b;">${poi.category} · 建议停留 ${poi.duration || 60} 分钟</p>
+                </div>
+              `,
+            });
+
+            marker.on('click', () => {
+              info.open(mapRef.current, marker.getPosition());
+            });
+
+            mapRef.current.add(marker);
+            markersRef.current.push(marker);
+          });
+        }
+      } catch (error) {
         // eslint-disable-next-line no-console
-        console.warn('加载高德地图失败:', error);
-      });
+        console.warn('加载地图失败:', error);
+        if (isMounted) {
+          setMapError(error.message || '地图加载失败');
+        }
+      }
+    };
+
+    initMap();
 
     return () => {
       isMounted = false;
-      // 关键：销毁地图实例，避免 React 卸载时 DOM 已被第三方改动导致 removeChild 报错
-      try {
-        if (polylineRef.current && mapRef.current) {
-          mapRef.current.remove(polylineRef.current);
-          polylineRef.current = null;
-        }
-      } catch (e) {
-        // ignore
-      }
-      try {
-        if (markersRef.current.length && mapRef.current) {
-          markersRef.current.forEach((m) => {
-            try { mapRef.current.remove(m); } catch (e) { /* ignore */ }
-          });
-          markersRef.current = [];
-        }
-      } catch (e) {
-        // ignore
-      }
-      try {
-        if (mapRef.current) {
-          mapRef.current.destroy();
-          mapRef.current = null;
-        }
-      } catch (e) {
-        // ignore
-      }
-      lastSignatureRef.current = '';
-      setMapReady(false);
+      cleanupMap();
     };
-  }, [mapCenter, mapZoom, allPoints.length]);
+  }, [mapCenter, mapZoom, allPoints.length, shouldUseMapbox]);
 
   return (
     <div className="h-full w-full relative z-0 bg-slate-950">
@@ -248,13 +436,33 @@ const MapPanel = () => {
         </div>
       )}
 
-      {/* Map Loading（更透明 + 深色主题） */}
-      {!mapReady && (
+      {/* Map Loading */}
+      {!mapReady && !mapError && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-950/35 backdrop-blur-[2px]">
           <div className="flex flex-col items-center gap-3">
             <div className="w-10 h-10 border-2 border-slate-700/80 border-t-sky-400 rounded-full animate-spin" />
-            <div className="text-xs text-slate-300">地图加载中…</div>
+            <div className="text-xs text-slate-300">
+              {shouldUseMapbox ? '🌍 加载国际地图…' : '🗺️ 加载地图中…'}
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Map Error */}
+      {mapError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 text-center px-6">
+            <AlertTriangle size={32} className="text-amber-400" />
+            <div className="text-sm text-slate-200 font-medium">地图加载失败</div>
+            <div className="text-xs text-slate-400 max-w-xs">{mapError}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Provider indicator */}
+      {mapReady && mapProvider && (
+        <div className="absolute bottom-4 left-4 bg-slate-900/70 backdrop-blur px-2 py-1 rounded text-[10px] text-slate-400 border border-slate-800/50">
+          {mapProvider === 'mapbox' ? '🌍 Mapbox' : '🇨🇳 高德地图'}
         </div>
       )}
     </div>

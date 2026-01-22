@@ -44,7 +44,9 @@ export const TravelProvider = ({ children }) => {
   // 航班信息（旧的 Flights 页面模拟用）
   const [flightInfo, setFlightInfo] = useState(null);
 
-  // 行程数据结构: { day1: [poi1, poi2], day2: [...] }
+  // 行程数据结构:
+  // 新结构：{ day1: { morning: [], afternoon: [], evening: [] }, day2: {...} }
+  // 兼容旧结构（数组）会在工具函数内自动归一化
   const [itinerary, setItinerary] = useState({});
 
   // 聊天历史
@@ -140,16 +142,16 @@ export const TravelProvider = ({ children }) => {
     }
   }, [preferences.destination, preferences.flights]);
 
-  const addPoiToDay = (poi, dayKey) => {
-    setItinerary((prev) => addPoiToDayInItinerary(prev, dayKey, poi));
+  const addPoiToDay = (poi, dayKey, timeOfDay) => {
+    setItinerary((prev) => addPoiToDayInItinerary(prev, dayKey, poi, timeOfDay));
   };
 
-  const removePoi = (dayKey, uniqueId) => {
-    setItinerary((prev) => removePoiFromItinerary(prev, dayKey, uniqueId));
+  const removePoi = (dayKey, uniqueId, timeOfDay) => {
+    setItinerary((prev) => removePoiFromItinerary(prev, dayKey, uniqueId, timeOfDay));
   };
 
-  const updateItineraryOrder = (dayKey, newItems) => {
-    setItinerary((prev) => updateItineraryOrderForDay(prev, dayKey, newItems));
+  const updateItineraryOrder = (dayKey, newItems, timeOfDay) => {
+    setItinerary((prev) => updateItineraryOrderForDay(prev, dayKey, newItems, timeOfDay));
   };
 
   const addChatMessage = (role, content) => {

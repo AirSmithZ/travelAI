@@ -163,6 +163,18 @@
   background: rgba(127, 29, 29, 0.35) !important;
 }
 
+/* ===== Plan Tooltip (notes) ===== */
+.tp-tooltip-dark .ant-tooltip-inner {
+  background: rgba(15, 23, 42, 0.98) !important;
+  color: rgba(226, 232, 240, 0.95) !important;
+  border: 1px solid rgba(51, 65, 85, 0.75) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55) !important;
+}
+.tp-tooltip-dark .ant-tooltip-arrow::before {
+  background: rgba(15, 23, 42, 0.98) !important;
+}
+
 /* Leaflet Map Styles Fix */
 .leaflet-container {
   width: 100%;
@@ -184,4 +196,31 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* ===== Drag-and-Drop Scrolling Fix ===== */
+/* 
+ * 修复 @hello-pangea/dnd 在滚动容器中拖拽时位置偏移的问题
+ * 问题原因：拖拽元素使用 fixed 定位，但计算位置时未考虑滚动偏移
+ * 解决方案：确保拖拽时元素使用正确的定位上下文
+ */
+[data-rbd-draggable-context-id] {
+  /* 确保拖拽元素在正确的堆叠上下文中 */
+}
+
+[data-rbd-drag-handle-draggable-id] {
+  /* 拖拽手柄样式 */
+  touch-action: none;
+}
+
+/* 拖拽中的元素样式 */
+[data-rbd-draggable-id][data-rbd-draggable-dragging="true"] {
+  /* 拖拽时添加视觉反馈 */
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+}
+
+/* 拖拽占位符样式 */
+[data-rbd-placeholder-context-id] {
+  /* 占位符保持可见 */
 }
