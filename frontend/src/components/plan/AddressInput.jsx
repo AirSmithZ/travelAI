@@ -138,7 +138,9 @@ const AddressInput = ({ addresses, onChange }) => {
   const handleAddAddress = () => {
     onChange([...addresses, { 
       city: null, 
-      address: ''
+      address: '',
+      checkInDate: null,
+      checkOutDate: null
     }]);
   };
 
@@ -246,6 +248,35 @@ const AddressInput = ({ addresses, onChange }) => {
                   placeholder="如：朝阳区xxx街道xxx号"
                   className="w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">
+                    入住日期
+                  </label>
+                  <input
+                    type="date"
+                    value={address.checkInDate || ''}
+                    onChange={(e) =>
+                      handleAddressChange(index, 'checkInDate', e.target.value || null)
+                    }
+                    className="w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">
+                    退房日期
+                  </label>
+                  <input
+                    type="date"
+                    value={address.checkOutDate || ''}
+                    onChange={(e) =>
+                      handleAddressChange(index, 'checkOutDate', e.target.value || null)
+                    }
+                    min={address.checkInDate || ''}
+                    className="w-full rounded-xl border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
+                  />
+                </div>
               </div>
             </div>
           </div>

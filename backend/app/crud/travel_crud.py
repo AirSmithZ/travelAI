@@ -54,10 +54,24 @@ def create_travel_plan(user_id: int, plan_data: TravelPlanCreate) -> Optional[in
     """创建旅行规划"""
     connection = get_db_connection()
     if not connection:
+        print("❌ 数据库连接失败：get_db_connection() 返回 None")
         return None
     
+    cursor = None
     try:
         cursor = connection.cursor()
+        print(f"📝 开始创建旅行规划，user_id={user_id}, destination={plan_data.destination}")
+        
+        # 验证用户是否存在
+        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            # 如果用户不存在，创建默认用户
+            print(f"⚠️ 用户 {user_id} 不存在，尝试创建默认用户")
+            cursor.execute("INSERT INTO users (id, username, email) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE id=id", 
+                         (user_id, f"user_{user_id}", f"user_{user_id}@example.com"))
+            connection.commit()
+            print(f"✅ 已创建默认用户 {user_id}")
         
         # 处理目的地（取第一个）
         destination = plan_data.destination[0] if plan_data.destination else ""
@@ -71,20 +85,76 @@ def create_travel_plan(user_id: int, plan_data: TravelPlanCreate) -> Optional[in
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         
+        # 准备插入值，确保类型正确
+        try:
+            addresses_json = json.dumps(
+                [addr.model_dump() if hasattr(addr, 'model_dump') else addr.dict() for addr in plan_data.addresses], 
+                ensure_ascii=False
+            ) if plan_data.addresses else json.dumps([], ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ 序列化 addresses 失败：{e}")
+            addresses_json = json.dumps([], ensure_ascii=False)
+        
         values = (
-            user_id,
-            destination,
-            plan_data.budget.min,
-            plan_data.budget.max,
-            json.dumps(plan_data.interests, ensure_ascii=False),
-            json.dumps(plan_data.food_preferences, ensure_ascii=False),
-            plan_data.travelers,
-            json.dumps(plan_data.xiaohongshu_notes, ensure_ascii=False),
-            json.dumps([addr.dict() for addr in plan_data.addresses], ensure_ascii=False)
+            int(user_id),  # 确保是整数
+            str(destination) if destination else "",  # 确保是字符串
+            float(plan_data.budget.min),  # 确保是浮点数
+            float(plan_data.budget.max),  # 确保是浮点数
+            json.dumps(plan_data.interests or [], ensure_ascii=False),
+            json.dumps(plan_data.food_preferences or [], ensure_ascii=False),
+            str(plan_data.travelers) if plan_data.travelers else "",
+            json.dumps(plan_data.xiaohongshu_notes or [], ensure_ascii=False),
+            addresses_json
         )
         
-        cursor.execute(insert_sql, values)
+        print(f"📋 准备插入的值：user_id={values[0]}, destination={values[1]}, budget={values[2]}-{values[3]}")
+        
+        # 执行插入
+        affected_rows = cursor.execute(insert_sql, values)
+        print(f"📊 INSERT 执行完成，affected_rows={affected_rows}")
+        
+        # 获取插入的 ID（多种方式尝试）
         plan_id = cursor.lastrowid
+        print(f"📊 cursor.lastrowid={plan_id}")
+        
+        # 如果 lastrowid 无效，尝试使用 LAST_INSERT_ID()
+        if not plan_id or plan_id == 0:
+            cursor.execute("SELECT LAST_INSERT_ID() as id")
+            result = cursor.fetchone()
+            if result:
+                plan_id = result.get('id') if isinstance(result, dict) else (result[0] if isinstance(result, (list, tuple)) else None)
+                print(f"📊 使用 LAST_INSERT_ID() 获取 plan_id={plan_id}")
+        
+        # 如果仍然没有 plan_id，尝试通过查询获取
+        if not plan_id or plan_id == 0:
+            cursor.execute("""
+                SELECT id FROM travel_plans 
+                WHERE user_id = %s AND destination = %s 
+                ORDER BY created_at DESC LIMIT 1
+            """, (user_id, destination))
+            result = cursor.fetchone()
+            if result:
+                plan_id = result.get('id') if isinstance(result, dict) else (result[0] if isinstance(result, (list, tuple)) else None)
+                print(f"📊 通过查询获取 plan_id={plan_id}")
+        
+        # 如果仍然没有 plan_id，说明插入失败
+        if not plan_id or plan_id == 0:
+            # 检查表是否存在
+            cursor.execute("SHOW TABLES LIKE 'travel_plans'")
+            table_exists = cursor.fetchone()
+            if not table_exists:
+                raise ValueError("数据库表 travel_plans 不存在，请先运行 python3 -m app.models.travel_models 创建表")
+            
+            # 检查是否有插入错误
+            cursor.execute("SHOW WARNINGS")
+            warnings = cursor.fetchall()
+            if warnings:
+                warning_msg = "; ".join([str(w) for w in warnings])
+                raise ValueError(f"插入旅行规划时出现警告：{warning_msg}")
+            
+            raise ValueError(f"插入旅行规划失败：无法获取 plan_id。lastrowid={cursor.lastrowid}, affected_rows={affected_rows}。请检查数据库表结构和外键约束。")
+        
+        print(f"✅ 成功创建旅行规划，plan_id={plan_id}")
         
         # 插入航班信息
         for flight in plan_data.flights:
@@ -108,25 +178,55 @@ def create_travel_plan(user_id: int, plan_data: TravelPlanCreate) -> Optional[in
         
         # 插入居住地址信息
         for addr in plan_data.addresses:
+            # 处理 city 字段：可能是字符串或对象
+            city_value = addr.city
+            if isinstance(city_value, dict):
+                city_value = city_value.get('name', '')
+            elif not isinstance(city_value, str):
+                city_value = str(city_value) if city_value else ''
+            
             insert_addr_sql = """
             INSERT INTO accommodations (
-                user_id, travel_plan_id, city, address
-            ) VALUES (%s, %s, %s, %s)
+                user_id, travel_plan_id, city, address, check_in_date, check_out_date
+            ) VALUES (%s, %s, %s, %s, %s, %s)
             """
             cursor.execute(
                 insert_addr_sql,
-                (user_id, plan_id, addr.city, addr.address)
+                (
+                    user_id, 
+                    plan_id, 
+                    city_value, 
+                    addr.address or '',
+                    addr.check_in_date,
+                    addr.check_out_date
+                )
             )
         
         connection.commit()
+        print(f"✅ 旅行规划创建成功并已提交，plan_id={plan_id}")
         return plan_id
     except Exception as e:
-        connection.rollback()
-        print(f"❌ 创建旅行规划失败：{e}")
-        return None
+        if connection:
+            try:
+                connection.rollback()
+                print("🔄 已回滚事务")
+            except Exception as rollback_error:
+                print(f"⚠️ 回滚失败：{rollback_error}")
+        import traceback
+        error_msg = f"❌ 创建旅行规划失败：{e}\n{traceback.format_exc()}"
+        print(error_msg)
+        raise  # 重新抛出异常，让上层处理
     finally:
-        cursor.close()
-        connection.close()
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
 
 
 def get_travel_plan(plan_id: int) -> Optional[Dict[str, Any]]:
@@ -140,16 +240,71 @@ def get_travel_plan(plan_id: int) -> Optional[Dict[str, Any]]:
         cursor.execute("SELECT * FROM travel_plans WHERE id = %s", (plan_id,))
         plan = cursor.fetchone()
         
-        if plan:
-            # 解析JSON字段
-            plan['interests'] = json.loads(plan['interests']) if plan['interests'] else []
-            plan['food_preferences'] = json.loads(plan['food_preferences']) if plan['food_preferences'] else []
-            plan['xiaohongshu_notes'] = json.loads(plan['xiaohongshu_notes']) if plan['xiaohongshu_notes'] else []
-            plan['addresses'] = json.loads(plan['addresses']) if plan['addresses'] else []
+        if not plan:
+            return None
         
-        return plan
+        # 确保 plan 是字典类型
+        if not isinstance(plan, dict):
+            print(f"⚠️ 警告：get_travel_plan 返回了非字典类型数据：{type(plan)}")
+            return None
+        
+        # 创建新的字典，避免修改原始数据
+        plan_dict = dict(plan)
+        
+        # 解析JSON字段，添加错误处理
+        try:
+            if plan_dict.get('interests'):
+                if isinstance(plan_dict['interests'], str):
+                    plan_dict['interests'] = json.loads(plan_dict['interests'])
+                elif not isinstance(plan_dict['interests'], list):
+                    plan_dict['interests'] = []
+            else:
+                plan_dict['interests'] = []
+        except Exception as e:
+            print(f"⚠️ 解析 interests 失败：{e}")
+            plan_dict['interests'] = []
+        
+        try:
+            if plan_dict.get('food_preferences'):
+                if isinstance(plan_dict['food_preferences'], str):
+                    plan_dict['food_preferences'] = json.loads(plan_dict['food_preferences'])
+                elif not isinstance(plan_dict['food_preferences'], list):
+                    plan_dict['food_preferences'] = []
+            else:
+                plan_dict['food_preferences'] = []
+        except Exception as e:
+            print(f"⚠️ 解析 food_preferences 失败：{e}")
+            plan_dict['food_preferences'] = []
+        
+        try:
+            if plan_dict.get('xiaohongshu_notes'):
+                if isinstance(plan_dict['xiaohongshu_notes'], str):
+                    plan_dict['xiaohongshu_notes'] = json.loads(plan_dict['xiaohongshu_notes'])
+                elif not isinstance(plan_dict['xiaohongshu_notes'], list):
+                    plan_dict['xiaohongshu_notes'] = []
+            else:
+                plan_dict['xiaohongshu_notes'] = []
+        except Exception as e:
+            print(f"⚠️ 解析 xiaohongshu_notes 失败：{e}")
+            plan_dict['xiaohongshu_notes'] = []
+        
+        try:
+            if plan_dict.get('addresses'):
+                if isinstance(plan_dict['addresses'], str):
+                    plan_dict['addresses'] = json.loads(plan_dict['addresses'])
+                elif not isinstance(plan_dict['addresses'], list):
+                    plan_dict['addresses'] = []
+            else:
+                plan_dict['addresses'] = []
+        except Exception as e:
+            print(f"⚠️ 解析 addresses 失败：{e}")
+            plan_dict['addresses'] = []
+        
+        return plan_dict
     except Exception as e:
         print(f"❌ 获取旅行规划失败：{e}")
+        import traceback
+        traceback.print_exc()
         return None
     finally:
         cursor.close()
@@ -475,9 +630,26 @@ def get_flights_by_plan(travel_plan_id: int) -> List[Dict[str, Any]]:
             "SELECT * FROM flights WHERE travel_plan_id = %s ORDER BY id ASC",
             (travel_plan_id,),
         )
-        return cursor.fetchall()
+        results = cursor.fetchall()
+        # 确保返回的是字典列表，并处理日期时间格式
+        flights = []
+        for row in results:
+            if isinstance(row, dict):
+                # 确保日期时间字段是字符串格式（如果数据库返回的是 datetime 对象）
+                flight = dict(row)
+                if flight.get("departure_time") and hasattr(flight["departure_time"], "isoformat"):
+                    flight["departure_time"] = flight["departure_time"].isoformat()
+                if flight.get("return_time") and hasattr(flight["return_time"], "isoformat"):
+                    flight["return_time"] = flight["return_time"].isoformat()
+                flights.append(flight)
+            elif isinstance(row, (list, tuple)):
+                # 如果返回的是元组/列表，转换为字典（这种情况不应该发生，但作为容错处理）
+                print(f"⚠️ 警告：flights 返回了非字典类型数据：{type(row)}")
+        return flights
     except Exception as e:
         print(f"❌ 获取航班信息失败：{e}")
+        import traceback
+        traceback.print_exc()
         return []
     finally:
         cursor.close()
@@ -496,9 +668,26 @@ def get_accommodations_by_plan(travel_plan_id: int) -> List[Dict[str, Any]]:
             "SELECT * FROM accommodations WHERE travel_plan_id = %s ORDER BY id ASC",
             (travel_plan_id,),
         )
-        return cursor.fetchall()
+        results = cursor.fetchall()
+        # 确保返回的是字典列表，并处理日期格式
+        accommodations = []
+        for row in results:
+            if isinstance(row, dict):
+                # 确保日期字段是字符串格式（如果数据库返回的是 date 对象）
+                acc = dict(row)
+                if acc.get("check_in_date") and hasattr(acc["check_in_date"], "isoformat"):
+                    acc["check_in_date"] = acc["check_in_date"].isoformat()
+                if acc.get("check_out_date") and hasattr(acc["check_out_date"], "isoformat"):
+                    acc["check_out_date"] = acc["check_out_date"].isoformat()
+                accommodations.append(acc)
+            elif isinstance(row, (list, tuple)):
+                # 如果返回的是元组/列表，转换为字典（这种情况不应该发生，但作为容错处理）
+                print(f"⚠️ 警告：accommodations 返回了非字典类型数据：{type(row)}")
+        return accommodations
     except Exception as e:
         print(f"❌ 获取住宿信息失败：{e}")
+        import traceback
+        traceback.print_exc()
         return []
     finally:
         cursor.close()

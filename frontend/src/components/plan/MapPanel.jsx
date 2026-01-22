@@ -51,7 +51,7 @@ const loadAmapScript = (() => {
   };
 })();
 
-// Mapbox 脚本加载（国外地图）
+// Mapbox 脚本加载（国外地图）- 添加超时和错误处理
 const loadMapboxScript = (() => {
   let loadingPromise = null;
   return () => {
@@ -60,11 +60,14 @@ const loadMapboxScript = (() => {
 
     const token = requireEnv('MAPBOX_TOKEN', '缺少 Mapbox Token：请配置 VITE_MAPBOX_TOKEN（用于国外地图）。');
 
-    // 加载 CSS
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css';
-    document.head.appendChild(link);
+    // 检查 CSS 是否已加载
+    const existingLink = document.querySelector('link[href*="mapbox-gl.css"]');
+    if (!existingLink) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css';
+      document.head.appendChild(link);
+    }
 
     // 加载 JS
     const script = document.createElement('script');
@@ -72,15 +75,32 @@ const loadMapboxScript = (() => {
     script.src = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js';
 
     loadingPromise = new Promise((resolve, reject) => {
-      script.onload = () => {
-        if (window.mapboxgl) {
-          window.mapboxgl.accessToken = token;
-          resolve(window.mapboxgl);
-        } else {
-          reject(new Error('Mapbox 加载失败'));
+      // 添加超时处理（10秒）
+      const timeout = setTimeout(() => {
+        script.onload = null;
+        script.onerror = null;
+        if (document.body.contains(script)) {
+          document.body.removeChild(script);
         }
+        reject(new Error('Mapbox 脚本加载超时（>10秒），请检查网络连接或使用代理'));
+      }, 10000);
+
+      script.onload = () => {
+        clearTimeout(timeout);
+        // 等待一小段时间确保 mapboxgl 全局对象已初始化
+        setTimeout(() => {
+          if (window.mapboxgl) {
+            window.mapboxgl.accessToken = token;
+            resolve(window.mapboxgl);
+          } else {
+            reject(new Error('Mapbox 加载失败：全局对象未初始化'));
+          }
+        }, 100);
       };
-      script.onerror = () => reject(new Error('Mapbox 脚本加载出错'));
+      script.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error('Mapbox 脚本加载出错：网络请求失败'));
+      };
     });
 
     document.body.appendChild(script);
@@ -92,27 +112,97 @@ const MapPanel = () => {
   const { mapCenter, mapZoom, mapPoints, itinerary } = useTravel();
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const polylineRef = useRef(null);
+  const polylineRef = useRef(null); // 高德地图：存储所有折线
+  const polylinesRef = useRef([]); // 高德地图：按天存储多条折线
   const markersRef = useRef([]);
   const lastSignatureRef = useRef('');
   const [mapReady, setMapReady] = useState(false);
   const [mapProvider, setMapProvider] = useState(null); // 'amap' | 'mapbox'
   const [mapError, setMapError] = useState(null);
+  const loadTimeoutRef = useRef(null);
+  
+  // 每天路线颜色（渐变色系，确保区分度）
+  const dayColors = [
+    '#38bdf8', // 第1天：天蓝色
+    '#10b981', // 第2天：绿色
+    '#f59e0b', // 第3天：橙色
+    '#ef4444', // 第4天：红色
+    '#8b5cf6', // 第5天：紫色
+    '#ec4899', // 第6天：粉色
+    '#06b6d4', // 第7天：青色
+    '#84cc16', // 第8天：黄绿色
+  ];
 
-  // 如果有后端返回的 mapPoints，则优先使用；否则退回到基于 itinerary 的本地模拟数据
-  const fallbackItineraryPoints = Object.values(itinerary || {}).flatMap((day) => {
-    // 新结构：{ morning:[], afternoon:[], evening:[] }
-    if (day && typeof day === 'object' && !Array.isArray(day)) {
-      const m = Array.isArray(day.morning) ? day.morning : [];
-      const a = Array.isArray(day.afternoon) ? day.afternoon : [];
-      const e = Array.isArray(day.evening) ? day.evening : [];
-      return [...m, ...a, ...e];
+  // 从 itinerary 中提取每天的路线点（按天分组），包含起始点和终止点
+  const dailyRoutes = useMemo(() => {
+    const routes = [];
+    const dayKeys = Object.keys(itinerary || {}).filter(key => key.startsWith('day')).sort();
+    
+    dayKeys.forEach((dayKey, dayIndex) => {
+      const day = itinerary[dayKey];
+      if (!day) return;
+      
+      // 新结构：{ morning:[], afternoon:[], evening:[] }
+      let dayPoints = [];
+      if (day && typeof day === 'object' && !Array.isArray(day)) {
+        const m = Array.isArray(day.morning) ? day.morning : [];
+        const a = Array.isArray(day.afternoon) ? day.afternoon : [];
+        const e = Array.isArray(day.evening) ? day.evening : [];
+        dayPoints = [...m, ...a, ...e];
+      } else if (Array.isArray(day)) {
+        dayPoints = day;
+      }
+      
+      // 过滤出有经纬度的点，并按时间顺序排序
+      const validPoints = dayPoints
+        .filter((poi) => Number.isFinite(poi.lat) && Number.isFinite(poi.lng))
+        .map((poi) => ({
+          ...poi,
+          lat: Number(poi.lat),
+          lng: Number(poi.lng),
+        }));
+      
+      // 获取起始点和终止点
+      const startPoint = day.start_point && Number.isFinite(day.start_point.lat) && Number.isFinite(day.start_point.lng)
+        ? { ...day.start_point, lat: Number(day.start_point.lat), lng: Number(day.start_point.lng) }
+        : null;
+      const endPoint = day.end_point && Number.isFinite(day.end_point.lat) && Number.isFinite(day.end_point.lng)
+        ? { ...day.end_point, lat: Number(day.end_point.lat), lng: Number(day.end_point.lng) }
+        : null;
+      
+      // 构建完整的路线点序列：起始点 -> 景点/餐厅 -> 终止点
+      const routePoints = [];
+      if (startPoint) {
+        routePoints.push(startPoint);
+      }
+      routePoints.push(...validPoints);
+      if (endPoint && (!startPoint || (endPoint.lat !== startPoint.lat || endPoint.lng !== startPoint.lng))) {
+        routePoints.push(endPoint);
+      }
+      
+      if (routePoints.length > 0) {
+        routes.push({
+          dayNumber: dayIndex + 1,
+          dayKey,
+          points: routePoints,
+          startPoint,
+          endPoint,
+          color: dayColors[dayIndex % dayColors.length],
+        });
+      }
+    });
+    
+    return routes;
+  }, [itinerary]);
+  
+  // 所有点（用于标记显示）
+  const allPoints = useMemo(() => {
+    if (mapPoints && mapPoints.length > 0) {
+      return mapPoints;
     }
-    // 旧结构：数组
-    if (Array.isArray(day)) return day;
-    return [];
-  });
-  const allPoints = (mapPoints && mapPoints.length > 0) ? mapPoints : fallbackItineraryPoints;
+    // 从 dailyRoutes 中提取所有点
+    return dailyRoutes.flatMap(route => route.points);
+  }, [mapPoints, dailyRoutes]);
 
   // 根据 mapCenter 判断使用哪个地图提供商
   const shouldUseMapbox = useMemo(() => {
@@ -123,6 +213,16 @@ const MapPanel = () => {
   // 清理地图实例的通用函数
   const cleanupMap = () => {
     try {
+      // 清理高德地图的所有折线
+      if (polylinesRef.current.length && mapRef.current && mapProvider === 'amap') {
+        polylinesRef.current.forEach((polyline) => {
+          try {
+            if (polyline) mapRef.current.remove(polyline);
+          } catch (e) { /* ignore */ }
+        });
+        polylinesRef.current = [];
+      }
+      // 兼容旧代码
       if (polylineRef.current && mapRef.current) {
         if (mapProvider === 'amap') {
           mapRef.current.remove(polylineRef.current);
@@ -181,9 +281,7 @@ const MapPanel = () => {
           cleanupMap();
         }
 
-        const validPoints = (allPoints || []).filter(
-          (poi) => Number.isFinite(poi.lng) && Number.isFinite(poi.lat)
-        );
+        // 不再使用 allPoints 过滤，改用 dailyRoutes
 
         if (shouldUseMapbox) {
           // 使用 Mapbox（国外地图）
@@ -196,97 +294,341 @@ const MapPanel = () => {
           const center = [mapCenter[1], mapCenter[0]]; // [lng, lat]
 
           if (!mapRef.current) {
+            // 清除之前的超时
+            if (loadTimeoutRef.current) {
+              clearTimeout(loadTimeoutRef.current);
+            }
+
             mapRef.current = new mapboxgl.Map({
               container: mapContainerRef.current,
               style: 'mapbox://styles/mapbox/dark-v11',
               center,
               zoom: mapZoom,
+              // 优化性能选项
+              antialias: false,
+              preserveDrawingBuffer: false,
             });
 
-            // 捕获 Mapbox 的网络/鉴权错误（例如 401 invalid token）
+            // 设置地图加载超时（15秒）
+            loadTimeoutRef.current = setTimeout(() => {
+              if (isMounted && !mapReady) {
+                setMapError('地图样式加载超时（>15秒），可能是网络问题或 Token 无效。请检查网络连接或 VITE_MAPBOX_TOKEN 配置。');
+              }
+            }, 15000);
+
+            // 捕获 Mapbox 的各种错误
             mapRef.current.on('error', (e) => {
-              const status = e?.error?.status || e?.error?.statusCode;
+              if (loadTimeoutRef.current) {
+                clearTimeout(loadTimeoutRef.current);
+                loadTimeoutRef.current = null;
+              }
+              
+              const error = e?.error || {};
+              const status = error.status || error.statusCode;
+              const message = error.message || '';
+
               if (status === 401) {
                 setMapError('Mapbox 鉴权失败（401）：请检查 VITE_MAPBOX_TOKEN 是否有效、是否有 styles:read 等权限。');
+              } else if (status === 403) {
+                setMapError('Mapbox 访问被拒绝（403）：Token 可能没有足够权限或已过期。');
+              } else if (status === 404) {
+                setMapError('Mapbox 资源未找到（404）：地图样式加载失败。');
+              } else if (message.includes('network') || message.includes('Network')) {
+                setMapError('网络错误：无法连接到 Mapbox 服务器，请检查网络连接。');
+              } else {
+                setMapError(`地图加载错误：${message || '未知错误'} (状态码: ${status || 'N/A'})`);
+              }
+              
+              if (isMounted) {
+                setMapReady(false);
               }
             });
 
+            // 地图加载成功
             mapRef.current.on('load', () => {
-              if (isMounted) setMapReady(true);
+              if (loadTimeoutRef.current) {
+                clearTimeout(loadTimeoutRef.current);
+                loadTimeoutRef.current = null;
+              }
+              if (isMounted) {
+                setMapReady(true);
+                setMapError(null);
+              }
+            });
+
+            // 监听样式数据加载完成（更早的加载完成信号）
+            // 使用 data 事件可以更早检测到样式加载完成
+            mapRef.current.on('data', (e) => {
+              if (e.dataType === 'style' && mapRef.current.isStyleLoaded()) {
+                if (loadTimeoutRef.current) {
+                  clearTimeout(loadTimeoutRef.current);
+                  loadTimeoutRef.current = null;
+                }
+                if (isMounted && !mapReady) {
+                  setMapReady(true);
+                  setMapError(null);
+                }
+              }
             });
           } else {
             mapRef.current.setCenter(center);
             mapRef.current.setZoom(mapZoom);
+            // 如果地图已存在，直接设置为 ready
+            if (mapRef.current.isStyleLoaded()) {
+              setMapReady(true);
+            }
           }
 
-          // 清理旧标记
-          markersRef.current.forEach((m) => {
-            try { m.remove(); } catch (e) { /* ignore */ }
-          });
-          markersRef.current = [];
-
-          if (!validPoints.length) return;
-
-          const signature = validPoints.map((p) => `${p.id || ''}:${p.lng},${p.lat}:${p.category || ''}`).join('|');
-          if (lastSignatureRef.current === signature) return;
-          lastSignatureRef.current = signature;
-
-          // 添加标记
-          validPoints.forEach((poi) => {
-            const color = getMarkerColor(poi.category);
-            const el = document.createElement('div');
-            el.style.cssText = `
-              width: 20px;
-              height: 20px;
-              border-radius: 999px;
-              border: 2px solid #ffffff;
-              background-color: ${color};
-              box-shadow: 0 2px 8px rgba(15, 23, 42, 0.4);
-              cursor: pointer;
-            `;
-
-            const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-              <div style="max-width: 220px; font-family: system-ui, sans-serif; padding: 4px;">
-                <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 4px; color: #1e293b;">${poi.name}</h3>
-                <p style="margin: 0; font-size: 12px; color: #64748b;">${poi.category} · 建议停留 ${poi.duration || 60} 分钟</p>
-              </div>
-            `);
-
-            const marker = new mapboxgl.Marker(el)
-              .setLngLat([poi.lng, poi.lat])
-              .setPopup(popup)
-              .addTo(mapRef.current);
-
-            markersRef.current.push(marker);
-          });
-
-          // 添加路线
-          if (validPoints.length > 1 && mapRef.current.isStyleLoaded()) {
-            const coordinates = validPoints.map((p) => [p.lng, p.lat]);
-            
-            if (mapRef.current.getSource('route')) {
-              mapRef.current.getSource('route').setData({
-                type: 'Feature',
-                properties: {},
-                geometry: { type: 'LineString', coordinates },
-              });
-            } else {
-              mapRef.current.addSource('route', {
-                type: 'geojson',
-                data: {
-                  type: 'Feature',
-                  properties: {},
-                  geometry: { type: 'LineString', coordinates },
-                },
-              });
-              mapRef.current.addLayer({
-                id: 'route',
-                type: 'line',
-                source: 'route',
-                layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#38bdf8', 'line-width': 3 },
-              });
+          // 等待地图样式加载完成
+          const addRoutesAndMarkers = () => {
+            if (!mapRef.current || !mapRef.current.isStyleLoaded()) {
+              return;
             }
+
+            // 清理旧标记和路线
+            markersRef.current.forEach((m) => {
+              try { m.remove(); } catch (e) { /* ignore */ }
+            });
+            markersRef.current = [];
+
+            // 清理旧路线图层（包括标签图层和箭头图层）
+            dailyRoutes.forEach((route) => {
+              const sourceId = `route_day${route.dayNumber}`;
+              const layerId = `route_day${route.dayNumber}`;
+              const labelLayerId = `${layerId}_label`;
+              const arrowLayerId = `${layerId}_arrows`;
+              const arrowSourceId = `${sourceId}_arrows`;
+              try {
+                if (mapRef.current.getLayer(arrowLayerId)) {
+                  mapRef.current.removeLayer(arrowLayerId);
+                }
+                if (mapRef.current.getSource(arrowSourceId)) {
+                  mapRef.current.removeSource(arrowSourceId);
+                }
+                if (mapRef.current.getLayer(labelLayerId)) {
+                  mapRef.current.removeLayer(labelLayerId);
+                }
+                if (mapRef.current.getLayer(layerId)) {
+                  mapRef.current.removeLayer(layerId);
+                }
+                if (mapRef.current.getSource(sourceId)) {
+                  mapRef.current.removeSource(sourceId);
+                }
+              } catch (e) { /* ignore */ }
+            });
+
+            if (allPoints.length === 0) return;
+
+            // 添加所有标记（使用图例颜色）
+            allPoints.forEach((poi) => {
+              const color = getMarkerColor(poi.category);
+              const el = document.createElement('div');
+              el.style.cssText = `
+                width: 20px;
+                height: 20px;
+                border-radius: 999px;
+                border: 2px solid #ffffff;
+                background-color: ${color};
+                box-shadow: 0 2px 8px rgba(15, 23, 42, 0.4);
+                cursor: pointer;
+              `;
+
+              const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                <div style="max-width: 220px; font-family: system-ui, sans-serif; padding: 4px;">
+                  <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 4px; color: #1e293b;">${poi.name}</h3>
+                  <p style="margin: 0; font-size: 12px; color: #64748b;">${poi.category} · 建议停留 ${poi.duration || 60} 分钟</p>
+                </div>
+              `);
+
+              const marker = new mapboxgl.Marker(el)
+                .setLngLat([poi.lng, poi.lat])
+                .setPopup(popup)
+                .addTo(mapRef.current);
+
+              markersRef.current.push(marker);
+            });
+
+            // 为每天添加不同颜色的路线
+            dailyRoutes.forEach((route) => {
+              if (route.points.length < 2) return;
+
+              const sourceId = `route_day${route.dayNumber}`;
+              const layerId = `route_day${route.dayNumber}`;
+              const coordinates = route.points.map((p) => [p.lng, p.lat]);
+
+              if (mapRef.current.getSource(sourceId)) {
+                mapRef.current.getSource(sourceId).setData({
+                  type: 'Feature',
+                  properties: { day: route.dayNumber },
+                  geometry: { type: 'LineString', coordinates },
+                });
+                
+                // 更新箭头数据
+                const arrowSourceId = `${sourceId}_arrows`;
+                if (mapRef.current.getSource(arrowSourceId)) {
+                  const arrowCoordinates = [];
+                  const step = Math.max(1, Math.floor(coordinates.length / 6));
+                  for (let i = step; i < coordinates.length - step; i += step) {
+                    arrowCoordinates.push({
+                      coord: coordinates[i],
+                      index: i,
+                    });
+                  }
+                  
+                  if (arrowCoordinates.length > 0) {
+                    const arrowFeatures = arrowCoordinates.map((item, idx) => {
+                      const coord = item.coord;
+                      let rotation = 0;
+                      const nextIndex = item.index + 1;
+                      if (nextIndex < coordinates.length) {
+                        const nextCoord = coordinates[nextIndex];
+                        const dx = nextCoord[0] - coord[0];
+                        const dy = nextCoord[1] - coord[1];
+                        rotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+                      }
+                      
+                      return {
+                        type: 'Feature',
+                        geometry: {
+                          type: 'Point',
+                          coordinates: coord,
+                        },
+                        properties: {
+                          rotation: rotation,
+                        },
+                      };
+                    });
+                    
+                    mapRef.current.getSource(arrowSourceId).setData({
+                      type: 'FeatureCollection',
+                      features: arrowFeatures,
+                    });
+                  }
+                }
+              } else {
+                mapRef.current.addSource(sourceId, {
+                  type: 'geojson',
+                  data: {
+                    type: 'Feature',
+                    properties: { day: route.dayNumber },
+                    geometry: { type: 'LineString', coordinates },
+                  },
+                });
+                mapRef.current.addLayer({
+                  id: layerId,
+                  type: 'line',
+                  source: sourceId,
+                  layout: { 'line-join': 'round', 'line-cap': 'round' },
+                  paint: {
+                    'line-color': route.color,
+                    'line-width': 3,
+                    'line-opacity': 0.8,
+                  },
+                });
+
+                // 添加路线标签（显示天数）
+                mapRef.current.addLayer({
+                  id: `${layerId}_label`,
+                  type: 'symbol',
+                  source: sourceId,
+                  layout: {
+                    'symbol-placement': 'line',
+                    'text-field': `第${route.dayNumber}天`,
+                    'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+                    'text-size': 12,
+                    'text-offset': [0, 1.5],
+                    'text-allow-overlap': true,
+                    'text-ignore-placement': true,
+                  },
+                  paint: {
+                    'text-color': route.color,
+                    'text-halo-color': '#ffffff',
+                    'text-halo-width': 2,
+                  },
+                });
+
+                // 添加方向箭头（使用符号图层显示箭头字符）
+                // 在路线上每隔一定距离添加一个箭头标记
+                const arrowCoordinates = [];
+                const step = Math.max(1, Math.floor(coordinates.length / 6)); // 在路线上添加约6个箭头
+                for (let i = step; i < coordinates.length - step; i += step) {
+                  arrowCoordinates.push({
+                    coord: coordinates[i],
+                    index: i,
+                  });
+                }
+                
+                if (arrowCoordinates.length > 0) {
+                  const arrowSourceId = `${sourceId}_arrows`;
+                  const arrowLayerId = `${layerId}_arrows`;
+                  
+                  // 计算每个箭头点的旋转角度（指向下一个点）
+                  const arrowFeatures = arrowCoordinates.map((item, idx) => {
+                    const coord = item.coord;
+                    let rotation = 0;
+                    const nextIndex = item.index + 1;
+                    if (nextIndex < coordinates.length) {
+                      const nextCoord = coordinates[nextIndex];
+                      const dx = nextCoord[0] - coord[0];
+                      const dy = nextCoord[1] - coord[1];
+                      rotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+                    }
+                    
+                    return {
+                      type: 'Feature',
+                      geometry: {
+                        type: 'Point',
+                        coordinates: coord,
+                      },
+                      properties: {
+                        rotation: rotation,
+                      },
+                    };
+                  });
+                  
+                  mapRef.current.addSource(arrowSourceId, {
+                    type: 'geojson',
+                    data: {
+                      type: 'FeatureCollection',
+                      features: arrowFeatures,
+                    },
+                  });
+                  
+                  // 使用 Unicode 箭头字符显示方向
+                  mapRef.current.addLayer({
+                    id: arrowLayerId,
+                    type: 'symbol',
+                    source: arrowSourceId,
+                    layout: {
+                      'symbol-placement': 'point',
+                      'text-field': '▶',
+                      'text-size': 10,
+                      'text-rotate': ['get', 'rotation'],
+                      'text-rotation-alignment': 'map',
+                      'text-allow-overlap': true,
+                      'text-ignore-placement': true,
+                    },
+                    paint: {
+                      'text-color': route.color,
+                      'text-halo-color': '#ffffff',
+                      'text-halo-width': 1.5,
+                    },
+                  });
+                }
+              }
+            });
+          };
+
+          // 如果地图已加载，立即添加；否则等待加载完成
+          if (mapRef.current.isStyleLoaded()) {
+            addRoutesAndMarkers();
+          } else {
+            mapRef.current.once('load', addRoutesAndMarkers);
+            mapRef.current.once('data', (e) => {
+              if (e.dataType === 'style') {
+                addRoutesAndMarkers();
+              }
+            });
           }
 
         } else {
@@ -320,32 +662,21 @@ const MapPanel = () => {
           }
 
           // 清理旧折线
+          polylinesRef.current.forEach((polyline) => {
+            try {
+              if (polyline) mapRef.current.remove(polyline);
+            } catch (e) { /* ignore */ }
+          });
+          polylinesRef.current = [];
           if (polylineRef.current) {
             try { mapRef.current.remove(polylineRef.current); } catch (e) { /* ignore */ }
             polylineRef.current = null;
           }
 
-          if (!validPoints.length) return;
+          if (allPoints.length === 0) return;
 
-          const signature = validPoints.map((p) => `${p.id || ''}:${p.lng},${p.lat}:${p.category || ''}`).join('|');
-          if (lastSignatureRef.current === signature) return;
-          lastSignatureRef.current = signature;
-
-          const path = validPoints.map((poi) => [poi.lng, poi.lat]);
-
-          polylineRef.current = new AMap.Polyline({
-            path,
-            strokeColor: '#38bdf8',
-            strokeWeight: 3,
-            strokeOpacity: 0.8,
-            lineJoin: 'round',
-            lineCap: 'round',
-            showDir: true,
-          });
-
-          mapRef.current.add(polylineRef.current);
-
-          validPoints.forEach((poi) => {
+          // 添加所有标记（使用图例颜色）
+          allPoints.forEach((poi) => {
             const color = getMarkerColor(poi.category);
             const marker = new AMap.Marker({
               position: [poi.lng, poi.lat],
@@ -380,6 +711,55 @@ const MapPanel = () => {
             mapRef.current.add(marker);
             markersRef.current.push(marker);
           });
+
+          // 为每天添加不同颜色的路线
+          dailyRoutes.forEach((route) => {
+            if (route.points.length < 2) return;
+
+            const path = route.points.map((poi) => [poi.lng, poi.lat]);
+            const polyline = new AMap.Polyline({
+              path,
+              strokeColor: route.color,
+              strokeWeight: 3,
+              strokeOpacity: 0.8,
+              lineJoin: 'round',
+              lineCap: 'round',
+              showDir: true,
+            });
+
+            mapRef.current.add(polyline);
+            polylinesRef.current.push(polyline);
+
+            // 添加路线标签（显示天数）- 高德地图使用自定义 HTML 标记
+            if (route.points.length > 0) {
+              const midIndex = Math.floor(route.points.length / 2);
+              const midPoint = route.points[midIndex];
+              const labelEl = document.createElement('div');
+              labelEl.style.cssText = `
+                background-color: ${route.color};
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 3px 8px;
+                border-radius: 4px;
+                border: 2px solid #ffffff;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+                white-space: nowrap;
+                pointer-events: none;
+              `;
+              labelEl.textContent = `第${route.dayNumber}天`;
+              
+              const labelMarker = new AMap.Marker({
+                position: [midPoint.lng, midPoint.lat],
+                content: labelEl,
+                offset: new AMap.Pixel(-20, -10),
+                zIndex: 100,
+              });
+              
+              mapRef.current.add(labelMarker);
+              polylinesRef.current.push(labelMarker);
+            }
+          });
         }
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -394,9 +774,14 @@ const MapPanel = () => {
 
     return () => {
       isMounted = false;
+      // 清除加载超时
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
       cleanupMap();
     };
-  }, [mapCenter, mapZoom, allPoints.length, shouldUseMapbox]);
+  }, [mapCenter, mapZoom, dailyRoutes, allPoints.length, shouldUseMapbox]);
 
   return (
     <div className="h-full w-full relative z-0 bg-slate-950">
@@ -409,30 +794,50 @@ const MapPanel = () => {
             <Compass size={14} className="text-sky-300" />
             图例
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#2B6CB0] border border-white shadow-sm" />
-            <span className="flex items-center gap-1">
-              <MapPin size={12} className="text-slate-300" /> 景点
-            </span>
+          
+          {/* 节点类型 */}
+          <div className="space-y-1.5 pb-2 border-b border-slate-700/50">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#2B6CB0] border border-white shadow-sm" />
+              <span className="flex items-center gap-1">
+                <MapPin size={12} className="text-slate-300" /> 景点
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#F56565] border border-white shadow-sm" />
+              <span className="flex items-center gap-1">
+                <Utensils size={12} className="text-slate-300" /> 美食
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#22C55E] border border-white shadow-sm" />
+              <span className="flex items-center gap-1">
+                <Plane size={12} className="text-slate-300" /> 机场
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#92400E] border border-white shadow-sm" />
+              <span className="flex items-center gap-1">
+                <Hotel size={12} className="text-slate-300" /> 住宿
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#F56565] border border-white shadow-sm" />
-            <span className="flex items-center gap-1">
-              <Utensils size={12} className="text-slate-300" /> 美食
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#22C55E] border border-white shadow-sm" />
-            <span className="flex items-center gap-1">
-              <Plane size={12} className="text-slate-300" /> 机场
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#92400E] border border-white shadow-sm" />
-            <span className="flex items-center gap-1">
-              <Hotel size={12} className="text-slate-300" /> 住宿
-            </span>
-          </div>
+          
+          {/* 路线颜色（按天） */}
+          {dailyRoutes.length > 0 && (
+            <div className="space-y-1.5 pt-2">
+              <div className="text-[10px] text-slate-400 mb-1">路线（按天）</div>
+              {dailyRoutes.map((route) => (
+                <div key={route.dayKey} className="flex items-center gap-2">
+                  <div
+                    className="w-4 h-0.5 rounded"
+                    style={{ backgroundColor: route.color }}
+                  />
+                  <span className="text-slate-300">第{route.dayNumber}天</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -441,8 +846,15 @@ const MapPanel = () => {
         <div className="absolute inset-0 flex items-center justify-center bg-slate-950/35 backdrop-blur-[2px]">
           <div className="flex flex-col items-center gap-3">
             <div className="w-10 h-10 border-2 border-slate-700/80 border-t-sky-400 rounded-full animate-spin" />
-            <div className="text-xs text-slate-300">
-              {shouldUseMapbox ? '🌍 加载国际地图…' : '🗺️ 加载地图中…'}
+            <div className="text-xs text-slate-300 text-center">
+              {shouldUseMapbox ? (
+                <>
+                  <div>🌍 加载国际地图…</div>
+                  <div className="text-[10px] text-slate-500 mt-1">首次加载可能需要 10-15 秒</div>
+                </>
+              ) : (
+                '🗺️ 加载地图中…'
+              )}
             </div>
           </div>
         </div>
@@ -450,11 +862,40 @@ const MapPanel = () => {
 
       {/* Map Error */}
       {mapError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 text-center px-6">
-            <AlertTriangle size={32} className="text-amber-400" />
-            <div className="text-sm text-slate-200 font-medium">地图加载失败</div>
-            <div className="text-xs text-slate-400 max-w-xs">{mapError}</div>
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm z-[2000]">
+          <div className="flex flex-col items-center gap-4 text-center px-6 max-w-md">
+            <AlertTriangle size={40} className="text-amber-400" />
+            <div className="text-base text-slate-200 font-semibold">地图加载失败</div>
+            <div className="text-xs text-slate-400 leading-relaxed">{mapError}</div>
+            <button
+              type="button"
+              onClick={() => {
+                setMapError(null);
+                setMapReady(false);
+                // 触发重新加载：清理地图实例
+                if (mapRef.current) {
+                  try {
+                    if (mapProvider === 'mapbox' && mapRef.current.remove) {
+                      mapRef.current.remove();
+                    } else if (mapProvider === 'amap' && mapRef.current.destroy) {
+                      mapRef.current.destroy();
+                    }
+                  } catch (e) {
+                    // ignore
+                  }
+                  mapRef.current = null;
+                }
+                // 清理标记和路线
+                markersRef.current = [];
+                polylineRef.current = null;
+                lastSignatureRef.current = '';
+                // 强制重新渲染
+                setMapProvider(null);
+              }}
+              className="mt-2 px-4 py-2 text-xs font-medium text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 rounded-lg transition-colors"
+            >
+              重试加载
+            </button>
           </div>
         </div>
       )}

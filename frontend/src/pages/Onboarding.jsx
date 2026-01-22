@@ -48,12 +48,62 @@ const Onboarding = () => {
           // AddressInput 里 city 可能是对象（含 name）或字符串，这里给字符串即可
           city: '新加坡',
           address: '武吉士酒店',
+          checkInDate: '2026-01-18',
+          checkOutDate: '2026-01-20',
+        },
+        {
+          city: '新加坡',
+          address: '滨海湾金沙酒店',
+          checkInDate: '2026-01-20',
+          checkOutDate: '2026-01-22',
         },
       ],
       flights: [
         {
           departureAirport: '樟宜机场',
           arrivalAirport: '樟宜机场',
+          departureTime: new Date('2026-01-18T16:00:00.000Z'),
+          returnTime: new Date('2026-01-22T16:00:00.000Z'),
+        },
+      ],
+    };
+
+    setPreferences((prev) => ({
+      ...prev,
+      ...mock,
+    }));
+    // 方便直接点击生成
+    setStep(2);
+  };
+
+  const handleMockFillChengdu = () => {
+    const mock = {
+      destination: ['成都'],
+      budget: { min: 0, max: 20000 },
+      interests: ['自然风光', '动物园'],
+      foodPreferences: ['中餐', '烧烤'],
+      travelers: 'couple',
+      xiaohongshuNotes: [
+        '更新了！一年一度成都攻略2.0版（干货） http://xhslink.com/o/67fB5TKwENk 复制后打开【小红书】查看笔记',
+      ],
+      addresses: [
+        {
+          city: '成都',
+          address: '四川锦江宾馆',
+          checkInDate: '2026-01-18',
+          checkOutDate: '2026-01-20',
+        },
+        {
+          city: '成都',
+          address: '宽窄巷子附近酒店',
+          checkInDate: '2026-01-20',
+          checkOutDate: '2026-01-22',
+        },
+      ],
+      flights: [
+        {
+          departureAirport: '成都天府国际机场',
+          arrivalAirport: '成都天府国际机场',
           departureTime: new Date('2026-01-18T16:00:00.000Z'),
           returnTime: new Date('2026-01-22T16:00:00.000Z'),
         },
@@ -300,6 +350,8 @@ const Onboarding = () => {
         addresses: (preferences.addresses || []).map((addr) => ({
           city: addr.city ? (typeof addr.city === 'string' ? addr.city : addr.city.name) : '',
           address: addr.address || '',
+          checkInDate: addr.checkInDate || null,
+          checkOutDate: addr.checkOutDate || null,
         })),
         flights: normalizedFlights,
       };
@@ -372,7 +424,16 @@ const Onboarding = () => {
                 onClick={handleMockFill}
                 className="text-xs rounded-full px-4"
               >
-                一键示例
+                一键示例（新加坡）
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleMockFillChengdu}
+                className="text-xs rounded-full px-4"
+              >
+                一键示例（成都）
               </Button>
               <div className="h-8 w-8 rounded-full bg-sky-500/20 flex items-center justify-center border border-sky-400/40">
                 <Plane className="text-sky-300 h-4 w-4" />

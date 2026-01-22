@@ -14,6 +14,8 @@ class BudgetSchema(BaseModel):
 class AddressSchema(BaseModel):
     city: str = Field(..., description="城市")
     address: str = Field(..., description="地址")
+    check_in_date: Optional[date] = Field(None, alias="checkInDate", description="入住日期")
+    check_out_date: Optional[date] = Field(None, alias="checkOutDate", description="退房日期")
 
 
 class FlightSchema(BaseModel):

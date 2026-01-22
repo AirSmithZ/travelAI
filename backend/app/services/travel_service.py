@@ -169,7 +169,8 @@ class TravelService:
         if xiaohongshu_notes:
             for note_url in xiaohongshu_notes:
                 note_content = self.xiaohongshu_client.get_note_content(note_url)
-                if note_content:
+                # 确保 note_content 是字典类型
+                if note_content and isinstance(note_content, dict):
                     xhs_content += f"\n笔记：{note_content.get('title', '')}\n{note_content.get('content', '')}\n"
 
         prompt = self._build_itinerary_prompt(
@@ -205,21 +206,47 @@ class TravelService:
                 yield sse("token", {"delta": text_buf})
 
             yield sse("progress", {"stage": "parse_json"})
+            print(f"📝 开始解析 LLM 返回的 JSON，文本长度：{len(text_buf)}")
             itinerary_data = self._parse_itinerary_response(text_buf, days)
+            
+            # 确保 itinerary_data 是字典类型
+            if not isinstance(itinerary_data, dict):
+                print(f"⚠️ 警告：解析结果不是字典类型：{type(itinerary_data)}")
+                itinerary_data = {}
+            
+            print(f"📊 解析结果：共 {len(itinerary_data)} 天的数据")
+            for day_key, day_data in itinerary_data.items():
+                # 确保 day_data 是字典类型
+                if not isinstance(day_data, dict):
+                    print(f"⚠️ 警告：{day_key} 的数据不是字典类型：{type(day_data)}")
+                    continue
+                schedule = day_data.get("schedule", {})
+                # 确保 schedule 是字典类型
+                if not isinstance(schedule, dict):
+                    schedule = {}
+                print(f"  {day_key}: schedule.morning={len(schedule.get('morning', []))}, afternoon={len(schedule.get('afternoon', []))}, evening={len(schedule.get('evening', []))}")
 
             yield sse("progress", {"stage": "fetch_recommendations"})
+            print(f"🔍 开始搜索景点和餐厅：destination={destination}")
             attractions = self.location_client.search_attractions(destination)
             restaurants = self.location_client.search_restaurants(destination)
+            print(f"📊 搜索结果：attractions={len(attractions) if attractions else 0}, restaurants={len(restaurants) if restaurants else 0}")
 
             # 如果没有经纬度，尝试用地理编码补齐（高德/Google 取决于国内外判断与 key）
             def _ensure_lat_lng(items: List[Dict[str, Any]], name_key: str = "name") -> List[Dict[str, Any]]:
                 enriched = []
                 for item in items:
+                    # 确保 item 是字典类型
+                    if not isinstance(item, dict):
+                        enriched.append(item)
+                        continue
+                    
                     lat = item.get("latitude")
                     lng = item.get("longitude")
                     if (lat is None or lng is None) and item.get(name_key):
                         geo = self.location_client.geocode(f"{destination} {item.get(name_key)}", location=destination)
-                        if geo and geo.get("latitude") is not None and geo.get("longitude") is not None:
+                        # 确保 geo 是字典类型
+                        if geo and isinstance(geo, dict) and geo.get("latitude") is not None and geo.get("longitude") is not None:
                             item["latitude"] = geo["latitude"]
                             item["longitude"] = geo["longitude"]
                     enriched.append(item)
@@ -231,16 +258,195 @@ class TravelService:
             # 额外获取航班与住宿（如果有经纬度则可用于地图）
             flights = travel_crud.get_flights_by_plan(travel_plan_id)
             accommodations = travel_crud.get_accommodations_by_plan(travel_plan_id)
+            
+            # 确保 accommodations 是字典列表，过滤掉非字典类型的数据
+            if accommodations:
+                accommodations = [acc for acc in accommodations if isinstance(acc, dict)]
+            
+            # 为住宿和航班添加经纬度（如果缺失）
+            def _geocode_accommodation(acc):
+                """为住宿地址添加经纬度"""
+                if not isinstance(acc, dict):
+                    return acc
+                if acc.get("latitude") and acc.get("longitude"):
+                    return acc
+                city = acc.get("city", "")
+                address = acc.get("address", "")
+                if city and address:
+                    geo = self.location_client.geocode(f"{city} {address}", location=city)
+                    # 确保 geo 是字典类型
+                    if geo and isinstance(geo, dict):
+                        acc["latitude"] = geo.get("latitude")
+                        acc["longitude"] = geo.get("longitude")
+                return acc
+            
+            accommodations = [_geocode_accommodation(acc) for acc in accommodations if isinstance(acc, dict)]
+            
+            # 确保 flights 是字典列表，过滤掉非字典类型的数据
+            if flights:
+                flights = [f for f in flights if isinstance(f, dict)]
+            
+            # 为航班机场添加经纬度（如果缺失）
+            def _geocode_flight(flight):
+                """为航班机场添加经纬度"""
+                if not isinstance(flight, dict):
+                    return flight
+                if flight.get("latitude") and flight.get("longitude"):
+                    return flight
+                airport = flight.get("departure_airport") or flight.get("arrival_airport", "")
+                if airport:
+                    geo = self.location_client.geocode(f"{destination} {airport}", location=destination)
+                    # 确保 geo 是字典类型
+                    if geo and isinstance(geo, dict):
+                        flight["latitude"] = geo.get("latitude")
+                        flight["longitude"] = geo.get("longitude")
+                return flight
+            
+            flights = [_geocode_flight(f) for f in flights if isinstance(f, dict)]
+            
+            # 计算每天的起始点和终止点
+            def _get_day_start_end_points(day_num: int, current_date: date) -> Dict[str, Optional[Dict[str, Any]]]:
+                """
+                根据日期获取当天的起始点和终止点
+                规则：
+                1. 如果当天是某个住宿的入住日期，该住宿作为起始点
+                2. 如果当天是某个住宿的退房日期，该住宿作为终止点
+                3. 如果当天在某个住宿的入住期间（入住日期 < 当天 < 退房日期），该住宿作为起始点和终止点
+                4. 如果是第一天且没有住宿，使用出发机场作为起始点
+                5. 如果是最后一天且没有住宿，使用到达机场作为终止点
+                """
+                start_point = None
+                end_point = None
+                
+                # 辅助函数：将日期字符串或对象转换为 date
+                def _to_date(d):
+                    if d is None:
+                        return None
+                    if isinstance(d, str):
+                        try:
+                            return datetime.strptime(d[:10], "%Y-%m-%d").date()
+                        except:
+                            return None
+                    if hasattr(d, 'date'):
+                        return d.date()
+                    if isinstance(d, date):
+                        return d
+                    return None
+                
+                # 查找当天的住宿
+                for acc in accommodations:
+                    # 确保 acc 是字典类型
+                    if not isinstance(acc, dict):
+                        continue
+                    
+                    check_in = _to_date(acc.get("check_in_date"))
+                    check_out = _to_date(acc.get("check_out_date"))
+                    
+                    if not check_in:
+                        continue
+                    
+                    # 检查是否有经纬度
+                    if not (acc.get("latitude") and acc.get("longitude")):
+                        continue
+                    
+                    acc_point = {
+                        "lat": float(acc["latitude"]),
+                        "lng": float(acc["longitude"]),
+                        "name": acc.get("address", ""),
+                        "category": "住宿",
+                        "type": "accommodation"
+                    }
+                    
+                    # 情况1：当天是入住日期，作为起始点
+                    if check_in == current_date:
+                        start_point = acc_point.copy()
+                        # 如果当天也是退房日期（同一天入住退房），也作为终止点
+                        if check_out == current_date:
+                            end_point = acc_point.copy()
+                    
+                    # 情况2：当天是退房日期，作为终止点
+                    elif check_out and check_out == current_date:
+                        end_point = acc_point.copy()
+                        # 如果还没有起始点，也作为起始点（当天退房后可能还要活动）
+                        if not start_point:
+                            start_point = acc_point.copy()
+                    
+                    # 情况3：当天在住宿期间（入住日期 < 当天 < 退房日期）
+                    elif check_out and check_in < current_date < check_out:
+                        # 如果还没有起始点，设为住宿
+                        if not start_point:
+                            start_point = acc_point.copy()
+                        # 终止点也设为住宿
+                        end_point = acc_point.copy()
+                
+                # 如果没有找到住宿作为起始点，检查是否是第一天（使用出发机场）
+                if not start_point and day_num == 1:
+                    for flight in flights:
+                        if not isinstance(flight, dict):
+                            continue
+                        if flight.get("departure_time"):
+                            dep_time = _to_date(flight.get("departure_time"))
+                            if dep_time == current_date and flight.get("latitude") and flight.get("longitude"):
+                                start_point = {
+                                    "lat": float(flight["latitude"]),
+                                    "lng": float(flight["longitude"]),
+                                    "name": flight.get("departure_airport", ""),
+                                    "category": "机场",
+                                    "type": "airport"
+                                }
+                                break
+                
+                # 如果没有找到住宿作为终止点，检查是否是最后一天（使用到达机场）
+                if not end_point and day_num == days:
+                    for flight in flights:
+                        if not isinstance(flight, dict):
+                            continue
+                        if flight.get("return_time"):
+                            ret_time = _to_date(flight.get("return_time"))
+                            if ret_time == current_date and flight.get("latitude") and flight.get("longitude"):
+                                end_point = {
+                                    "lat": float(flight["latitude"]),
+                                    "lng": float(flight["longitude"]),
+                                    "name": flight.get("arrival_airport", ""),
+                                    "category": "机场",
+                                    "type": "airport"
+                                }
+                                break
+                
+                return {"start": start_point, "end": end_point}
 
             yield sse("progress", {"stage": "persist"})
             itinerary_details = []
+            
+            # 计算每天的日期
+            from datetime import timedelta
             for day_num in range(1, days + 1):
-                day_itinerary = itinerary_data.get(f"day_{day_num}", {})
+                current_date = start_date + timedelta(days=day_num - 1)
+                day_itinerary_raw = itinerary_data.get(f"day_{day_num}", {})
+                
+                # 确保 day_itinerary 是字典类型
+                if not isinstance(day_itinerary_raw, dict):
+                    print(f"⚠️ 警告：day_{day_num} 的数据不是字典类型：{type(day_itinerary_raw)}，使用默认值")
+                    day_itinerary = {
+                        "schedule": {"morning": [], "afternoon": [], "evening": []},
+                        "spots": [],
+                        "restaurants": []
+                    }
+                else:
+                    day_itinerary = day_itinerary_raw
+                
+                # 获取当天的起始点和终止点
+                day_points = _get_day_start_end_points(day_num, current_date)
                 
                 # 兼容新结构 schedule：派生 spots/restaurants，避免下游结果为空
                 day_spots = day_itinerary.get("spots", []) or []
                 day_restaurants = day_itinerary.get("restaurants", []) or []
-                schedule = day_itinerary.get("schedule") or {}
+                schedule_raw = day_itinerary.get("schedule")
+                # 确保 schedule 是字典类型
+                if not isinstance(schedule_raw, dict):
+                    schedule = {}
+                else:
+                    schedule = schedule_raw
                 if (not day_spots and not day_restaurants) and schedule:
                     def _norm_list(v):
                         if not v:
@@ -253,11 +459,14 @@ class TravelService:
                             return [v]
                         return []
                     merged = []
-                    merged += _norm_list(schedule.get("morning"))
-                    merged += _norm_list(schedule.get("afternoon"))
-                    merged += _norm_list(schedule.get("evening"))
+                    merged += _norm_list(schedule.get("morning") if isinstance(schedule, dict) else [])
+                    merged += _norm_list(schedule.get("afternoon") if isinstance(schedule, dict) else [])
+                    merged += _norm_list(schedule.get("evening") if isinstance(schedule, dict) else [])
                     # 简单按 type/cuisine 判断
                     for p in merged:
+                        # 确保 p 是字典类型
+                        if not isinstance(p, dict):
+                            continue
                         ptype = p.get("type") or ("restaurant" if (p.get("cuisine") or p.get("cuisine_type") or p.get("price_range")) else "spot")
                         if ptype == "restaurant":
                             day_restaurants.append(p)
@@ -364,7 +573,12 @@ class TravelService:
                     return {"cost": "¥0", "cost_yuan": 0.0}
 
                 # 逐天推送给前端：按早/中/晚分组，确保拖拽只影响分组内部排序
-                schedule = day_itinerary.get("schedule") or {}
+                schedule_raw = day_itinerary.get("schedule")
+                # 确保 schedule 是字典类型
+                if not isinstance(schedule_raw, dict):
+                    schedule = {}
+                else:
+                    schedule = schedule_raw
                 segments = ["morning", "afternoon", "evening"]
 
                 def _as_list(v) -> List[Dict[str, Any]]:
@@ -380,21 +594,48 @@ class TravelService:
 
                 grouped_items: Dict[str, List[Dict[str, Any]]] = {k: [] for k in segments}
                 # 优先使用 schedule（模型按早/中/晚输出）
-                has_schedule = any(_as_list(schedule.get(k)) for k in segments)
-                if has_schedule:
+                # 确保 schedule 是字典后再使用 .get()
+                has_schedule = isinstance(schedule, dict) and any(_as_list(schedule.get(k)) for k in segments)
+                print(f"📅 第{day_num}天：has_schedule={has_schedule}, schedule keys={list(schedule.keys()) if isinstance(schedule, dict) else []}")
+                if has_schedule and isinstance(schedule, dict):
                     for seg in segments:
                         raw_items = _as_list(schedule.get(seg))
                         for idx, act in enumerate(raw_items):
                             ptype = act.get("type") or ("restaurant" if (act.get("cuisine") or act.get("cuisine_type") or act.get("price_range")) else "spot")
                             category = "美食" if ptype == "restaurant" else "景点"
+                            
+                            # 确保经纬度存在：优先使用 act 中的，否则从推荐列表中匹配
+                            lat = _num(act.get("latitude"))
+                            lng = _num(act.get("longitude"))
+                            act_name = act.get("name") or act.get("location") or ""
+                            
+                            # 如果缺少经纬度，尝试从推荐列表中匹配
+                            if (lat is None or lng is None) and act_name:
+                                # 在 attractions 或 restaurants 中查找匹配项
+                                search_list = attractions if category == "景点" else restaurants
+                                for rec_item in search_list:
+                                    rec_name = rec_item.get("name", "")
+                                    if rec_name and (act_name.lower() in rec_name.lower() or rec_name.lower() in act_name.lower()):
+                                        if rec_item.get("latitude") is not None and rec_item.get("longitude") is not None:
+                                            lat = _num(rec_item.get("latitude"))
+                                            lng = _num(rec_item.get("longitude"))
+                                            break
+                                
+                                # 如果仍然没有，尝试地理编码
+                                if (lat is None or lng is None) and act_name:
+                                    geo = self.location_client.geocode(f"{destination} {act_name}", location=destination)
+                                    if geo and isinstance(geo, dict) and geo.get("latitude") is not None and geo.get("longitude") is not None:
+                                        lat = _num(geo.get("latitude"))
+                                        lng = _num(geo.get("longitude"))
+                            
                             base = {
                                 "uniqueId": f"{'rest' if category == '美食' else 'spot'}_{day_num}_{seg}_{idx}",
                                 "timeOfDay": seg,
-                                "name": act.get("name") or act.get("location") or (f"餐厅{idx + 1}" if category == "美食" else f"景点{idx + 1}"),
+                                "name": act_name or (f"餐厅{idx + 1}" if category == "美食" else f"景点{idx + 1}"),
                                 "category": category,
                                 "duration": _dur(act.get("play_time_minutes"), _dur(act.get("recommended_time"), 60)),
-                                "lat": _num(act.get("latitude")),
-                                "lng": _num(act.get("longitude")),
+                                "lat": lat,
+                                "lng": lng,
                                 "description": act.get("description"),
                                 "notes": _norm_notes(act.get("notes")),
                                 "commute_from_prev": act.get("commute_from_prev"),
@@ -414,14 +655,37 @@ class TravelService:
                     for idx, (ptype, act) in enumerate(merged):
                         seg = "morning" if idx % 3 == 0 else ("afternoon" if idx % 3 == 1 else "evening")
                         category = "美食" if ptype == "restaurant" else "景点"
+                        
+                        # 确保经纬度存在
+                        lat = _num(act.get("latitude"))
+                        lng = _num(act.get("longitude"))
+                        act_name = act.get("name") or act.get("location") or ""
+                        
+                        # 如果缺少经纬度，尝试从推荐列表中匹配或地理编码
+                        if (lat is None or lng is None) and act_name:
+                            search_list = attractions if category == "景点" else restaurants
+                            for rec_item in search_list:
+                                rec_name = rec_item.get("name", "")
+                                if rec_name and (act_name.lower() in rec_name.lower() or rec_name.lower() in act_name.lower()):
+                                    if rec_item.get("latitude") is not None and rec_item.get("longitude") is not None:
+                                        lat = _num(rec_item.get("latitude"))
+                                        lng = _num(rec_item.get("longitude"))
+                                        break
+                            
+                            if (lat is None or lng is None) and act_name:
+                                geo = self.location_client.geocode(f"{destination} {act_name}", location=destination)
+                                if geo and isinstance(geo, dict) and geo.get("latitude") is not None and geo.get("longitude") is not None:
+                                    lat = _num(geo.get("latitude"))
+                                    lng = _num(geo.get("longitude"))
+                        
                         base = {
                             "uniqueId": f"{'rest' if category == '美食' else 'spot'}_{day_num}_{seg}_{idx}",
                             "timeOfDay": seg,
-                            "name": act.get("name") or act.get("location") or (f"餐厅{idx + 1}" if category == "美食" else f"景点{idx + 1}"),
+                            "name": act_name or (f"餐厅{idx + 1}" if category == "美食" else f"景点{idx + 1}"),
                             "category": category,
                             "duration": _dur(act.get("play_time_minutes"), _dur(act.get("recommended_time"), 60)),
-                            "lat": _num(act.get("latitude")),
-                            "lng": _num(act.get("longitude")),
+                            "lat": lat,
+                            "lng": lng,
                             "description": act.get("description"),
                             "notes": _norm_notes(act.get("notes")),
                             "commute_from_prev": act.get("commute_from_prev"),
@@ -448,14 +712,22 @@ class TravelService:
                         # 早上：主要景点 1
                         if len(spot_slice) >= 1:
                             s0 = spot_slice[0]
+                            lat = _num(s0.get("latitude"))
+                            lng = _num(s0.get("longitude"))
+                            # 确保有经纬度
+                            if (lat is None or lng is None) and s0.get("name"):
+                                geo = self.location_client.geocode(f"{destination} {s0.get('name')}", location=destination)
+                                if geo and isinstance(geo, dict):
+                                    lat = _num(geo.get("latitude"))
+                                    lng = _num(geo.get("longitude"))
                             base = {
                                 "uniqueId": f"spot_{day_num}_morning_fallback_0",
                                 "timeOfDay": "morning",
                                 "name": s0.get("name") or s0.get("location") or "景点",
                                 "category": "景点",
                                 "duration": _dur(s0.get("play_time_minutes"), 120),
-                                "lat": _num(s0.get("latitude")),
-                                "lng": _num(s0.get("longitude")),
+                                "lat": lat,
+                                "lng": lng,
                                 "description": s0.get("description"),
                                 "notes": _norm_notes(s0.get("notes")),
                                 "commute_from_prev": s0.get("commute_from_prev"),
@@ -466,14 +738,21 @@ class TravelService:
                         # 下午：餐厅 1
                         if len(rest_slice) >= 1:
                             r0 = rest_slice[0]
+                            lat = _num(r0.get("latitude"))
+                            lng = _num(r0.get("longitude"))
+                            if (lat is None or lng is None) and r0.get("name"):
+                                geo = self.location_client.geocode(f"{destination} {r0.get('name')}", location=destination)
+                                if geo and isinstance(geo, dict):
+                                    lat = _num(geo.get("latitude"))
+                                    lng = _num(geo.get("longitude"))
                             base = {
                                 "uniqueId": f"rest_{day_num}_afternoon_fallback_0",
                                 "timeOfDay": "afternoon",
                                 "name": r0.get("name") or "推荐餐厅",
                                 "category": "美食",
                                 "duration": _dur(r0.get("play_time_minutes"), 60),
-                                "lat": _num(r0.get("latitude")),
-                                "lng": _num(r0.get("longitude")),
+                                "lat": lat,
+                                "lng": lng,
                                 "description": r0.get("description"),
                                 "notes": _norm_notes(r0.get("notes")),
                                 "commute_from_prev": r0.get("commute_from_prev"),
@@ -486,14 +765,21 @@ class TravelService:
                         # 晚上：次要景点（如果有）
                         if len(spot_slice) >= 2:
                             s1 = spot_slice[1]
+                            lat = _num(s1.get("latitude"))
+                            lng = _num(s1.get("longitude"))
+                            if (lat is None or lng is None) and s1.get("name"):
+                                geo = self.location_client.geocode(f"{destination} {s1.get('name')}", location=destination)
+                                if geo and isinstance(geo, dict):
+                                    lat = _num(geo.get("latitude"))
+                                    lng = _num(geo.get("longitude"))
                             base = {
                                 "uniqueId": f"spot_{day_num}_evening_fallback_1",
                                 "timeOfDay": "evening",
                                 "name": s1.get("name") or "夜间景点",
                                 "category": "景点",
                                 "duration": _dur(s1.get("play_time_minutes"), 90),
-                                "lat": _num(s1.get("latitude")),
-                                "lng": _num(s1.get("longitude")),
+                                "lat": lat,
+                                "lng": lng,
                                 "description": s1.get("description"),
                                 "notes": _norm_notes(s1.get("notes")),
                                 "commute_from_prev": s1.get("commute_from_prev"),
@@ -509,13 +795,18 @@ class TravelService:
                         return len(v.get("items"))
                     return 0
 
+                # 安全获取 schedule
+                schedule_for_stats = day_itinerary.get("schedule")
+                if not isinstance(schedule_for_stats, dict):
+                    schedule_for_stats = {}
+                
                 stats = {
                     "spots": len(day_spots) if isinstance(day_spots, list) else 0,
                     "restaurants": len(day_restaurants) if isinstance(day_restaurants, list) else 0,
                     "schedule": {
-                        "morning": _safe_len((day_itinerary.get("schedule") or {}).get("morning")),
-                        "afternoon": _safe_len((day_itinerary.get("schedule") or {}).get("afternoon")),
-                        "evening": _safe_len((day_itinerary.get("schedule") or {}).get("evening")),
+                        "morning": _safe_len(schedule_for_stats.get("morning")),
+                        "afternoon": _safe_len(schedule_for_stats.get("afternoon")),
+                        "evening": _safe_len(schedule_for_stats.get("evening")),
                     },
                     "grouped_items": {
                         "morning": len(grouped_items.get("morning") or []),
@@ -524,7 +815,17 @@ class TravelService:
                     }
                 }
 
-                yield sse("day", {"day_number": day_num, "items": grouped_items, "stats": stats})
+                # 打印每天的数据统计
+                total_items = sum(len(grouped_items.get(seg, [])) for seg in segments)
+                print(f"📤 推送第{day_num}天数据：total_items={total_items}, morning={len(grouped_items.get('morning', []))}, afternoon={len(grouped_items.get('afternoon', []))}, evening={len(grouped_items.get('evening', []))}")
+                # 添加当天的起始点和终止点信息
+                yield sse("day", {
+                    "day_number": day_num, 
+                    "items": grouped_items, 
+                    "stats": stats,
+                    "start_point": day_points["start"],
+                    "end_point": day_points["end"]
+                })
 
             result = {
                 "success": True,

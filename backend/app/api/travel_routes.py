@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from typing import List, Dict, Any
 from datetime import date, datetime
+import json
 from app.schemas.travel_schemas import (
     TravelPlanCreate,
     TravelPlanResponse,
@@ -37,10 +38,24 @@ def get_current_user_id() -> int:
 @router.get("/geocode")
 async def geocode(address: str, location: str = None):
     """地理编码：用于前端根据目的地文本获取地图中心经纬度"""
+    import urllib.parse
+    # URL 解码地址参数
+    decoded_address = urllib.parse.unquote(address)
+    decoded_location = urllib.parse.unquote(location) if location else None
+    
+    print(f"🌍 地理编码接口调用：address={decoded_address}, location={decoded_location}")
+    
     client = LocationAPIClient()
-    result = client.geocode(address, location=location)
+    result = client.geocode(decoded_address, location=decoded_location)
+    
     if not result or result.get("latitude") is None or result.get("longitude") is None:
-        raise HTTPException(status_code=404, detail="无法解析该地址")
+        error_detail = f"无法解析该地址：{decoded_address}"
+        if decoded_location:
+            error_detail += f" (location: {decoded_location})"
+        print(f"❌ {error_detail}")
+        raise HTTPException(status_code=404, detail=error_detail)
+    
+    print(f"✅ 地理编码成功：{decoded_address} -> ({result.get('latitude')}, {result.get('longitude')})")
     return result
 
 
@@ -55,15 +70,20 @@ async def create_travel_plan(
     try:
         plan_id = travel_crud.create_travel_plan(user_id, plan_data)
         if not plan_id:
-            raise HTTPException(status_code=500, detail="创建旅行规划失败")
+            raise HTTPException(status_code=500, detail="创建旅行规划失败：数据库操作返回空ID")
         
         plan = travel_crud.get_travel_plan(plan_id)
         if not plan:
-            raise HTTPException(status_code=404, detail="旅行规划不存在")
+            raise HTTPException(status_code=404, detail=f"旅行规划不存在：plan_id={plan_id}")
         
         return TravelPlanResponse(**plan)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_detail = f"创建旅行规划时发生错误: {str(e)}\n{traceback.format_exc()}"
+        print(f"❌ {error_detail}")  # 打印到控制台便于调试
+        raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")
 
 
 @router.get("/plans/{plan_id}", response_model=TravelPlanResponse)
@@ -119,22 +139,34 @@ async def generate_itinerary_stream(plan_id: int, request: GenerateItineraryRequ
     plan = travel_crud.get_travel_plan(plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="旅行规划不存在")
+    
+    # 确保 plan 是字典类型
+    if not isinstance(plan, dict):
+        raise HTTPException(status_code=500, detail=f"旅行规划数据格式错误：期望字典，实际为 {type(plan)}")
 
     travel_service = TravelService()
 
     def event_iter():
-        return travel_service.generate_itinerary_stream(
-            travel_plan_id=plan_id,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            destination=plan["destination"],
-            interests=plan.get("interests", []) or [],
-            food_preferences=plan.get("food_preferences", []) or [],
-            travelers=plan.get("travelers", "") or "",
-            budget_min=float(plan.get("budget_min", 0) or 0),
-            budget_max=float(plan.get("budget_max", 10000) or 10000),
-            xiaohongshu_notes=plan.get("xiaohongshu_notes", []) or [],
-        )
+        try:
+            # 使用 yield from 来委托给生成器，确保流式输出正常工作
+            yield from travel_service.generate_itinerary_stream(
+                travel_plan_id=plan_id,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                destination=plan.get("destination", "") or "",
+                interests=plan.get("interests", []) or [],
+                food_preferences=plan.get("food_preferences", []) or [],
+                travelers=plan.get("travelers", "") or "",
+                budget_min=float(plan.get("budget_min", 0) or 0),
+                budget_max=float(plan.get("budget_max", 10000) or 10000),
+                xiaohongshu_notes=plan.get("xiaohongshu_notes", []) or [],
+            )
+        except Exception as e:
+            # 捕获错误并返回错误事件
+            import traceback
+            error_msg = f"生成路线时发生错误：{str(e)}\n{traceback.format_exc()}"
+            print(f"❌ {error_msg}")
+            yield f"event: error\ndata: {json.dumps({'message': error_msg}, ensure_ascii=False)}\n\n"
 
     headers = {
         "Cache-Control": "no-cache",

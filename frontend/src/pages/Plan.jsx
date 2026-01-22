@@ -85,6 +85,8 @@ const Plan = () => {
             morning: Array.isArray(grouped.morning) ? grouped.morning : [],
             afternoon: Array.isArray(grouped.afternoon) ? grouped.afternoon : [],
             evening: Array.isArray(grouped.evening) ? grouped.evening : [],
+            start_point: payload.start_point || null, // 当天的起始点（住宿或机场）
+            end_point: payload.end_point || null, // 当天的终止点（住宿或机场）
           };
           // eslint-disable-next-line no-console
           console.log('[SSE day]', {
@@ -95,6 +97,8 @@ const Plan = () => {
               evening: nextDay.evening.length,
             },
             stats: payload.stats,
+            start_point: nextDay.start_point,
+            end_point: nextDay.end_point,
           });
           setItinerary((prev) => ({
             ...(prev || {}),

@@ -24,9 +24,14 @@ class Settings(BaseSettings):
     
     # API Keys（不要在代码中写默认值，统一通过环境变量注入）
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+    # 高德地图 Web 服务 API Key（后端使用，用于地理编码和地点搜索）
     AMAP_API_KEY: str = os.getenv("AMAP_API_KEY", "")
+    # 高德地图安全密钥（可选，用于签名验证）
     AMAP_SECURITY_KEY: str = os.getenv("AMAP_SECURITY_KEY", "")
+    # 高德地图 Web JS API Key（前端使用，仅用于前端地图显示，后端不需要）
+    AMAP_WEB_JS_KEY: Optional[str] = os.getenv("AMAP_WEB_JS_KEY", None)
     GOOGLE_PLACES_API_KEY: Optional[str] = os.getenv("GOOGLE_PLACES_API_KEY", None)
+    MAPBOX_TOKEN: Optional[str] = os.getenv("MAPBOX_TOKEN", None)  # Mapbox Token（用于国外地理编码）
     
     # 应用配置
     API_V1_PREFIX: str = "/api/v1"
@@ -50,4 +55,4 @@ def _require(name: str, value: str):
 
 _require("DEEPSEEK_API_KEY", settings.DEEPSEEK_API_KEY)
 _require("AMAP_API_KEY", settings.AMAP_API_KEY)
-_require("AMAP_SECURITY_KEY", settings.AMAP_SECURITY_KEY)
+# AMAP_SECURITY_KEY 是可选的（某些 Web 服务 API Key 不需要签名）
