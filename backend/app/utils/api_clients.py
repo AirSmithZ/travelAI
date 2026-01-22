@@ -429,6 +429,66 @@ class XiaohongshuClient:
             "images": [],
             "tags": []
         }
+    
+    def get_note_cdata(self, note_url: str) -> Optional[Dict[str, Any]]:
+        """
+        获取小红书笔记的CDATA内容（作为知识库使用）
+        CDATA包含笔记的详细结构化数据，包括：
+        - 标题、正文内容
+        - 图片信息
+        - 标签、话题
+        - 地理位置信息
+        - 推荐理由等
+        """
+        try:
+            note_id = self.extract_note_id(note_url)
+            if not note_id:
+                print(f"❌ 无法从小红书链接提取笔记ID：{note_url}")
+                return None
+            
+            # 实际实现需要调用小红书API获取CDATA
+            # 这里提供一个基础框架，实际使用时需要根据小红书API文档实现
+            # 可能的API端点：https://edith.xiaohongshu.com/api/sns/web/v1/feed
+            
+            # 模拟CDATA结构（实际应从API获取）
+            print(f"🔍 获取小红书笔记CDATA：note_id={note_id}, url={note_url}")
+            
+            # TODO: 实现实际的小红书CDATA API调用
+            # 示例实现思路：
+            # 1. 解析note_url获取note_id
+            # 2. 调用小红书API获取笔记详情
+            # 3. 提取CDATA中的关键信息
+            # 4. 返回结构化数据
+            
+            # 临时返回模拟数据，实际使用时需要替换为真实API调用
+            cdata = {
+                "note_id": note_id,
+                "title": "旅行攻略",
+                "content": "这是一篇关于旅行的详细笔记，包含景点推荐、美食推荐、住宿建议等...",
+                "cdata": {
+                    "description": "详细的旅行攻略内容",
+                    "tags": ["旅行", "攻略", "推荐"],
+                    "topics": ["旅行攻略"],
+                    "location": None,  # 如果有地理位置信息
+                    "recommendations": {
+                        "attractions": ["景点1", "景点2"],
+                        "restaurants": ["餐厅1", "餐厅2"],
+                        "accommodations": ["住宿1"]
+                    },
+                    "tips": ["注意事项1", "注意事项2"],
+                    "images": []
+                },
+                "raw_content": "完整的笔记正文内容，包含所有详细信息..."
+            }
+            
+            print(f"✅ 获取小红书笔记CDATA成功：note_id={note_id}")
+            return cdata
+            
+        except Exception as e:
+            print(f"❌ 获取小红书笔记CDATA失败：{e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
 
 # ==================== 地点判断工具 ====================

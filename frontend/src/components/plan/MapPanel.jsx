@@ -120,6 +120,7 @@ const MapPanel = () => {
   const [mapProvider, setMapProvider] = useState(null); // 'amap' | 'mapbox'
   const [mapError, setMapError] = useState(null);
   const loadTimeoutRef = useRef(null);
+  const [selectedDay, setSelectedDay] = useState(null); // null 表示显示所有天
   
   // 每天路线颜色（渐变色系，确保区分度）
   const dayColors = [
@@ -139,6 +140,11 @@ const MapPanel = () => {
     const dayKeys = Object.keys(itinerary || {}).filter(key => key.startsWith('day')).sort();
     
     dayKeys.forEach((dayKey, dayIndex) => {
+      // 如果选择了特定天数，只处理选中的那一天
+      if (selectedDay !== null && dayIndex + 1 !== selectedDay) {
+        return;
+      }
+      
       const day = itinerary[dayKey];
       if (!day) return;
       
@@ -193,15 +199,79 @@ const MapPanel = () => {
     });
     
     return routes;
-  }, [itinerary]);
+  }, [itinerary, selectedDay]);
   
-  // 所有点（用于标记显示）
+  // 所有点（用于标记显示），包括起始点和终止点
   const allPoints = useMemo(() => {
+    const points = [];
+    
+    // 添加 mapPoints（后端返回的推荐点）
     if (mapPoints && mapPoints.length > 0) {
-      return mapPoints;
+      points.push(...mapPoints);
     }
-    // 从 dailyRoutes 中提取所有点
-    return dailyRoutes.flatMap(route => route.points);
+    
+    // 从 dailyRoutes 中提取所有点，包括起始点和终止点
+    dailyRoutes.forEach(route => {
+      // 添加起始点
+      if (route.startPoint && route.startPoint.lat != null && route.startPoint.lng != null) {
+        points.push({
+          id: `start_${route.dayNumber}`,
+          name: route.startPoint.name || '起始点',
+          lat: route.startPoint.lat,
+          lng: route.startPoint.lng,
+          category: route.startPoint.category || '起点',
+          type: route.startPoint.type,
+        });
+      }
+      // 添加终止点（如果与起始点不同）
+      if (route.endPoint && route.endPoint.lat != null && route.endPoint.lng != null) {
+        const isSameAsStart = route.startPoint && 
+          route.startPoint.lat === route.endPoint.lat && 
+          route.startPoint.lng === route.endPoint.lng;
+        if (!isSameAsStart) {
+          points.push({
+            id: `end_${route.dayNumber}`,
+            name: route.endPoint.name || '终止点',
+            lat: route.endPoint.lat,
+            lng: route.endPoint.lng,
+            category: route.endPoint.category || '终点',
+            type: route.endPoint.type,
+          });
+        }
+      }
+      // 添加路线中的其他点
+      route.points.forEach((point, idx) => {
+        // 跳过起始点和终止点（避免重复）
+        if (point.lat != null && point.lng != null) {
+          const isStart = route.startPoint && 
+            point.lat === route.startPoint.lat && 
+            point.lng === route.startPoint.lng;
+          const isEnd = route.endPoint && 
+            point.lat === route.endPoint.lat && 
+            point.lng === route.endPoint.lng;
+          if (!isStart && !isEnd) {
+            points.push({
+              id: `route_${route.dayNumber}_${idx}`,
+              name: point.name || '地点',
+              lat: point.lat,
+              lng: point.lng,
+              category: point.category || '景点',
+            });
+          }
+        }
+      });
+    });
+    
+    // 去重：基于经纬度
+    const seen = new Set();
+    return points.filter(point => {
+      const key = `${point.lat}_${point.lng}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
   }, [mapPoints, dailyRoutes]);
 
   // 根据 mapCenter 判断使用哪个地图提供商
@@ -783,9 +853,48 @@ const MapPanel = () => {
     };
   }, [mapCenter, mapZoom, dailyRoutes, allPoints.length, shouldUseMapbox]);
 
+  // 获取所有天数
+  const allDays = useMemo(() => {
+    const dayKeys = Object.keys(itinerary || {}).filter(key => key.startsWith('day')).sort();
+    return dayKeys.map((_, index) => index + 1);
+  }, [itinerary]);
+
   return (
     <div className="h-full w-full relative z-0 bg-slate-950">
       <div ref={mapContainerRef} className="h-full w-full" />
+
+      {/* Day Filter - 按天筛选按钮 */}
+      {allDays.length > 0 && (
+        <div className="absolute top-4 left-4 bg-slate-900/75 backdrop-blur-xl p-2 rounded-xl shadow-2xl border border-slate-800/70 z-[1000]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setSelectedDay(null)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                selectedDay === null
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800/70 border border-slate-700/50'
+              }`}
+            >
+              全部
+            </button>
+            {allDays.map((dayNum) => (
+              <button
+                key={dayNum}
+                type="button"
+                onClick={() => setSelectedDay(dayNum)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  selectedDay === dayNum
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800/70 border border-slate-700/50'
+                }`}
+              >
+                第{dayNum}天
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Map Legend */}
       {allPoints.length > 0 && (
@@ -827,15 +936,17 @@ const MapPanel = () => {
           {dailyRoutes.length > 0 && (
             <div className="space-y-1.5 pt-2">
               <div className="text-[10px] text-slate-400 mb-1">路线（按天）</div>
-              {dailyRoutes.map((route) => (
-                <div key={route.dayKey} className="flex items-center gap-2">
-                  <div
-                    className="w-4 h-0.5 rounded"
-                    style={{ backgroundColor: route.color }}
-                  />
-                  <span className="text-slate-300">第{route.dayNumber}天</span>
-                </div>
-              ))}
+              {dailyRoutes
+                .filter((route) => selectedDay === null || route.dayNumber === selectedDay)
+                .map((route) => (
+                  <div key={route.dayKey} className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-0.5 rounded"
+                      style={{ backgroundColor: route.color }}
+                    />
+                    <span className="text-slate-300">第{route.dayNumber}天</span>
+                  </div>
+                ))}
             </div>
           )}
         </div>

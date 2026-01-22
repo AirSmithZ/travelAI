@@ -189,6 +189,49 @@ const ItineraryPanel = () => {
                 {/* Day Content */}
                 {!isDayCollapsed && (
                   <div className="p-2 space-y-2">
+                    {/* 起始点和终止点（不可拖拽） */}
+                    {(itinerary[dayKey]?.start_point || itinerary[dayKey]?.end_point) && (
+                      <div className="mb-2 space-y-2">
+                        {itinerary[dayKey]?.start_point && (
+                          <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/60 opacity-75">
+                            <div className="flex gap-2.5">
+                              <div className="text-slate-600 flex items-center pt-0.5">
+                                <MapPin size={14} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start gap-2">
+                                  <h4 className="font-semibold text-[13px] text-slate-100 truncate leading-tight">
+                                    {itinerary[dayKey].start_point.name || '起始点'}
+                                  </h4>
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                    {itinerary[dayKey].start_point.category || '起点'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {itinerary[dayKey]?.end_point && (
+                          <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/60 opacity-75">
+                            <div className="flex gap-2.5">
+                              <div className="text-slate-600 flex items-center pt-0.5">
+                                <MapPin size={14} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start gap-2">
+                                  <h4 className="font-semibold text-[13px] text-slate-100 truncate leading-tight">
+                                    {itinerary[dayKey].end_point.name || '终止点'}
+                                  </h4>
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                    {itinerary[dayKey].end_point.category || '终点'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {SEGMENTS.map((seg) => {
                       const segItems = day[seg.key] || [];
                       const Icon = seg.icon;
@@ -237,12 +280,15 @@ const ItineraryPanel = () => {
                                     const costText = poi?.cost || '';
                                     const hasNotes = (Array.isArray(poi?.notes) && poi.notes.length > 0) || Boolean(poi?.description);
                                     const catStyle = getCategoryStyle(poi.category);
+                                    // 酒店和机场禁止拖拽
+                                    const isLocked = poi.category === '住宿' || poi.category === '机场' || poi.type === 'accommodation' || poi.type === 'airport';
 
                                     return (
                                       <Draggable 
                                         key={poi.uniqueId} 
                                         draggableId={poi.uniqueId} 
                                         index={idx}
+                                        isDragDisabled={isLocked}
                                       >
                                         {(provided, snapshot) => {
                                           // 修复拖拽偏移：当拖拽时，重新计算正确的位置
@@ -264,18 +310,27 @@ const ItineraryPanel = () => {
                                             className={`bg-slate-900/80 p-3 rounded-xl border transition-shadow ${
                                               snapshot.isDragging
                                                 ? 'shadow-2xl ring-2 ring-sky-500/60 border-sky-500/40 z-[9999]'
-                                                : 'border-slate-800/60 hover:border-slate-700/60'
+                                                : isLocked
+                                                  ? 'border-slate-800/60 opacity-75'
+                                                  : 'border-slate-800/60 hover:border-slate-700/60'
                                             }`}
                                             onClick={() => handlePoiClick(poi)}
                                           >
                                             <div className="flex gap-2.5">
-                                              {/* Drag Handle */}
-                                              <div
-                                                {...provided.dragHandleProps}
-                                                className="text-slate-700 hover:text-slate-400 cursor-grab active:cursor-grabbing flex items-center pt-0.5"
-                                              >
-                                                <GripVertical size={14} />
-                                              </div>
+                                              {/* Drag Handle - 酒店和机场不显示拖拽手柄 */}
+                                              {!isLocked && (
+                                                <div
+                                                  {...provided.dragHandleProps}
+                                                  className="text-slate-700 hover:text-slate-400 cursor-grab active:cursor-grabbing flex items-center pt-0.5"
+                                                >
+                                                  <GripVertical size={14} />
+                                                </div>
+                                              )}
+                                              {isLocked && (
+                                                <div className="text-slate-600 flex items-center pt-0.5">
+                                                  <MapPin size={14} />
+                                                </div>
+                                              )}
 
                                               {/* Content */}
                                               <div className="flex-1 min-w-0">

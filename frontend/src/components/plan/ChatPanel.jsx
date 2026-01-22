@@ -1,19 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTravel } from '../../context/TravelContext';
 import Button from '../ui/Button';
-import { Send, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
+import { Send } from 'lucide-react';
 
 const ChatPanel = () => {
   const { chatHistory, addChatMessage, setItinerary, itinerary, preferences } = useTravel();
   const [input, setInput] = useState('');
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const scrollRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [chatHistory, isCollapsed]);
+  }, [chatHistory]);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -47,29 +46,10 @@ const ChatPanel = () => {
   ];
 
   return (
-    <div className={`bg-transparent flex flex-col transition-all duration-300 ${isCollapsed ? 'h-16' : 'h-[35vh] min-h-[250px]'}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/70 bg-slate-900/50">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-sky-500/15 border border-sky-400/30 flex items-center justify-center">
-            <Sparkles size={16} className="text-sky-200" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-sm text-slate-100">🤖 AI 旅行助手</h3>
-            {!isCollapsed && <p className="text-xs text-slate-400">随时告诉我你的想法，我会帮你调整路线</p>}
-          </div>
-        </div>
-        <button 
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 hover:bg-slate-950/30 rounded text-slate-300"
-        >
-          {isCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
-        </button>
-      </div>
+    <div className="h-full bg-transparent flex flex-col">
 
       {/* Chat Area */}
-      {!isCollapsed && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/20" ref={scrollRef}>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/20" ref={scrollRef}>
           {chatHistory.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
@@ -81,12 +61,10 @@ const ChatPanel = () => {
               </div>
             </div>
           ))}
-        </div>
-      )}
+      </div>
 
       {/* Input Area */}
-      {!isCollapsed && (
-        <div className="p-4 bg-slate-900/40 border-t border-slate-800/70">
+      <div className="p-4 bg-slate-900/40 border-t border-slate-800/70">
           <div className="flex gap-2 mb-3 overflow-x-auto pb-1 no-scrollbar">
             {suggestions.map((s, i) => (
               <button 
@@ -116,8 +94,7 @@ const ChatPanel = () => {
               <Send size={14} />
             </Button>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

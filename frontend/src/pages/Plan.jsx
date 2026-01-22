@@ -9,7 +9,7 @@ import ItineraryPanel from '../components/plan/ItineraryPanel';
 import MapPanel from '../components/plan/MapPanel';
 import RestaurantDrawer from '../components/plan/RestaurantDrawer';
 import Button from '../components/ui/Button';
-import { Utensils, Share2, ArrowLeft, FolderOpen, Trash2, X, Compass, Sparkles, Bookmark } from 'lucide-react';
+import { Utensils, Share2, ArrowLeft, FolderOpen, Trash2, X, Compass, Sparkles, Bookmark, Bot } from 'lucide-react';
 import { Modal } from 'antd';
 
 const Plan = () => {
@@ -32,6 +32,7 @@ const Plan = () => {
   const [isRestaurantOpen, setIsRestaurantOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSessionDrawerOpen, setIsSessionDrawerOpen] = useState(false);
+  const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   // 用于避免重复启动：记录已请求的 key，防止重复请求
   const requestedKeysRef = useRef(new Set()); // 存储已请求过的 key
   const abortControllerRef = useRef(null);
@@ -321,7 +322,23 @@ const Plan = () => {
   };
 
   const handleToggleSessionDrawer = () => {
-    setIsSessionDrawerOpen((prev) => !prev);
+    setIsSessionDrawerOpen((prev) => {
+      if (!prev) {
+        // 打开SessionDrawer时，关闭ChatDrawer
+        setIsChatDrawerOpen(false);
+      }
+      return !prev;
+    });
+  };
+
+  const handleToggleChatDrawer = () => {
+    setIsChatDrawerOpen((prev) => {
+      if (!prev) {
+        // 打开ChatDrawer时，关闭SessionDrawer
+        setIsSessionDrawerOpen(false);
+      }
+      return !prev;
+    });
   };
 
   const handleSaveSession = () => {
@@ -418,6 +435,16 @@ const Plan = () => {
             <span className="text-xs font-medium hidden md:inline">附近美食</span>
           </button>
 
+          {/* AI 旅行助手 */}
+          <button
+            type="button"
+            onClick={handleToggleChatDrawer}
+            className="group flex items-center gap-1.5 px-3 py-2 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 border border-transparent hover:border-purple-500/20 transition-all duration-200"
+          >
+            <Bot size={16} className="group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-medium hidden md:inline">AI 助手</span>
+          </button>
+
           {/* 会话 */}
           <button
             type="button"
@@ -450,13 +477,8 @@ const Plan = () => {
            <ItineraryPanel />
         </div>
 
-        {/* Center/Right Panel: Chat & Map */}
+        {/* Center/Right Panel: Map */}
         <div className="flex-1 flex flex-col min-w-0 relative">
-          {/* Chat Overlay */}
-          <div className="absolute top-4 left-4 right-4 md:left-10 md:right-auto md:w-[400px] z-[400] shadow-2xl rounded-xl overflow-hidden border border-slate-800/70 bg-slate-900/90 backdrop-blur">
-            <ChatPanel />
-          </div>
-
           {/* Map */}
           <div className="flex-1 bg-slate-950">
             <MapPanel />
@@ -466,17 +488,52 @@ const Plan = () => {
         {/* Restaurant Drawer */}
         <RestaurantDrawer isOpen={isRestaurantOpen} onClose={handleCloseRestaurant} />
 
-        {/* Backdrop for session drawer */}
+        {/* Backdrop for drawers */}
         <div
           className={`fixed inset-0 z-20 transition-opacity duration-300 ${
-            isSessionDrawerOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            (isSessionDrawerOpen || isChatDrawerOpen) ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
-          onClick={() => setIsSessionDrawerOpen(false)}
+          onClick={() => {
+            setIsSessionDrawerOpen(false);
+            setIsChatDrawerOpen(false);
+          }}
           role="button"
           tabIndex={-1}
-          aria-label="close session drawer"
+          aria-label="close drawers"
         >
           <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" />
+        </div>
+
+        {/* Chat Drawer - AI 旅行助手 - 右侧抽屉 */}
+        <div
+          className={`fixed inset-y-14 right-0 w-96 bg-slate-900/95 border-l border-slate-800/50 shadow-2xl z-[35] transform transition-transform duration-300 backdrop-blur-xl ${
+            isChatDrawerOpen ? 'translate-x-0' : 'translate-x-full'
+          }`}
+        >
+          <div className="h-full flex flex-col">
+            <div className="p-4 border-b border-slate-800/60 flex items-center justify-between gap-2 bg-gradient-to-r from-purple-500/8 to-pink-500/8">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/25 flex items-center justify-center">
+                  <Bot size={16} className="text-purple-400" />
+                </div>
+                <div>
+                  <span className="text-sm font-semibold text-slate-100">🤖 AI 旅行助手</span>
+                  <div className="text-[10px] text-slate-500 mt-0.5">随时告诉我你的想法，我会帮你调整路线</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-lg bg-slate-800/50 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors grid place-items-center"
+                onClick={() => setIsChatDrawerOpen(false)}
+                aria-label="close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ChatPanel />
+            </div>
+          </div>
         </div>
 
         {/* Session Drawer - 右侧会话抽屉 */}

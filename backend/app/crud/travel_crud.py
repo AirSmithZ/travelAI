@@ -176,7 +176,10 @@ def create_travel_plan(user_id: int, plan_data: TravelPlanCreate) -> Optional[in
                 )
             )
         
-        # 插入居住地址信息
+        # 插入居住地址信息（并进行地理编码保存经纬度）
+        from app.utils.api_clients import LocationAPIClient
+        location_client = LocationAPIClient()
+        
         for addr in plan_data.addresses:
             # 处理 city 字段：可能是字符串或对象
             city_value = addr.city
@@ -185,10 +188,31 @@ def create_travel_plan(user_id: int, plan_data: TravelPlanCreate) -> Optional[in
             elif not isinstance(city_value, str):
                 city_value = str(city_value) if city_value else ''
             
+            address_value = addr.address or ''
+            
+            # 对住宿地址进行地理编码，获取经纬度
+            latitude = None
+            longitude = None
+            if city_value and address_value:
+                try:
+                    full_address = f"{city_value} {address_value}"
+                    geo = location_client.geocode(full_address, location=city_value)
+                    if geo and isinstance(geo, dict):
+                        latitude = geo.get("latitude")
+                        longitude = geo.get("longitude")
+                        if latitude is not None and longitude is not None:
+                            print(f"✅ 住宿地理编码成功：{full_address} -> ({latitude}, {longitude})")
+                        else:
+                            print(f"⚠️ 住宿地理编码返回空坐标：{full_address}")
+                    else:
+                        print(f"⚠️ 住宿地理编码失败：{full_address}")
+                except Exception as e:
+                    print(f"⚠️ 住宿地理编码异常：{full_address} - {str(e)}")
+            
             insert_addr_sql = """
             INSERT INTO accommodations (
-                user_id, travel_plan_id, city, address, check_in_date, check_out_date
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+                user_id, travel_plan_id, city, address, check_in_date, check_out_date, latitude, longitude
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(
                 insert_addr_sql,
@@ -196,9 +220,11 @@ def create_travel_plan(user_id: int, plan_data: TravelPlanCreate) -> Optional[in
                     user_id, 
                     plan_id, 
                     city_value, 
-                    addr.address or '',
+                    address_value,
                     addr.check_in_date,
-                    addr.check_out_date
+                    addr.check_out_date,
+                    latitude,
+                    longitude
                 )
             )
         
