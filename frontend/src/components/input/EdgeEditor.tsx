@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { usePlanStore, findNodeContext, findEdgeContext } from '../../stores/usePlanStore';
 import type { EdgeType, TransportMode } from '../../types/itinerary';
 import { TRANSPORT_ICONS } from '../../data/categoryTokens';
-import { FormField, FormInput, FormRow, FormSection, FormSelect } from '../ui/FormField';
+import { FormField, FormInput, FormNumberInput, FormRow, FormSection, FormSelect } from '../ui/FormField';
 import './EdgeEditor.css';
 
 const TRANSPORT_OPTIONS: TransportMode[] = ['walk', 'subway', 'bus', 'taxi', 'flight', 'ferry'];
@@ -133,8 +133,7 @@ export function EdgeEditor() {
             </FormField>
           </FormRow>
           <FormField label="耗时（分钟）">
-            <FormInput
-              type="number"
+            <FormNumberInput
               min={0}
               value={durationDraft}
               onChange={(e) => setDurationDraft(e.target.value)}

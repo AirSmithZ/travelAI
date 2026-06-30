@@ -58,6 +58,7 @@
 }
 
 .time-picker__panel {
+  position: fixed;
   padding: 10px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);

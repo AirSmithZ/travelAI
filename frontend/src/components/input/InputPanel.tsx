@@ -48,7 +48,8 @@ export function InputPanel() {
 
   useEffect(() => {
     if (selectedNodeId && selectedNodeId !== prevNodeIdRef.current && editorRef.current) {
-      editorRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const scrollEl = editorRef.current.querySelector<HTMLElement>('.itinerary-editor__scroll');
+      if (scrollEl) scrollEl.scrollTop = 0;
     }
     prevNodeIdRef.current = selectedNodeId;
   }, [selectedNodeId]);

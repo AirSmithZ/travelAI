@@ -151,20 +151,89 @@
   gap: 10px;
 }
 
-.form-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
+.form-control--number {
+  appearance: textfield;
+  -moz-appearance: textfield;
+  font-variant-numeric: tabular-nums;
 }
 
-.form-checkbox input {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--accent);
+.form-control--number::-webkit-outer-spin-button,
+.form-control--number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.form-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
   cursor: pointer;
+  user-select: none;
+}
+
+.form-checkbox__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.form-checkbox__box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: transparent;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.form-checkbox__box svg {
+  display: block;
+}
+
+.form-checkbox__label {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.form-checkbox:hover .form-checkbox__box {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+
+.form-checkbox:hover .form-checkbox__label {
+  color: var(--text);
+}
+
+.form-checkbox__input:focus-visible + .form-checkbox__box {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.form-checkbox__input:checked + .form-checkbox__box {
+  color: var(--bg-deep);
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.form-checkbox__input:checked ~ .form-checkbox__label {
+  color: var(--text);
 }
 
 .form-btn {

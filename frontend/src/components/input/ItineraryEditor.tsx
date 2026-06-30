@@ -12,7 +12,8 @@ import { listEdgesForNode } from '../../utils/edgeMutations';
 import { EdgeEditor } from './EdgeEditor';
 import { EdgeConnectGroup } from './EdgeSelectRow';
 import { TipsEditor } from './TipsEditor';
-import { FormField, FormInput, FormRow, FormSection, FormSelect } from '../ui/FormField';
+import { FormField, FormInput, FormNumberInput, FormRow, FormSection, FormSelect } from '../ui/FormField';
+import { FormCheckbox } from '../ui/FormCheckbox';
 import { TimePicker } from '../ui/TimePicker';
 import { TagPicker } from '../ui/TagPicker';
 import { NodeCoordEditor } from './NodeCoordEditor';
@@ -260,14 +261,11 @@ export function ItineraryEditor() {
               />
             </FormField>
           </FormRow>
-          <label className="form-checkbox">
-            <input
-              type="checkbox"
-              checked={node.is_optional}
-              onChange={(e) => updateNode(dayIndex, node.id, { is_optional: e.target.checked })}
-            />
-            备选节点
-          </label>
+          <FormCheckbox
+            label="备选节点"
+            checked={node.is_optional}
+            onChange={(e) => updateNode(dayIndex, node.id, { is_optional: e.target.checked })}
+          />
         </FormSection>
 
         <FormSection title="开销">
@@ -284,8 +282,7 @@ export function ItineraryEditor() {
           </FormField>
           <FormRow>
             <FormField label="金额">
-              <FormInput
-                type="number"
+              <FormNumberInput
                 value={node.cost?.amount ?? ''}
                 placeholder="80"
                 onChange={(e) => {

@@ -33,6 +33,11 @@ body,
   margin: 0;
 }
 
+html,
+body {
+  overflow: hidden;
+}
+
 body {
   font-family: var(--font-body);
   background: var(--bg-deep);

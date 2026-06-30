@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { CATEGORY_META } from '../../data/categoryTokens';
 import type { ItineraryNode } from '../../types/itinerary';
+import { formatNodeCost } from '../../utils/formatNodeCost';
 import './TripNode.css';
 
 export type TripNodeData = {
@@ -17,6 +18,7 @@ function TripNodeComponent({ data }: NodeProps & { data: TripNodeData }) {
     node.start_time && node.end_time
       ? `${node.start_time} – ${node.end_time}`
       : node.start_time ?? '';
+  const costLabel = formatNodeCost(node);
 
   return (
     <div
@@ -36,6 +38,7 @@ function TripNodeComponent({ data }: NodeProps & { data: TripNodeData }) {
       </div>
       <div className="trip-node__name">{node.name}</div>
       {timeLabel && <div className="trip-node__time">{timeLabel}</div>}
+      {costLabel && <div className="trip-node__cost">{costLabel}</div>}
       {!compact && node.tags && node.tags.length > 0 && (
         <div className="trip-node__tags">
           {node.tags.slice(0, 2).map((tag) => (

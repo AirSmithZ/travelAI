@@ -19,6 +19,13 @@ function formatTime(hour: number, minute: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
+function scrollListToValue(list: HTMLUListElement | null, selected: number) {
+  if (!list) return;
+  const item = list.querySelector<HTMLElement>(`[data-value="${selected}"]`);
+  if (!item) return;
+  list.scrollTop = item.offsetTop - list.clientHeight / 2 + item.clientHeight / 2;
+}
+
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = Array.from({ length: 60 }, (_, i) => i);
 
@@ -94,14 +101,9 @@ export function TimePicker({
   useEffect(() => {
     if (!open) return;
 
-    const scrollSelected = (list: HTMLUListElement | null, selected: number) => {
-      const item = list?.querySelector<HTMLElement>(`[data-value="${selected}"]`);
-      item?.scrollIntoView({ block: 'center' });
-    };
-
     requestAnimationFrame(() => {
-      scrollSelected(hourListRef.current, draftHour);
-      scrollSelected(minuteListRef.current, draftMinute);
+      scrollListToValue(hourListRef.current, draftHour);
+      scrollListToValue(minuteListRef.current, draftMinute);
     });
   }, [open, draftHour, draftMinute]);
 
@@ -109,11 +111,23 @@ export function TimePicker({
     if (!open) return;
 
     updatePanelPosition();
+
+    const onScroll = (e: Event) => {
+      const target = e.target;
+      if (
+        panelRef.current?.contains(target as Node) ||
+        rootRef.current?.contains(target as Node)
+      ) {
+        return;
+      }
+      updatePanelPosition();
+    };
+
     window.addEventListener('resize', updatePanelPosition);
-    window.addEventListener('scroll', updatePanelPosition, true);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
       window.removeEventListener('resize', updatePanelPosition);
-      window.removeEventListener('scroll', updatePanelPosition, true);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [open, updatePanelPosition]);
 
@@ -238,7 +252,17 @@ export function TimePicker({
         className={`time-picker__trigger${hasValue ? '' : ' time-picker__trigger--empty'}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setOpen((v) => {
+            const next = !v;
+            if (next) {
+              requestAnimationFrame(() => {
+                triggerRef.current?.focus({ preventScroll: true });
+              });
+            }
+            return next;
+          });
+        }}
       >
         <svg
           className="time-picker__icon"

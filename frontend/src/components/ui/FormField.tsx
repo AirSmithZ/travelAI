@@ -38,6 +38,17 @@ export function FormInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input className="form-control" {...props} />;
 }
 
+export function FormNumberInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  const { className = '', ...rest } = props;
+  return (
+    <input
+      type="number"
+      className={`form-control form-control--number ${className}`.trim()}
+      {...rest}
+    />
+  );
+}
+
 export function FormSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <div className="form-select-wrap">

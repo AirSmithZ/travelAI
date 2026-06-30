@@ -93,6 +93,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+.trip-node__cost {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-muted));
+  font-variant-numeric: tabular-nums;
+}
+
+.trip-node--compact .trip-node__cost {
+  font-size: 9px;
+}
+
 .trip-node__tags {
   display: flex;
   flex-wrap: wrap;

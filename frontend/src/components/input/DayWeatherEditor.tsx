@@ -1,7 +1,7 @@
 import type { DayWeather } from '../../types/itinerary';
 import { WEATHER_ICON_OPTIONS } from '../../data/categoryTokens';
 import { weatherIconLabel } from '../../utils/formatWeather';
-import { FormField, FormInput, FormRow, FormSection, FormSelect } from '../ui/FormField';
+import { FormField, FormNumberInput, FormRow, FormSection, FormSelect } from '../ui/FormField';
 
 interface DayWeatherEditorProps {
   weather?: DayWeather;
@@ -13,8 +13,7 @@ export function DayWeatherEditor({ weather, onChange }: DayWeatherEditorProps) {
     <FormSection title="当日天气">
       <FormRow>
         <FormField label="最低温 °C">
-          <FormInput
-            type="number"
+          <FormNumberInput
             value={weather?.temp_min ?? ''}
             onChange={(e) =>
               onChange({ temp_min: e.target.value === '' ? undefined : Number(e.target.value) })
@@ -22,8 +21,7 @@ export function DayWeatherEditor({ weather, onChange }: DayWeatherEditorProps) {
           />
         </FormField>
         <FormField label="最高温 °C">
-          <FormInput
-            type="number"
+          <FormNumberInput
             value={weather?.temp_max ?? ''}
             onChange={(e) =>
               onChange({ temp_max: e.target.value === '' ? undefined : Number(e.target.value) })

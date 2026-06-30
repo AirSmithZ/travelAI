@@ -85,8 +85,9 @@
   color: var(--text-dim);
 }
 
-.input-panel--form .itinerary-editor {
+.input-panel--form .itinerary-editor,
+.input-panel--form .edge-editor {
   flex: 1;
-  overflow-y: auto;
   min-height: 0;
+  overflow: hidden;
 }
