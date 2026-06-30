@@ -1,0 +1,112 @@
+.itinerary-graph {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.itinerary-graph__lane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: linear-gradient(90deg, var(--accent-soft), transparent 60%);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.itinerary-graph__region {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.itinerary-graph__weather {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.itinerary-graph__lane-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.itinerary-graph__add-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--bg-deep);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.itinerary-graph__add-btn:hover {
+  filter: brightness(1.05);
+}
+
+.itinerary-graph__canvas {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.itinerary-graph__canvas .react-flow {
+  background: radial-gradient(ellipse at 30% 20%, rgba(245, 158, 11, 0.04), transparent 50%),
+    var(--bg-base);
+}
+
+.itinerary-graph__legend {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.itinerary-graph__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.itinerary-graph__line {
+  display: inline-block;
+  width: 24px;
+  height: 0;
+  border-top: 2px solid #4a9eff;
+}
+
+.itinerary-graph__line--dashed {
+  border-top-style: dashed;
+  border-color: #64748b;
+}
+
+.itinerary-graph__box {
+  display: inline-block;
+  width: 18px;
+  height: 12px;
+  border: 1.5px dashed rgba(148, 163, 184, 0.45);
+  border-radius: 3px;
+}
+
+.itinerary-graph__line--cross-day {
+  background: transparent;
+  border-top: 2px dashed #94a3b8;
+  height: 0;
+  width: 20px;
+}
+
+.itinerary-graph__hint {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-style: italic;
+}

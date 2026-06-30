@@ -1,0 +1,25 @@
+# 密钥与本地环境（P6 — 勿提交）
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+
+# 数据与缓存
+storage/
+data/
+frontend/node_modules/
+
+# IDE
+.DS_Store
+.idea/
+.vscode/

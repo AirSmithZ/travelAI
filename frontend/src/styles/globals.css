@@ -1,0 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Syne:wght@500;600;700;800&display=swap');
+
+:root {
+  --bg-deep: #070b10;
+  --bg-base: #0c1219;
+  --bg-elevated: #131b24;
+  --bg-panel: #182230;
+  --border: rgba(148, 163, 184, 0.12);
+  --border-strong: rgba(148, 163, 184, 0.22);
+  --text: #e8edf4;
+  --text-muted: #8b9cb0;
+  --text-dim: #5c6d82;
+  --accent: #f59e0b;
+  --accent-soft: rgba(245, 158, 11, 0.15);
+  --font-display: 'Syne', 'Noto Sans SC', sans-serif;
+  --font-body: 'Noto Sans SC', system-ui, sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --shadow-glow: 0 0 40px rgba(245, 158, 11, 0.06);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-deep);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 99px;
+}
+
+/* React Flow overrides */
+.react-flow__background {
+  background: transparent !important;
+}
+
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+.react-flow__controls {
+  display: none;
+}
+
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* MapLibre — 仅在地图 Tab 展示自定义 attribution */
+.maplibregl-ctrl-attrib {
+  display: none !important;
+}

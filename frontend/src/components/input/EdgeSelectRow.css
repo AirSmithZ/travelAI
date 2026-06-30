@@ -1,0 +1,187 @@
+/* 连接选择 — 编辑感、类别色锚点、克制间距 */
+
+.edge-connect-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.edge-connect-group + .edge-connect-group {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.edge-connect-group__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.edge-connect-group__empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--bg-panel) 80%, transparent);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.edge-connect-group__list {
+  display: block;
+}
+
+.edge-connect {
+  display: grid;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  min-height: 38px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.edge-connect--pick {
+  grid-template-columns: 22px 1fr;
+  border: 1px dashed color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-panel));
+}
+
+.edge-connect--locked {
+  grid-template-columns: 22px 1fr auto;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.edge-connect__dir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.edge-connect--pick .edge-connect__dir {
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-dim));
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
+}
+
+.edge-connect--locked .edge-connect__dir {
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.edge-connect--locked .form-select-wrap::after,
+.edge-connect--pick .form-select-wrap::after {
+  display: none;
+}
+
+.edge-connect--locked .edge-connect__native:disabled {
+  opacity: 1;
+  color: var(--text);
+  cursor: default;
+  -webkit-text-fill-color: var(--text);
+}
+
+.edge-connect__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  padding: 0;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.edge-connect__remove:hover {
+  color: #f87171;
+  background: color-mix(in srgb, #f87171 10%, transparent);
+}
+
+.edge-connect--pick .edge-connect__dir {
+  border: none;
+  border-right: 1px dashed color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+
+.edge-connect__select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.edge-connect__select .form-select-wrap {
+  width: 100%;
+  flex: 1;
+  min-width: 0;
+}
+
+.edge-connect__native.form-control,
+.edge-connect__native {
+  width: 100%;
+  height: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+}
+
+.edge-connect__native.form-control:hover,
+.edge-connect__native:hover {
+  border-color: transparent;
+  color: var(--text);
+}
+
+.edge-connect__native.form-control:focus,
+.edge-connect__native:focus {
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text);
+}
+
+.edge-connect--pick:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-style: solid;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.edge-connect--pick:focus-within .edge-connect__dir {
+  border-right-style: solid;
+  color: var(--accent);
+}
+
+.edge-connect__native option {
+  background: var(--bg-elevated);
+  color: var(--text);
+}

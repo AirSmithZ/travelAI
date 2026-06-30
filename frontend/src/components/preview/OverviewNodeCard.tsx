@@ -1,0 +1,70 @@
+import { CATEGORY_META } from '../../data/categoryTokens';
+import type { ItineraryNode } from '../../types/itinerary';
+import '../graph/TripNode.css';
+
+interface OverviewNodeCardProps {
+  node: ItineraryNode;
+  selected: boolean;
+  compact?: boolean;
+  onSelect: () => void;
+  onOpenMap: () => void;
+}
+
+export function OverviewNodeCard({
+  node,
+  selected,
+  compact,
+  onSelect,
+  onOpenMap,
+}: OverviewNodeCardProps) {
+  const meta = CATEGORY_META[node.category];
+  const timeLabel =
+    node.start_time && node.end_time
+      ? `${node.start_time} – ${node.end_time}`
+      : node.start_time ?? '';
+
+  return (
+    <button
+      type="button"
+      data-overview-node={node.id}
+      className={`trip-node overview-trip-node ${compact ? 'trip-node--compact' : ''} ${node.is_optional ? 'trip-node--optional' : ''} ${selected ? 'trip-node--selected' : ''}`}
+      style={
+        {
+          '--node-color': meta.color,
+          '--node-glow': meta.glow,
+        } as React.CSSProperties
+      }
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenMap();
+      }}
+    >
+      <div className="trip-node__header">
+        <span className="trip-node__icon">{meta.icon}</span>
+        <span className="trip-node__category">{meta.label}</span>
+        {node.floor && <span className="trip-node__floor">{node.floor}</span>}
+      </div>
+      <div className="trip-node__name">{node.name}</div>
+      {timeLabel && <div className="trip-node__time">{timeLabel}</div>}
+      {!compact && node.tags && node.tags.length > 0 && (
+        <div className="trip-node__tags">
+          {node.tags.slice(0, 2).map((tag) => (
+            <span key={tag} className="trip-node__tag">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+      {!compact && node.tips && node.tips.length > 0 && (
+        <div className="trip-node__desc" title={node.tips.join('\n')}>
+          {node.tips.join(' · ')}
+        </div>
+      )}
+    </button>
+  );
+}

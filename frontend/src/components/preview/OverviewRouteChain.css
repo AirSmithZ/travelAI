@@ -1,0 +1,76 @@
+.overview-route-chain {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.overview-route-chain__node {
+  position: absolute;
+  z-index: 3;
+  touch-action: none;
+  cursor: grab;
+  transition: opacity 0.18s ease;
+}
+
+.overview-route-chain__node--dragging {
+  transition: none;
+}
+
+.overview-route-chain__node--ghost-source {
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.overview-route-chain__node .trip-node {
+  width: 100%;
+  cursor: inherit;
+}
+
+.overview-route-chain__node--dragging {
+  z-index: 5;
+  cursor: grabbing;
+}
+
+.overview-route-chain__node--dragging .overview-trip-node {
+  box-shadow:
+    0 0 0 2px var(--accent-soft),
+    0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.overview-route-chain__node--region-enter {
+  animation: overview-region-enter 0.28s ease-out;
+}
+
+.overview-route-chain__node--region-enter-down {
+  --overview-region-enter-from: -10px;
+}
+
+.overview-route-chain__node--region-enter-up {
+  --overview-region-enter-from: 10px;
+}
+
+@keyframes overview-region-enter {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.overview-route-chain__group {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.overview-route-chain__group .overview-route-chain__node {
+  pointer-events: auto;
+}
+
+.overview-route-chain__alt {
+  position: absolute;
+  left: 0;
+  display: flex;
+  gap: 8px;
+  height: 28px;
+}

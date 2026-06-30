@@ -1,0 +1,63 @@
+.overview-trip-node {
+  flex-shrink: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  animation: none;
+}
+
+.overview-trip-node:hover {
+  transform: translateY(-2px);
+}
+
+.overview-trip-edge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--commute-width, 56px);
+  min-height: 32px;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  font-family: inherit;
+}
+
+.overview-trip-edge--compact {
+  width: var(--commute-width, 44px);
+}
+
+.overview-trip-edge__line {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: 0;
+  border-top: 2px solid #4a9eff;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.overview-trip-edge--alt .overview-trip-edge__line {
+  border-top-style: dashed;
+  border-color: #64748b;
+}
+
+.overview-trip-edge--selected .overview-trip-edge__line {
+  border-color: var(--accent);
+  border-top-width: 2.5px;
+}
+
+.overview-trip-edge .trip-edge__label {
+  position: relative;
+  transform: none;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.overview-trip-edge--selected .trip-edge__label {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}

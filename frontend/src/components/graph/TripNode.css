@@ -1,0 +1,142 @@
+.trip-node {
+  width: 168px;
+  min-height: 88px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(145deg, var(--bg-panel) 0%, var(--bg-elevated) 100%);
+  border: 1.5px solid color-mix(in srgb, var(--node-color) 55%, transparent);
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 0 24px var(--node-glow);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+  animation: node-enter 0.45s ease backwards;
+}
+
+.trip-node:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--node-color) 80%, white);
+}
+
+.trip-node--compact {
+  width: 140px;
+  min-height: 64px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.trip-node--compact .trip-node__name {
+  font-size: 12px;
+}
+
+.trip-node--compact .trip-node__header {
+  margin-bottom: 2px;
+}
+
+.trip-node--selected {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 2px var(--accent-soft),
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    0 0 32px var(--node-glow);
+}
+
+.trip-node--optional {
+  border-style: dashed;
+  opacity: 0.82;
+  min-height: 72px;
+}
+
+.trip-node__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.trip-node__icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.trip-node__category {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--node-color);
+}
+
+.trip-node__floor {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.trip-node__name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.trip-node__time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.trip-node__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.trip-node__tag {
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+}
+
+.trip-node__desc {
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--accent);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.trip-node__warn {
+  margin-top: 4px;
+  font-size: 9px;
+  color: #fbbf24;
+}
+
+.trip-node__handle {
+  width: 6px !important;
+  height: 6px !important;
+  background: var(--node-color) !important;
+  border: none !important;
+  opacity: 0;
+}
+
+@keyframes node-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+}

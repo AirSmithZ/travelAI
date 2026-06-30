@@ -1,0 +1,87 @@
+.region-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  border-right: 1px solid var(--border-strong);
+  pointer-events: none;
+}
+
+.region-rail__header {
+  border-bottom: 1px solid var(--border);
+}
+
+.region-rail__label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: center;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.region-rail__row-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+}
+
+.overview-headers {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.overview-headers__col {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+}
+
+.overview-headers__day {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.overview-headers__date {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.overview-graph__grid-col {
+  position: absolute;
+  top: 0;
+  border-right: 1px dashed var(--border);
+  pointer-events: none;
+}
+
+.overview-graph__grid-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.5;
+  pointer-events: none;
+}

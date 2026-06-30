@@ -1,0 +1,66 @@
+.tag-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tag-picker__selected,
+.tag-picker__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tag-picker__presets-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+
+.tag-picker__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.tag-picker__chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--text);
+}
+
+.tag-picker__chip--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.tag-picker__chip-x {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.tag-picker__add {
+  display: flex;
+  gap: 6px;
+}
+
+.tag-picker__input {
+  flex: 1;
+  min-width: 0;
+}

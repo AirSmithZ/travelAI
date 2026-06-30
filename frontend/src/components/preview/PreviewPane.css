@@ -1,0 +1,54 @@
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+}
+
+.preview-pane__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-pane__toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-pane__main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-pane__stack {
+  position: relative;
+  height: 100%;
+}
+
+.preview-pane__view {
+  height: 100%;
+}
+
+.preview-pane__view--graph,
+.preview-pane__view--map {
+  position: absolute;
+  inset: 0;
+}
+
+.preview-pane__view--hidden {
+  display: none;
+  pointer-events: none;
+}
+
+.preview-pane__view--graph:not(.preview-pane__view--hidden),
+.preview-pane__view--map:not(.preview-pane__view--hidden) {
+  z-index: 1;
+}

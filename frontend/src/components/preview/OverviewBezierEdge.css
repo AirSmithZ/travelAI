@@ -1,0 +1,82 @@
+.overview-bezier-edge {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.overview-bezier-edge__path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text-muted) 55%, #4a9eff);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+}
+
+.overview-bezier-edge__path--alt {
+  stroke: color-mix(in srgb, var(--text-dim) 80%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.overview-bezier-edge--region .overview-bezier-edge__path {
+  stroke: color-mix(in srgb, var(--text-dim) 65%, transparent);
+  stroke-width: 1.75;
+}
+
+.overview-bezier-edge--region .overview-bezier-edge__path--alt {
+  opacity: 0.75;
+}
+
+.overview-bezier-edge__label {
+  position: relative;
+  transform: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+  margin: 0 auto;
+  width: fit-content;
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  pointer-events: none;
+}
+
+.overview-bezier-edge__label-bg {
+  fill: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.overview-bezier-edge__label-text {
+  font-family: var(--font-body, 'Noto Sans SC', sans-serif);
+  font-size: 9px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  fill: var(--text-dim);
+  pointer-events: none;
+}
+
+.overview-bezier-edge__label-g--alt .overview-bezier-edge__label-bg {
+  stroke-dasharray: 3 2;
+  opacity: 0.85;
+}
+
+.overview-bezier-edge__label-g--alt .overview-bezier-edge__label-text {
+  opacity: 0.85;
+}
+
+.overview-bezier-edge__label--alt {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.overview-bezier-edge__icon {
+  font-size: 10px;
+  opacity: 0.9;
+}
