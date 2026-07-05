@@ -8,6 +8,7 @@ import { ItineraryGraph } from '../graph/ItineraryGraph';
 import { TravelMap } from '../map/TravelMap';
 import { OverviewGraphView } from './OverviewGraphView';
 import { ExportGraphButton } from './ExportGraphButton';
+import { StayZoneToolbarButton } from './StayZoneToolbarButton';
 import { EmptyPreview } from './EmptyPreview';
 import './PreviewPane.css';
 
@@ -48,6 +49,7 @@ export function PreviewPane() {
           )}
           <ViewTabs active={activeView} onChange={setActiveView} />
           {hasItinerary && activeView === 'graph' && <ExportGraphButton />}
+          <StayZoneToolbarButton />
         </div>
         {showDayTabs && itinerary && (
           <DayTabs

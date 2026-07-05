@@ -279,6 +279,22 @@ async def _fix_truncated_json_async(
     )
 
 
+async def _finalize_parse_response(
+    req: ChatParseRequest,
+    reply: str,
+    patches: list,
+    warnings: list[str],
+    dropped: int,
+) -> ChatParseResponse:
+    return ChatParseResponse(
+        reply=reply,
+        patches=patches,
+        warnings=warnings,
+        dropped_patch_count=dropped,
+        chat_mode_used=req.chat_mode,
+    )
+
+
 def parse_chat(req: ChatParseRequest, client: LLMClient) -> ChatParseResponse:
     system = GLOBAL_SYSTEM if req.chat_mode == "global" else SUPPLEMENT_SYSTEM
     user_payload = _build_user_payload(req)
@@ -318,12 +334,8 @@ async def parse_chat_async(req: ChatParseRequest, client: LLMClient) -> ChatPars
     patches, warnings, dropped = process_llm_patches(
         parsed.patches, req.chat_mode, req.trip_request, req.itinerary
     )
-    return ChatParseResponse(
-        reply=parsed.reply,
-        patches=patches,
-        warnings=warnings,
-        dropped_patch_count=dropped,
-        chat_mode_used=req.chat_mode,
+    return await _finalize_parse_response(
+        req, parsed.reply, patches, warnings, dropped
     )
 
 
@@ -374,12 +386,8 @@ async def parse_chat_stream_async(req: ChatParseRequest, client: LLMClient):
     patches, warnings, dropped = process_llm_patches(
         parsed.patches, req.chat_mode, req.trip_request, req.itinerary
     )
-    response = ChatParseResponse(
-        reply=parsed.reply,
-        patches=patches,
-        warnings=warnings,
-        dropped_patch_count=dropped,
-        chat_mode_used=req.chat_mode,
+    response = await _finalize_parse_response(
+        req, parsed.reply, patches, warnings, dropped
     )
     yield {"event": "result", "data": response.model_dump()}
 

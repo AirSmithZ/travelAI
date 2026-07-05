@@ -1,0 +1,31 @@
+[
+  {
+    "id": "asia-short",
+    "origin": "PVG",
+    "destination": "SIN",
+    "date": "2026-10-16",
+    "return_date": null,
+    "adults": 1,
+    "cabin": "economy",
+    "note": "与 mockSingapore 对齐；亚太短线"
+  },
+  {
+    "id": "asia-hub",
+    "origin": "HKG",
+    "destination": "NRT",
+    "date": "2026-11-01",
+    "return_date": "2026-11-08",
+    "adults": 2,
+    "cabin": "economy"
+  },
+  {
+    "id": "duffel-sandbox",
+    "origin": "LHR",
+    "destination": "JFK",
+    "date": "2026-07-15",
+    "return_date": null,
+    "adults": 1,
+    "cabin": "economy",
+    "note": "Duffel sandbox 常用线"
+  }
+]

@@ -1,0 +1,3 @@
+letsfg>=1.3.0
+fast-flights>=3.0
+httpx>=0.27.0

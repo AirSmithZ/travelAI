@@ -3,13 +3,17 @@ import maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, MapLayerMouseEvent } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import { usePlanStore, findNodeContext, selectActiveItinerary } from '../../stores/usePlanStore';
+import { usePlanStore, findNodeContext, selectActiveItinerary, selectActivePlan } from '../../stores/usePlanStore';
 import { geocodeReverse } from '../../api/geocode';
 import { CATEGORY_META } from '../../data/categoryTokens';
 import { buildNodeCoordsPatch } from '../../utils/applyNodeCoords';
 import { hasMapCoords } from '../../utils/mapCoords';
 import { countOverlappingNodes, spreadMapNodes, type MapDisplayNode } from '../../utils/spreadMapNodes';
 import { bindMapStylePatches, MAP_LABEL_FONT, whenMapStyleReady } from '../../utils/mapStylePatches';
+import {
+  STAY_ZONE_FILL,
+  updateStayZoneSource,
+} from '../../utils/stayZoneGeoJSON';
 import type { DayPlan, ItineraryEdge, ItineraryNode, NodeCategory } from '../../types/itinerary';
 import './TravelMap.css';
 
@@ -137,6 +141,13 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
   } | null>(null);
 
   const itinerary = usePlanStore(selectActiveItinerary);
+  const plan = usePlanStore(selectActivePlan);
+  const stayZones = useMemo(
+    () => plan.travel_intel.recommended_stay_zones ?? [],
+    [plan.travel_intel.recommended_stay_zones],
+  );
+  const selectedStayZoneId = usePlanStore((s) => s.selectedStayZoneId);
+  const setSelectedStayZoneId = usePlanStore((s) => s.setSelectedStayZoneId);
   const activeDayIndex = usePlanStore((s) => s.activeDayIndex);
   const graphViewMode = usePlanStore((s) => s.graphViewMode);
   const selectedNodeId = usePlanStore((s) => s.selectedNodeId);
@@ -461,6 +472,56 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       unbindStyleReady();
     };
   }, [nodesGeoJSON, displayNodes, fitKey, fitToNodes, visible]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    let cancelled = false;
+
+    const syncStayZones = () => {
+      if (cancelled || !map.isStyleLoaded()) return;
+      ensureNodeLayers(map);
+      updateStayZoneSource(map, stayZones, selectedStayZoneId, NODE_CIRCLE);
+    };
+
+    const unbindStyleReady = whenMapStyleReady(map, syncStayZones);
+
+    return () => {
+      cancelled = true;
+      unbindStyleReady();
+    };
+  }, [stayZones, selectedStayZoneId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const onZoneClick = (e: MapLayerMouseEvent) => {
+      if (usePlanStore.getState().mapPickNodeId) return;
+      const id = e.features?.[0]?.properties?.id;
+      if (typeof id === 'string') setSelectedStayZoneId(id);
+    };
+
+    const onEnter = () => {
+      if (!usePlanStore.getState().mapPickNodeId) {
+        map.getCanvas().style.cursor = 'pointer';
+      }
+    };
+    const onLeave = () => {
+      map.getCanvas().style.cursor = '';
+    };
+
+    map.on('click', STAY_ZONE_FILL, onZoneClick);
+    map.on('mouseenter', STAY_ZONE_FILL, onEnter);
+    map.on('mouseleave', STAY_ZONE_FILL, onLeave);
+
+    return () => {
+      map.off('click', STAY_ZONE_FILL, onZoneClick);
+      map.off('mouseenter', STAY_ZONE_FILL, onEnter);
+      map.off('mouseleave', STAY_ZONE_FILL, onLeave);
+    };
+  }, [mapReady, setSelectedStayZoneId]);
 
   // 从路线图切回地图：强制 resize（visibility 切换不一定触发 ResizeObserver）
   useEffect(() => {

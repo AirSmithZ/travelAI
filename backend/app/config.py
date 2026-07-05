@@ -60,6 +60,48 @@ class Settings(BaseSettings):
         validation_alias="PHOTON_BASE_URL",
     )
 
+    tripcom_affiliate_alliance_id: str = Field(
+        default="",
+        validation_alias="TRIPCOM_AFFILIATE_ALLIANCE_ID",
+    )
+    tripcom_affiliate_sid: str = Field(
+        default="",
+        validation_alias="TRIPCOM_AFFILIATE_SID",
+    )
+    tripcom_affiliate_sub1: str = Field(
+        default="",
+        validation_alias="TRIPCOM_AFFILIATE_SUB1",
+    )
+    tripcom_affiliate_sub3: str = Field(
+        default="",
+        validation_alias="TRIPCOM_AFFILIATE_SUB3",
+    )
+    tripcom_default_currency: str = Field(
+        default="CNY",
+        validation_alias="TRIPCOM_DEFAULT_CURRENCY",
+    )
+    flight_include_letsfg: bool = Field(
+        default=False,
+        validation_alias="FLIGHT_INCLUDE_LETSFG",
+    )
+    flight_letsfg_timeout_sec: int = Field(
+        default=300,
+        validation_alias="FLIGHT_LETSFG_TIMEOUT_SEC",
+    )
+    flight_default_preference: str = Field(
+        default="balanced",
+        validation_alias="FLIGHT_DEFAULT_PREFERENCE",
+    )
+    ignav_api_key: str = Field(default="", validation_alias="IGNAV_API_KEY")
+    flight_include_ignav: bool = Field(
+        default=True,
+        validation_alias="FLIGHT_INCLUDE_IGNAV",
+    )
+    flight_ignav_timeout_sec: int = Field(
+        default=120,
+        validation_alias="FLIGHT_IGNAV_TIMEOUT_SEC",
+    )
+
     @property
     def geocode_provider_chain(self) -> list[str]:
         return [p.strip().lower() for p in self.geocode_providers.split(",") if p.strip()]

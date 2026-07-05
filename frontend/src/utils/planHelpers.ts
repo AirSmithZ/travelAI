@@ -1,6 +1,7 @@
 import type { DayPlan, Itinerary } from '../types/itinerary';
 import type { PlanPhase, TravelPlan } from '../types/travelPlan';
 import type { TripRequest } from '../types/tripRequest';
+import { createEmptyTravelIntel } from '../types/travelIntel';
 import { createEmptyTripRequest } from '../types/tripRequest';
 import { DEFAULT_FORM_LAYOUT } from './formLayout';
 import { ensureItineraryNodeRegions } from './nodeRegion';
@@ -33,6 +34,7 @@ export function createEmptyPlan(title = '新旅行计划'): TravelPlan {
     updated_at: now,
     phase: 'empty',
     trip_request: createEmptyTripRequest(),
+    travel_intel: createEmptyTravelIntel(),
     itinerary: null,
     chat_messages: [],
     pending_patches: [],

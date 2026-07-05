@@ -1,0 +1,239 @@
+/* 与 flight-intel 同系视觉 */
+.stay-zone {
+  margin: 0;
+  padding: 12px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: var(--radius-md);
+}
+
+.stay-zone--full {
+  min-height: 100%;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+.stay-zone--done {
+  border-color: color-mix(in srgb, #1a7f4b 28%, var(--border));
+}
+
+.stay-zone__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stay-zone__head-text {
+  min-width: 0;
+}
+
+.stay-zone__title {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.stay-zone__desc {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.stay-zone__badge {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 99px;
+  color: var(--text-dim);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+}
+
+.stay-zone__badge--pending {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-base));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.stay-zone__badge--done {
+  color: #1a7f4b;
+  background: color-mix(in srgb, #1a7f4b 12%, var(--bg-base));
+  border-color: color-mix(in srgb, #1a7f4b 35%, var(--border));
+}
+
+.stay-zone__section {
+  margin-bottom: 10px;
+}
+
+.stay-zone__label {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.stay-zone__hint,
+.stay-zone__meta,
+.stay-zone__warning {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.stay-zone__warning {
+  color: var(--accent);
+}
+
+.stay-zone__error {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: #c0392b;
+}
+
+.stay-zone__actions {
+  margin-bottom: 10px;
+}
+
+.stay-zone__prefs {
+  margin-bottom: 10px;
+}
+
+.stay-zone__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.stay-zone__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stay-zone__card {
+  padding: 10px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease;
+}
+
+.stay-zone__card--selected {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.stay-zone__card--confirmed {
+  border-color: color-mix(in srgb, #1a7f4b 40%, var(--border));
+}
+
+.stay-zone__card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.stay-zone__card-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.stay-zone__card-city {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.stay-zone__card-days {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.stay-zone__card-rationale {
+  margin: 0 0 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.stay-zone__card-transit {
+  margin: 0 0 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.stay-zone__card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.stay-zone__link {
+  margin-right: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.stay-zone__link:hover {
+  text-decoration: underline;
+}
+
+.stay-zone__add {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.stay-zone__add-hint {
+  margin: 0 0 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.stay-zone__hotel-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stay-zone__hotel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.stay-zone__confirmed-cta {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}

@@ -1,10 +1,12 @@
 import type { TravelPlan } from '../types/travelPlan';
+import type { LeftPanelMode } from '../stores/usePlanStore';
 import { createEmptyPlan } from './planHelpers';
 import { migrateItineraryCrossDayEdges } from './itineraryMigrate';
 import { normalizeFormPatch } from './patchSchema';
+import { createEmptyTravelIntel } from '../types/travelIntel';
 
 const STORAGE_KEY = 'travel_plans_v1';
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = 3;
 
 interface StoragePayloadV1 {
   version: 1;
@@ -16,12 +18,13 @@ export interface StoragePayload {
   version: typeof STORAGE_VERSION;
   active_plan_id: string;
   plans: TravelPlan[];
-  left_panel_mode?: 'chat' | 'form';
+  left_panel_mode?: LeftPanelMode;
 }
 
 function migratePlan(plan: TravelPlan): TravelPlan {
   return {
     ...plan,
+    travel_intel: plan.travel_intel ?? createEmptyTravelIntel(),
     pending_patches: (plan.pending_patches ?? []).map((p) =>
       normalizeFormPatch(p as Parameters<typeof normalizeFormPatch>[0]),
     ),
@@ -45,7 +48,10 @@ export function loadPlansFromStorage(): StoragePayload | null {
 
     const leftPanelMode =
       'left_panel_mode' in data &&
-      (data.left_panel_mode === 'chat' || data.left_panel_mode === 'form')
+      (        data.left_panel_mode === 'chat' ||
+        data.left_panel_mode === 'form' ||
+        data.left_panel_mode === 'flight' ||
+        data.left_panel_mode === 'stay')
         ? data.left_panel_mode
         : undefined;
 
@@ -70,7 +76,7 @@ export function savePlansToStorage(payload: StoragePayload): void {
 export function getInitialState(): {
   plans: TravelPlan[];
   activePlanId: string;
-  leftPanelMode: 'chat' | 'form';
+  leftPanelMode: LeftPanelMode;
 } {
   const stored = loadPlansFromStorage();
   if (stored && stored.plans.length > 0) {

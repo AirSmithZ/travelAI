@@ -5,11 +5,12 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   padding: 14px 14px 10px;
 }
 
 .chat-panel__main {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;

@@ -1,0 +1,80 @@
+.flight-manual {
+  margin-top: 4px;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+  padding-top: 10px;
+}
+
+.flight-manual__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.flight-manual__toggle-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.flight-manual__toggle-hint {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.flight-manual__body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flight-manual__desc {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.flight-manual__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.flight-manual__check input {
+  accent-color: var(--accent);
+}
+
+.flight-manual__error {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #f87171;
+  background: color-mix(in srgb, #f87171 8%, var(--bg-base));
+  border: 1px solid color-mix(in srgb, #f87171 30%, var(--border));
+  border-radius: var(--radius-sm);
+}
+
+.flight-manual__actions {
+  display: flex;
+  justify-content: flex-end;
+}

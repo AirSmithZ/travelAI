@@ -1,5 +1,6 @@
 import type { Itinerary } from './itinerary';
 import type { TripRequest } from './tripRequest';
+import type { TravelIntel } from './travelIntel';
 
 export type PlanPhase = 'empty' | 'planning' | 'detailed';
 
@@ -84,6 +85,7 @@ export interface TravelPlan {
   updated_at: string;
   phase: PlanPhase;
   trip_request: TripRequest;
+  travel_intel: TravelIntel;
   itinerary: Itinerary | null;
   chat_messages: ChatMessage[];
   pending_patches: FormPatch[];

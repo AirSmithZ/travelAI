@@ -1,0 +1,354 @@
+:root {
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #f4f4f5;
+}
+
+body {
+  margin: 0;
+}
+
+.flight-verify {
+  display: flex;
+  flex-direction: column;
+  max-width: 760px;
+  height: 100vh;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 0;
+  box-sizing: border-box;
+}
+
+.flight-verify__header h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.flight-verify__badge {
+  display: inline-block;
+  margin: 0;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.75rem;
+}
+
+.flight-verify__desc {
+  margin: 0;
+  color: #52525b;
+  font-size: 0.88rem;
+}
+
+.flight-verify__examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.flight-verify__examples-label {
+  font-size: 0.78rem;
+  color: #71717a;
+}
+
+.flight-verify__example {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid #d4d4d8;
+  border-radius: 999px;
+  background: #fff;
+  color: #3f3f46;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.flight-verify__example:hover:not(:disabled) {
+  border-color: #a1a1aa;
+}
+
+.flight-verify__example:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flight-verify__chat {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.flight-verify__empty {
+  margin: 2rem 0;
+  text-align: center;
+  color: #a1a1aa;
+  font-size: 0.9rem;
+}
+
+.flight-verify__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.flight-verify__bubble {
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
+.flight-verify__bubble--user {
+  align-self: flex-end;
+  max-width: 85%;
+  background: #18181b;
+  color: #fafafa;
+  border-bottom-right-radius: 4px;
+}
+
+.flight-verify__bubble--assistant {
+  align-self: stretch;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-bottom-left-radius: 4px;
+}
+
+.flight-verify__bubble--loading {
+  color: #71717a;
+  font-style: italic;
+}
+
+.flight-verify__reply {
+  margin: 0 0 0.65rem;
+}
+
+.flight-verify__parsed {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: #f4f4f5;
+  font-size: 0.82rem;
+}
+
+.flight-verify__parsed-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #52525b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flight-verify__parsed p {
+  margin: 0;
+}
+
+.flight-verify__missing {
+  margin-top: 0.35rem !important;
+  color: #b45309;
+}
+
+.flight-verify__recommend {
+  margin-top: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.flight-verify__recommend-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flight-verify__recommend p:last-child {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #1e3a8a;
+}
+
+.flight-verify__offers {
+  margin-top: 0.65rem;
+}
+
+.flight-verify__offers-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #27272a;
+}
+
+.flight-verify__offers-sub {
+  margin-left: 0.35rem;
+  font-weight: 400;
+  color: #71717a;
+}
+
+.flight-verify__table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+}
+
+.flight-verify__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+}
+
+.flight-verify__table th,
+.flight-verify__table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid #f4f4f5;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.flight-verify__table th {
+  background: #fafafa;
+  color: #52525b;
+  font-weight: 600;
+}
+
+.flight-verify__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.flight-verify__link-box--secondary {
+  background: #fafafa;
+  border-color: #e4e4e7;
+}
+
+.flight-verify__link-box--secondary .flight-verify__link-label {
+  color: #52525b;
+}
+
+.flight-verify__link-box--secondary a {
+  color: #3f3f46;
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.flight-verify__link-box--secondary a:hover {
+  text-decoration: underline;
+}
+
+.flight-verify__warn {
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.8rem;
+}
+
+.flight-verify__link-box {
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.flight-verify__link-label {
+  margin: 0 0 0.3rem;
+  font-size: 0.75rem;
+  color: #047857;
+}
+
+.flight-verify__link-box a {
+  word-break: break-all;
+  color: #065f46;
+  font-size: 0.8rem;
+}
+
+.flight-verify__details {
+  margin-top: 0.55rem;
+}
+
+.flight-verify__details summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: #52525b;
+}
+
+.flight-verify__json {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  overflow: auto;
+  border-radius: 8px;
+  background: #18181b;
+  color: #e4e4e7;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.flight-verify__error {
+  margin: 0.5rem 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+.flight-verify__composer {
+  flex-shrink: 0;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0 1rem;
+  border-top: 1px solid #e4e4e7;
+  background: #f4f4f5;
+}
+
+.flight-verify__composer textarea {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #d4d4d8;
+  border-radius: 10px;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.flight-verify__composer-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.flight-verify__composer button {
+  padding: 0.55rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: #18181b;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.flight-verify__composer button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.flight-verify__reset {
+  background: #fff !important;
+  color: #52525b !important;
+  border: 1px solid #d4d4d8 !important;
+}
+
+.flight-verify__footer {
+  flex-shrink: 0;
+  padding-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.flight-verify__footer a {
+  color: #52525b;
+}

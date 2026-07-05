@@ -3,6 +3,14 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import type { Itinerary, ItineraryNode, GraphViewMode, ViewTab, DayPlan, DayWeather } from '../types/itinerary';
 import type { FormPatch, TravelPlan, ChatMode } from '../types/travelPlan';
 import type { TripRequest } from '../types/tripRequest';
+import type { FlightLegRole, FlightSearchSession, ManualFlightLegInput } from '../types/travelIntel';
+import {
+  flightLegFromManualInput,
+  flightLegsFromQuote,
+  syncFlightSearchAfterLegRemoval,
+  syncTravelIntelStatus,
+} from '../types/travelIntel';
+import { isRoundTripQuote } from '../types/flight';
 import { applyFormPatches } from '../utils/formPatchTool';
 import {
   createEmptyPlan,
@@ -54,6 +62,15 @@ import {
   popItineraryUndo,
   pushItineraryHistory,
 } from '../utils/itineraryHistory';
+import type { RecommendedStayZone, StayZonePreferences } from '../types/stayZone';
+import { addHotelNodeForZone } from '../utils/hotelNodeMutations';
+import {
+  hotelFromZoneAndNode,
+  patchStayZones,
+  removeHotelByNodeId,
+  removeHotelFromIntel,
+  syncIntelHotelFromNode,
+} from '../utils/hotelIntelSync';
 
 export type GenerationPhase = 'idle' | 'llm' | 'geocode';
 
@@ -72,6 +89,17 @@ export type EditorTarget =
   | { kind: 'form'; focus: 'day'; dayIndex: number }
   | { kind: 'form'; focus: 'region'; regionName: string };
 
+export type LeftPanelMode = 'chat' | 'flight' | 'stay' | 'form';
+
+export interface AddHotelFromZoneInput {
+  name: string;
+  lat: number;
+  lng: number;
+  address?: string;
+  coord_source?: string;
+  pendingMapPick?: boolean;
+}
+
 interface PlanState {
   plans: TravelPlan[];
   activePlanId: string;
@@ -84,9 +112,11 @@ interface PlanState {
   selectedEdgeId: string | null;
   /** 表头 / 区域轨编辑目标（与 node/edge 互斥） */
   editorTarget: EditorTarget | null;
-  leftPanelMode: 'chat' | 'form';
+  leftPanelMode: LeftPanelMode;
   /** 地图选点校准目标节点（§3.6 方式 B） */
   mapPickNodeId: string | null;
+  /** 住宿片区卡片 hover / 选中，驱动地图高亮 */
+  selectedStayZoneId: string | null;
   /** 总览导出时临时渲染全部列 */
   exportOverviewCapture: boolean;
   /** 总览列宽（按 planId），用户拖拽表头调整 */
@@ -114,6 +144,18 @@ interface PlanState {
   setItinerary: (itinerary: Itinerary | null) => void;
   generateItinerary: () => Promise<'api' | 'mock'>;
   maybeAutoGenerateItinerary: () => Promise<'api' | 'mock' | 'skipped'>;
+  setFlightSearchResult: (session: FlightSearchSession) => void;
+  mergeFlightSearchResult: (patch: Partial<FlightSearchSession>) => void;
+  confirmFlightQuote: (quoteId: string, role?: FlightLegRole) => void;
+  addManualFlightLeg: (input: ManualFlightLegInput) => void;
+  removeFlightLeg: (legId: string) => void;
+  recommendStayZones: (zones: RecommendedStayZone[], fetchedAt: string) => void;
+  setStayZonePreferences: (prefs: StayZonePreferences) => void;
+  confirmStayZone: (zoneId: string) => void;
+  rejectStayZone: (zoneId: string) => void;
+  addHotelFromZone: (zoneId: string, input: AddHotelFromZoneInput) => string | null;
+  removeHotelStay: (hotelId: string) => void;
+  setSelectedStayZoneId: (zoneId: string | null) => void;
   generateMockItinerary: () => void;
   updateNode: (dayIndex: number, nodeId: string, partial: Partial<ItineraryNode>) => void;
   updateDay: (dayIndex: number, partial: Partial<DayPlan>) => void;
@@ -140,7 +182,7 @@ interface PlanState {
   removeEdge: (dayIndex: number, edgeId: string) => void;
   removeCrossDayEdge: (edgeId: string) => void;
 
-  setLeftPanelMode: (mode: 'chat' | 'form') => void;
+  setLeftPanelMode: (mode: LeftPanelMode) => void;
 
   addChatMessage: (
     role: 'user' | 'assistant',
@@ -273,6 +315,7 @@ export const usePlanStore = create<PlanState>()(
     editorTarget: null,
     leftPanelMode: initial.leftPanelMode,
     mapPickNodeId: null,
+    selectedStayZoneId: null,
     exportOverviewCapture: false,
     overviewColumnWidths: {},
     isGeneratingItinerary: false,
@@ -494,6 +537,9 @@ export const usePlanStore = create<PlanState>()(
     generateItinerary: async () => {
       set({ isGeneratingItinerary: true, generationProgress: { phase: 'llm', llmPreview: '' } });
       const p = get().getActivePlan();
+      if (p.travel_intel.flights.length === 0) {
+        useToastStore.getState().show('尚未确认航班；玩法行程将不含航班时刻约束', 'warning');
+      }
       try {
         const { itinerary, llmLatencyMs } = await generateItineraryStream(p.trip_request, {
           geocode: false,
@@ -547,6 +593,276 @@ export const usePlanStore = create<PlanState>()(
       }
     },
 
+    setFlightSearchResult: (session) => {
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          travel_intel: { ...p.travel_intel, last_flight_search: session },
+        })),
+      );
+    },
+
+    mergeFlightSearchResult: (patch) => {
+      set((s) =>
+        updateActivePlan(s, (p) => {
+          const prev = p.travel_intel.last_flight_search;
+          if (!prev) return p;
+          return {
+            ...p,
+            travel_intel: {
+              ...p.travel_intel,
+              last_flight_search: { ...prev, ...patch },
+            },
+          };
+        }),
+      );
+    },
+
+    confirmFlightQuote: (quoteId, role = 'outbound') => {
+      const search = get().getActivePlan().travel_intel.last_flight_search;
+      const quote = search?.ranked.find((o) => o.id === quoteId);
+      const isRoundTrip = quote ? isRoundTripQuote(quote) : false;
+
+      set((s) =>
+        updateActivePlan(s, (p) => {
+          const session = p.travel_intel.last_flight_search;
+          const q = session?.ranked.find((o) => o.id === quoteId);
+          if (!q || !session) return p;
+
+          const startSequence =
+            p.travel_intel.flights.length > 0
+              ? Math.max(...p.travel_intel.flights.map((f) => f.sequence)) + 1
+              : 1;
+
+          const newLegs = flightLegsFromQuote(q, {
+            startSequence,
+            role,
+            purchaseUrl: session.purchase_url,
+          });
+
+          let flights = [...p.travel_intel.flights];
+          if (isRoundTripQuote(q)) {
+            flights = flights.filter((f) => f.role !== 'outbound' && f.role !== 'return');
+            flights.push(...newLegs);
+          } else if (role === 'intercity') {
+            flights.push(...newLegs);
+          } else {
+            flights = flights.filter((f) => f.role !== role);
+            flights.push(...newLegs);
+          }
+
+          return {
+            ...p,
+            travel_intel: syncTravelIntelStatus({
+              ...p.travel_intel,
+              flights,
+              last_flight_search: {
+                ...session,
+                confirmed_quote_id: quoteId,
+                hide_ranked: true,
+              },
+            }),
+          };
+        }),
+      );
+      set({ leftPanelMode: 'form' });
+      useToastStore.getState().show(
+        isRoundTrip ? '已确认往返航段，已切换到行程编辑' : '已确认航班航段，已切换到行程编辑',
+        'info',
+      );
+    },
+
+    addManualFlightLeg: (input) => {
+      set((s) =>
+        updateActivePlan(s, (p) => {
+          const startSequence =
+            p.travel_intel.flights.length > 0
+              ? Math.max(...p.travel_intel.flights.map((f) => f.sequence)) + 1
+              : 1;
+
+          const leg = flightLegFromManualInput(input, {
+            sequence: startSequence,
+            defaultPurchaseUrl: p.travel_intel.last_flight_search?.purchase_url,
+          });
+
+          const flights =
+            input.role === 'intercity'
+              ? [...p.travel_intel.flights, leg]
+              : [...p.travel_intel.flights.filter((f) => f.role !== input.role), leg];
+
+          return {
+            ...p,
+            travel_intel: syncTravelIntelStatus({ ...p.travel_intel, flights }),
+          };
+        }),
+      );
+      set({ leftPanelMode: 'form' });
+      useToastStore.getState().show('已添加航段，已切换到行程编辑', 'info');
+    },
+
+    removeFlightLeg: (legId) => {
+      set((s) =>
+        updateActivePlan(s, (p) => {
+          const removed = p.travel_intel.flights.find((f) => f.id === legId);
+          let flights = p.travel_intel.flights.filter((f) => f.id !== legId);
+          if (removed?.bundle_id) {
+            flights = flights.filter((f) => f.bundle_id !== removed.bundle_id);
+          }
+
+          const session = p.travel_intel.last_flight_search;
+          const last_flight_search = session
+            ? syncFlightSearchAfterLegRemoval(session, flights)
+            : session;
+
+          const travel_intel = syncTravelIntelStatus({
+            ...p.travel_intel,
+            flights,
+            last_flight_search,
+          });
+          return { ...p, travel_intel };
+        }),
+      );
+    },
+
+    recommendStayZones: (zones, fetchedAt) => {
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          travel_intel: syncTravelIntelStatus({
+            ...p.travel_intel,
+            recommended_stay_zones: zones,
+            stay_zones_fetched_at: fetchedAt,
+          }),
+        })),
+      );
+    },
+
+    setStayZonePreferences: (prefs) => {
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          travel_intel: { ...p.travel_intel, stay_zone_preferences: prefs },
+        })),
+      );
+    },
+
+    confirmStayZone: (zoneId) => {
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          travel_intel: patchStayZones(p.travel_intel, (zones) =>
+            zones.map((z) =>
+              z.id === zoneId ? { ...z, status: 'confirmed' as const } : z,
+            ),
+          ),
+        })),
+      );
+    },
+
+    rejectStayZone: (zoneId) => {
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          travel_intel: patchStayZones(p.travel_intel, (zones) =>
+            zones.map((z) =>
+              z.id === zoneId ? { ...z, status: 'rejected' as const } : z,
+            ),
+          ),
+        })),
+      );
+    },
+
+    addHotelFromZone: (zoneId, input) => {
+      const plan = get().getActivePlan();
+      const itinerary = plan.itinerary;
+      if (!itinerary) return null;
+      const zone = (plan.travel_intel.recommended_stay_zones ?? []).find(
+        (z) => z.id === zoneId,
+      );
+      if (!zone || zone.status !== 'confirmed') return null;
+
+      get().recordItineraryHistory();
+      const { itinerary: nextItinerary, nodeId } = addHotelNodeForZone(itinerary, zone, {
+        name: input.name,
+        lat: input.lat,
+        lng: input.lng,
+        address: input.address,
+        coord_source: input.pendingMapPick ? 'map_pick' : input.coord_source,
+      });
+
+      const ctx = findNodeContext(nextItinerary, nodeId);
+      const node = ctx?.node;
+      if (!node) return null;
+
+      const sequence =
+        plan.travel_intel.hotels.length > 0
+          ? Math.max(...plan.travel_intel.hotels.map((h) => h.sequence)) + 1
+          : 1;
+
+      const hotel = hotelFromZoneAndNode(zone, nodeId, node, {
+        sequence,
+        pendingMapPick: input.pendingMapPick,
+      });
+
+      set((s) => ({
+        ...updateActivePlan(s, (p) => ({
+          ...p,
+          itinerary: nextItinerary,
+          travel_intel: syncTravelIntelStatus({
+            ...p.travel_intel,
+            hotels: [...p.travel_intel.hotels.filter((h) => h.zone_id !== zoneId), hotel],
+          }),
+        })),
+        selectedNodeId: nodeId,
+        activeDayIndex: ctx.dayIndex,
+        leftPanelMode: input.pendingMapPick ? 'form' : s.leftPanelMode,
+      }));
+
+      return nodeId;
+    },
+
+    removeHotelStay: (hotelId) => {
+      const plan = get().getActivePlan();
+      const hotel = plan.travel_intel.hotels.find((h) => h.id === hotelId);
+      if (!hotel) return;
+
+      if (hotel.itinerary_node_id && plan.itinerary) {
+        const ctx = findNodeContext(plan.itinerary, hotel.itinerary_node_id);
+        if (ctx) {
+          get().recordItineraryHistory();
+          set((s) => {
+            const next = updateActivePlan(s, (p) => {
+              if (!p.itinerary) return p;
+              return {
+                ...p,
+                itinerary: removeNodeFromItinerary(
+                  p.itinerary,
+                  ctx.dayIndex,
+                  hotel.itinerary_node_id!,
+                ),
+                travel_intel: removeHotelFromIntel(p.travel_intel, hotelId),
+              };
+            });
+            return {
+              ...next,
+              selectedNodeId:
+                s.selectedNodeId === hotel.itinerary_node_id ? null : s.selectedNodeId,
+            };
+          });
+          return;
+        }
+      }
+
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          travel_intel: removeHotelFromIntel(p.travel_intel, hotelId),
+        })),
+      );
+    },
+
+    setSelectedStayZoneId: (zoneId) => set({ selectedStayZoneId: zoneId }),
+
     maybeAutoGenerateItinerary: async () => {
       const plan = get().getActivePlan();
       if (!shouldAutoGenerateItinerary(plan)) return 'skipped';
@@ -573,7 +889,13 @@ export const usePlanStore = create<PlanState>()(
               nodes: day.nodes.map((n) => (n.id === nodeId ? { ...n, ...partial } : n)),
             };
           });
-          return { ...p, itinerary: { ...p.itinerary, days } };
+          const nextItinerary = { ...p.itinerary, days };
+          const node = findNodeContext(nextItinerary, nodeId)?.node;
+          const travel_intel =
+            node?.category === 'hotel'
+              ? syncIntelHotelFromNode(p.travel_intel, nodeId, { ...node, ...partial })
+              : p.travel_intel;
+          return { ...p, itinerary: nextItinerary, travel_intel };
         }),
       );
     },
@@ -783,9 +1105,15 @@ export const usePlanStore = create<PlanState>()(
       set((s) => {
         const next = updateActivePlan(s, (p) => {
           if (!p.itinerary) return p;
+          const node = p.itinerary.days[dayIndex]?.nodes.find((n) => n.id === nodeId);
+          const travel_intel =
+            node?.category === 'hotel'
+              ? removeHotelByNodeId(p.travel_intel, nodeId)
+              : p.travel_intel;
           return {
             ...p,
             itinerary: removeNodeFromItinerary(p.itinerary, dayIndex, nodeId),
+            travel_intel,
           };
         });
         return {
@@ -1219,7 +1547,7 @@ usePlanStore.subscribe(
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       savePlansToStorage({
-        version: 2,
+        version: 3,
         active_plan_id: activePlanId,
         plans,
         left_panel_mode: leftPanelMode,
