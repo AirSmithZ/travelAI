@@ -305,6 +305,22 @@ def run_autocomplete(
                     if is_bare and not hits:
                         # 禁止裸名全球 Top1：围栏外全部丢弃后不再采用
                         continue
+                elif (
+                    bias is not None
+                    and bias.country_code
+                    and not use_fence
+                ):
+                    # 仅有国家码时：丢掉明显异国命中（Photon 等未必尊重 countrycodes）
+                    cc = bias.country_code.lower()
+                    before = len(hits)
+                    hits = [
+                        h
+                        for h in hits
+                        if not h.country_code or h.country_code.lower() == cc
+                    ]
+                    rejected_out_of_fence += before - len(hits)
+                    if is_bare and not hits:
+                        continue
                 if hits:
                     return AutocompleteResult(
                         results=hits[:limit],

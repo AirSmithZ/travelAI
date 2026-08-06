@@ -2,3 +2,6 @@
 output/
 .env
 __pycache__/
+
+# Chrome 用户档案（SEC-01 — 含 Cookies，禁止入库）
+.edreams_chrome_data/

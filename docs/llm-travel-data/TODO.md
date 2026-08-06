@@ -7,12 +7,15 @@
 
 ---
 
-## 0. 安全 / 合规 `SEC-*`（分析报告 V1 / V18 · **未在 Wave 1–2 覆盖**）
+## 0. 安全 / 合规 `SEC-*`（对照 [复检报告](../复检报告-travelAI-drag_dev2.md)）
 
 | ID | 状态 | 优先级 | 待办 | 关联文档 |
 |----|------|--------|------|----------|
-| **SEC-01** | ✅ | **P0** | 已 `git rm --cached` + `.gitignore`；**若曾 push 远端仍需轮换相关账号**（历史 blob 可能残留） | [分析报告 V1](../分析报告-travelAI-drag_dev.md) |
+| **SEC-01** | ✅ | **P0** | 根 + `backend/` + `flight-spike/` 三处 Chrome 档案均已 `git rm --cached`；gitignore 含 `**/.edreams_chrome_data/` | [复检报告 §2](../复检报告-travelAI-drag_dev2.md) · [20-运行验证](./20-L1L2运行验证记录.md) |
+| **SEC-01b** | 🔲 | **P0** | 若曾 push：轮换 eDreams/Trip.com 账号；可选 filter-repo 清历史 blob | [复检报告 §2](../复检报告-travelAI-drag_dev2.md) |
 | **SEC-02** | 🔲 | P2 | 公网部署前：generate 鉴权或限速；收紧 CORS（当前 `allow_credentials=True` + 无 auth，本地可接受） | [分析报告 V18](../分析报告-travelAI-drag_dev.md) · `main.py` |
+| **GEO-06** | ✅ | P1 | 中心解析失败：保留 countrycodes、禁裸名全球 Top1、无围栏→`low` 信心 | [复检报告 §2](../复检报告-travelAI-drag_dev2.md) · `geocoding.py` |
+| **GEO-07** | ✅ | P1 | 围栏内多候选 + 名称相关性；统一 `geocode_place` / apply 信心口径 | [复检报告 §2](../复检报告-travelAI-drag_dev2.md) |
 
 ---
 
@@ -182,7 +185,7 @@ flowchart LR
 
 **建议实施顺序（2026-08-07）**：
 
-1. ~~`SEC-01`~~ ✅ · ~~`GEO-*` Wave~~ ✅ · ~~`B-P4` / `FLT-RANK` / `FLOW-01b` / `DATA-01`~~ ✅  
+1. ~~`SEC-01` 出 index~~ ✅ · **`SEC-01b` 轮换/清历史** 🔲 · ~~`GEO-06/07`~~ ✅  
 2. **`DATA-02` 完整 tz 表** → **`DATA-05`** → **`DATA-03/04/06`**  
 3. **`WS-06`** 参考依据侧栏 · **`HOT-01/03`** · **`FLOW-02`**  
 4. （⏸ **WX-*** / 多数 **WS-***）· **`SEC-02`** 仅部署前

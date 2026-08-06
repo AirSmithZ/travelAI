@@ -28,7 +28,13 @@ from app.services.geocoding import (  # noqa: E402
 )
 
 
-def _hit(name: str, lat: float, lng: float, source: str = "photon") -> GeocodeHit:
+def _hit(
+    name: str,
+    lat: float,
+    lng: float,
+    source: str = "photon",
+    country_code: str | None = None,
+) -> GeocodeHit:
     return GeocodeHit(
         name=name,
         address=name,
@@ -36,7 +42,7 @@ def _hit(name: str, lat: float, lng: float, source: str = "photon") -> GeocodeHi
         lng=lng,
         place_id=f"test/{name}",
         coord_source=source,
-        country_code=None,
+        country_code=country_code,
     )
 
 
@@ -269,7 +275,50 @@ def test_geocode_place_accepts_in_fence():
                 hit = geocode_place("Gardens by the Bay", "新加坡")
     assert hit is not None
     assert abs(hit["lat"] - 1.281) < 1e-6
+    assert hit["coord_confidence"] == "medium"
     print("geocode_place in-fence OK")
+
+
+def test_country_only_filters_wrong_country():
+    """中心解析失败、仅有 countrycodes 时过滤异国命中。"""
+    settings = Settings(GEOCODE_PROVIDERS="photon")
+    bias = GeocodeBias(country_code="sg")
+    mixed = [
+        _hit("Central Park NYC", 40.78, -73.97, country_code="us"),
+        _hit("Jurong Central Park", 1.338, 103.708, country_code="sg"),
+    ]
+
+    class FakePhoton:
+        name = "photon"
+
+        def autocomplete(self, query, *, limit, bias=None):
+            return mixed
+
+    with patch(
+        "app.services.geocode_providers._build_providers",
+        return_value=[FakePhoton()],
+    ):
+        out = run_autocomplete(
+            ["Central Park, Singapore"],
+            limit=2,
+            settings=settings,
+            bias=bias,
+            fence_km=None,
+            bare_query="Central Park",
+            allow_bare_without_fence=False,
+        )
+    assert len(out.results) == 1
+    assert out.results[0].country_code == "sg"
+    print("country-only filter OK")
+
+
+def test_name_relevance_picks_better_match():
+    from app.services.geocoding import _name_relevance
+
+    assert _name_relevance("滨海湾金沙", "滨海湾金沙", "") > _name_relevance(
+        "滨海湾金沙", "滨海湾购物中心", ""
+    )
+    print("name relevance OK")
 
 
 def main() -> None:
@@ -281,6 +330,8 @@ def main() -> None:
     test_resolve_destination_center_cached()
     test_geocode_itinerary_meta_warnings()
     test_geocode_place_accepts_in_fence()
+    test_country_only_filters_wrong_country()
+    test_name_relevance_picks_better_match()
     print("all geocode fence tests passed")
 
 

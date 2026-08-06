@@ -129,9 +129,15 @@ def _bias_for_destination(
     fence_km = float(cfg.geocode_fence_km)
 
     if center is None:
-        warnings.append("目的地中心未能解析，未启用地理围栏距离校验")
+        # 复检 P1：中心失败时仍保留 countrycodes，禁止完全放开裸名全球 Top1
         if alias_cc:
+            warnings.append(
+                "目的地中心未能解析，已降级为国家码过滤（无距离围栏）；坐标请人工复核"
+            )
             return GeocodeBias(country_code=alias_cc), None, warnings
+        warnings.append(
+            "目的地中心未能解析且无国家码别名，地理围栏未启用；坐标强制低信心"
+        )
         return None, None, warnings
 
     cc = center.country_code or alias_cc
@@ -158,6 +164,9 @@ def geocode_autocomplete(
 
     cfg = settings or get_settings()
     bias, fence_km, setup_warnings = _bias_for_destination(destination, settings=cfg)
+    dest = destination.strip()
+    # 有目的地时永不允许「无围栏裸名全球 Top1」；仅无 destination 时才放开
+    allow_bare = not dest and fence_km is None
     outcome = run_autocomplete(
         queries,
         limit=limit,
@@ -165,7 +174,7 @@ def geocode_autocomplete(
         bias=bias,
         fence_km=fence_km,
         bare_query=name.strip(),
-        allow_bare_without_fence=fence_km is None,
+        allow_bare_without_fence=allow_bare,
     )
     if setup_warnings:
         outcome.warnings = [*setup_warnings, *outcome.warnings]
@@ -176,6 +185,22 @@ def _cache_key(name: str, destination: str) -> tuple[str, str]:
     return (name.strip().lower(), destination.strip().lower())
 
 
+def _name_relevance(query: str, hit_name: str, hit_address: str) -> float:
+    """围栏内防「近但错」：简单名称一致性分（越高越好）。"""
+    q = (query or "").strip().lower()
+    if not q:
+        return 0.0
+    n = (hit_name or "").strip().lower()
+    a = (hit_address or "").strip().lower()
+    if q == n:
+        return 3.0
+    if n and (q in n or n in q):
+        return 2.0
+    if q in a:
+        return 1.0
+    return 0.0
+
+
 def geocode_place(name: str, destination: str = "") -> dict[str, Any] | None:
     """批量编码用：失败返回 None，不抛异常。"""
     key = _cache_key(name, destination)
@@ -183,20 +208,28 @@ def geocode_place(name: str, destination: str = "") -> dict[str, Any] | None:
         return _GEOCODE_CACHE[key]
 
     try:
-        result = geocode_autocomplete(name, destination, limit=1)
+        # 多候选 + 名称相关性，减轻围栏内同名错点
+        result = geocode_autocomplete(name, destination, limit=5)
         if not result.results:
             hit: dict[str, Any] | None = None
         else:
-            first = result.results[0]
+            best = max(
+                result.results,
+                key=lambda h: _name_relevance(name, h.name, h.address),
+            )
+            # 与 _apply_geocode_to_node 对齐：成功命中默认 medium；
+            # 仅当无距离围栏（中心解析失败降级）时标 low 促复核
+            bias, fence_km, _ = _bias_for_destination(destination)
+            conf = "medium"
+            if fence_km is None and destination.strip():
+                conf = "low"
             hit = {
-                "lat": first.lat,
-                "lng": first.lng,
-                "address": first.address,
-                "coord_confidence": "medium",
-                "coord_source": first.coord_source,
+                "lat": best.lat,
+                "lng": best.lng,
+                "address": best.address,
+                "coord_confidence": conf,
+                "coord_source": best.coord_source,
             }
-            if result.rejected_out_of_fence:
-                hit["coord_confidence"] = "low"
     except GeocodeProviderError as e:
         logger.warning("geocode_place failed for %s: %s", name, e)
         hit = None
@@ -271,15 +304,22 @@ def _apply_geocode_to_node(node: dict[str, Any], destination: str) -> _GeocodeNo
         return _GeocodeNodeOutcome(name=name, ok=False)
 
     try:
-        result = geocode_autocomplete(name, destination, limit=1)
+        result = geocode_autocomplete(name, destination, limit=5)
         out_of_fence = result.rejected_out_of_fence > 0 and not result.results
         if result.results:
-            first = result.results[0]
+            first = max(
+                result.results,
+                key=lambda h: _name_relevance(name, h.name, h.address),
+            )
+            _, fence_km, _ = _bias_for_destination(destination)
+            conf = "medium"
+            if fence_km is None and destination.strip():
+                conf = "low"
             hit = {
                 "lat": first.lat,
                 "lng": first.lng,
                 "address": first.address,
-                "coord_confidence": "low" if result.rejected_out_of_fence else "medium",
+                "coord_confidence": conf,
                 "coord_source": first.coord_source,
             }
             node.update(hit)

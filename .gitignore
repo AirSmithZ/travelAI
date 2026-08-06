@@ -4,7 +4,9 @@
 .env.*.local
 
 # 浏览器用户档案（含 Cookies / 本地存储 — SEC-01，禁止入库）
+# 匹配任意层级：根目录 / backend/ / flight-spike/ 等
 .edreams_chrome_data/
+**/.edreams_chrome_data/
 
 # Python
 __pycache__/

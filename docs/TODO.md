@@ -25,7 +25,7 @@
 
 | 优先级 | ID 前缀 | 项 | 关联 |
 |--------|---------|-----|------|
-| **P0** | ~~`SEC-01`~~ ✅ | Chrome 档案已出库（gitignore + untrack）；远端历史若曾 push 需轮换账号 | [llm TODO §0](./llm-travel-data/TODO.md) |
+| **P0** | ~~`SEC-01`~~ ✅ | 三处 Chrome 档案已出 index；**`SEC-01b`** 历史/轮换仍开放 | [复检报告](./复检报告-travelAI-drag_dev2.md) · [llm TODO §0](./llm-travel-data/TODO.md) |
 | **P0** | ~~`DATA-01`~~ ✅ | 行程日期用 `date_start` | [llm TODO §0c](./llm-travel-data/TODO.md) |
 | **P1** | `DATA-02`–`06` | timezone 完整表、Mock 合一、Pydantic、LLM schema、compact/FormPatch | [llm TODO §0c](./llm-travel-data/TODO.md) |
 | **P1** | ~~`FLOW-01b`~~ ✅ | 后端 generate 无航班拒绝 | `itineraries.py` |
