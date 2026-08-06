@@ -2,7 +2,7 @@
 
 ← [总索引](./TODO.md) · [开发进度](./开发进度.md)
 
-> **更新**：2026-07-05  
+> **更新**：2026-08-07（UX-14 优先级下调为 P1：主诉 GEO/B-P4 已落地）  
 > **ID 前缀**：`UX-` · 状态：🔲 开放 · ⏸ 暂停 · ✅ 完成
 
 ---
@@ -11,8 +11,8 @@
 
 | ID | 状态 | 优先级 | 待办 | 关联文档 |
 |----|------|--------|------|----------|
-| **UX-14-01** | 🔲 | **P0** | `selectPreviewCollapsed`：无 `itinerary.days` 时折叠右栏 | [14 §4.1](./14-无路线图时预览区折叠方案.md) |
-| **UX-14-02** | 🔲 | P0 | `AppShell` 右栏 `app-shell__preview--collapsed` + 左栏 flex 占满 | [14 §4.3](./14-无路线图时预览区折叠方案.md) |
+| **UX-14-01** | 🔲 | P1 | `selectPreviewCollapsed`：无 `itinerary.days` 时折叠右栏 | [14 §4.1](./14-无路线图时预览区折叠方案.md) |
+| **UX-14-02** | 🔲 | P1 | `AppShell` 右栏 `app-shell__preview--collapsed` + 左栏 flex 占满 | [14 §4.3](./14-无路线图时预览区折叠方案.md) |
 | **UX-14-03** | 🔲 | P1 | InputPanel 底栏「路线预览」strip（手动展开 EmptyPreview） | [14 §4.4](./14-无路线图时预览区折叠方案.md) |
 | **UX-14-04** | 🔲 | P1 | `previewExpandedWithoutItinerary` store 字段 + action | [14 §4.1](./14-无路线图时预览区折叠方案.md) |
 | **UX-14-05** | 🔲 | P1 | 住宿 recommend 有 geometry 时强制展开预览并切 map | [14 §5.1](./14-无路线图时预览区折叠方案.md) · [13 §5.1](./llm-travel-data/13-阶段B住宿区域实施计划.md) |
@@ -44,4 +44,4 @@
 
 ---
 
-*清单版本：v1.0 · 2026-07-05*
+*清单版本：v1.1 · 2026-08-07*

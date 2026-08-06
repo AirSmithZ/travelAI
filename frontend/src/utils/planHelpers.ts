@@ -65,6 +65,7 @@ export function touchPlan(plan: TravelPlan): TravelPlan {
 /** global 模式确认 patch 后是否具备生成行程图的最低条件 */
 export function shouldAutoGenerateItinerary(plan: TravelPlan): boolean {
   if (plan.itinerary || plan.phase === 'detailed') return false;
+  if (plan.travel_intel.flights.length === 0) return false;
   const tr = plan.trip_request;
   if (!tr.destination.trim()) return false;
   return Boolean(

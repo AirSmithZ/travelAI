@@ -142,8 +142,8 @@ interface PlanState {
 
   updateTripRequest: (partial: Partial<TripRequest>) => void;
   setItinerary: (itinerary: Itinerary | null) => void;
-  generateItinerary: () => Promise<'api' | 'mock'>;
-  maybeAutoGenerateItinerary: () => Promise<'api' | 'mock' | 'skipped'>;
+  generateItinerary: () => Promise<'api' | 'mock' | 'blocked'>;
+  maybeAutoGenerateItinerary: () => Promise<'api' | 'mock' | 'skipped' | 'blocked'>;
   setFlightSearchResult: (session: FlightSearchSession) => void;
   mergeFlightSearchResult: (patch: Partial<FlightSearchSession>) => void;
   confirmFlightQuote: (quoteId: string, role?: FlightLegRole) => void;
@@ -535,14 +535,26 @@ export const usePlanStore = create<PlanState>()(
     },
 
     generateItinerary: async () => {
-      set({ isGeneratingItinerary: true, generationProgress: { phase: 'llm', llmPreview: '' } });
       const p = get().getActivePlan();
       if (p.travel_intel.flights.length === 0) {
-        useToastStore.getState().show('尚未确认航班；玩法行程将不含航班时刻约束', 'warning');
+        useToastStore.getState().show('请先确认航班后再生成玩法行程', 'warning');
+        return 'blocked';
       }
+      const hasHotels = p.travel_intel.hotels.length > 0;
+      const hasZones = (p.travel_intel.recommended_stay_zones ?? []).some(
+        (z) => z.status === 'confirmed',
+      );
+      if (!hasHotels && !hasZones) {
+        useToastStore
+          .getState()
+          .show('尚未确认酒店或住宿片区；行程住宿区域将为估算', 'warning');
+      }
+
+      set({ isGeneratingItinerary: true, generationProgress: { phase: 'llm', llmPreview: '' } });
       try {
         const { itinerary, llmLatencyMs } = await generateItineraryStream(p.trip_request, {
           geocode: false,
+          travel_intel: p.travel_intel,
           onDelta: (preview) => {
             set((s) => ({
               generationProgress: {
@@ -571,6 +583,12 @@ export const usePlanStore = create<PlanState>()(
           })),
         );
         set({ isGeneratingItinerary: false });
+        const evidenceCount = itinerary.meta?.evidence?.length ?? 0;
+        if (evidenceCount > 0) {
+          useToastStore
+            .getState()
+            .show(`已参考 ${evidenceCount} 条公开笔记印证（非票价）`, 'info');
+        }
         const dest = p.trip_request.destination?.trim();
         if (dest) {
           runBackgroundGeocode(set, itinerary, dest, llmLatencyMs);

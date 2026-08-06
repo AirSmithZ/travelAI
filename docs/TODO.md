@@ -1,6 +1,6 @@
 # 项目待办总索引
 
-> **更新**：2026-08-06  
+> **更新**：2026-08-07  
 > **用途**：从各分析/方案文档汇总的 **开放待办**；实施完成后在本索引与子清单中勾选，并在源文档同步状态。  
 > **原则**：每条待办必须有 **TODO ID** 与 **关联文档** 链接，便于后续 PR / 实施计划引用。
 
@@ -10,26 +10,28 @@
 
 | 域 | 文件 | 范围 |
 |----|------|------|
-| **机酒 / LLM 数据 / 阶段 B** | [llm-travel-data/TODO.md](./llm-travel-data/TODO.md) | P3–P6、Chat Tool、Ignav/Trip、P5b、**WX/WS/AG** |
+| **机酒 / LLM 数据 / 阶段 B** | [llm-travel-data/TODO.md](./llm-travel-data/TODO.md) | **SEC/DATA**、GEO、P3–P6、Chat Tool、**WX/WS/AG** |
 | **布局 / 前端 UX** | [TODO-布局与前端.md](./TODO-布局与前端.md) | 预览区折叠、移动端 Phase 4 |
 | **路线图 / 总览 / 导出** | [TODO-路线图与总览.md](./TODO-路线图与总览.md) | 总览抛光、导出主题、表单债务、`fetch_weather` UI |
 
 **进度快照**：[开发进度.md](./开发进度.md) · **问题跟踪**：[问题日志.md](./问题日志.md)  
-**能力缺口分析**：[15-天气联网与决策Agent缺口分析.md](./llm-travel-data/15-天气联网与决策Agent缺口分析.md)
+**能力缺口分析**：[15](./llm-travel-data/15-天气联网与决策Agent缺口分析.md) · **审查对照**：[分析报告-drag_dev](./分析报告-travelAI-drag_dev.md)
 
 ---
 
 ## 优先级摘要（开放项）
 
-> **纠偏**：当前主路线见 [16-产品能力优先级纠偏分析](./llm-travel-data/16-产品能力优先级纠偏分析.md)。天气/Tavily/完整 Agent **降为 P2+**，待地址与 B-P4 稳定。
+> **纠偏**：Wave 1–2（GEO 围栏、B-P4 机酒锚点）已在工作区落地 ✅。当前主线见子清单建议顺序；天气/Tavily 仍 ⏸。
 
 | 优先级 | ID 前缀 | 项 | 关联 |
 |--------|---------|-----|------|
-| **P0** | `GEO-*` | **生成 geocode 错点**：目的地围栏 + Top1 校验 | [17 §3](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
-| **P0** | `B-P4-*` | generate 读 `travel_intel` 硬约束 | [06 §7](./llm-travel-data/06-机酒确认与行程生成流程方案.md) · [16](./llm-travel-data/16-产品能力优先级纠偏分析.md) |
-| **P1** | `HOT-*` / 性价比流程 | 酒店源探路 + 机酒决策顺序重排 | [17 §2–5](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
-| **P0** | `UX-14-*` | 无路线图时预览区折叠 | [14-方案](./14-无路线图时预览区折叠方案.md) |
-| **P2** / **⏸** | `WX-*` / `WS-*` | 天气/Tavily（用户同意暂缓） | [17 §4](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
+| **P0** | ~~`SEC-01`~~ ✅ | Chrome 档案已出库（gitignore + untrack）；远端历史若曾 push 需轮换账号 | [llm TODO §0](./llm-travel-data/TODO.md) |
+| **P0** | ~~`DATA-01`~~ ✅ | 行程日期用 `date_start` | [llm TODO §0c](./llm-travel-data/TODO.md) |
+| **P1** | `DATA-02`–`06` | timezone 完整表、Mock 合一、Pydantic、LLM schema、compact/FormPatch | [llm TODO §0c](./llm-travel-data/TODO.md) |
+| **P1** | ~~`FLOW-01b`~~ ✅ | 后端 generate 无航班拒绝 | `itineraries.py` |
+| **P1** | `HOT-*` / `GEO-03/05` | 酒店源探路 + geocode 英译/debounce | [17](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
+| **P1** | `UX-14-*` | 无路线图时预览区折叠（主诉已解后可做） | [14-方案](./14-无路线图时预览区折叠方案.md) |
+| **P2** / **⏸** | `WX-*` / 多数 `WS-*` / `SEC-02` | 天气/Tavily 暂缓；公网鉴权部署前再做 | [17 §4](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
 
 ---
 
@@ -37,6 +39,9 @@
 
 | 域 | 里程碑 | 关联文档 |
 |----|--------|----------|
+| **GEO-01/02/04** | 目的地围栏 + 超时/warnings；`app/data` 已跟踪 | [llm TODO](./llm-travel-data/TODO.md) · [17](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
+| **B-P4-01/02/03 · FLOW-01 · AG-01** | generate 吃 travel_intel；前端无航班阻断 | [06](./llm-travel-data/06-机酒确认与行程生成流程方案.md) · [18](./llm-travel-data/18-机酒优先与迭代行程产品决策.md) |
+| **FLT-RANK-01** | balanced 5:2:2:1 权重 | `rank.py` |
 | 航班 P1–P2c | Ignav + Panel + 手动添加 | [09](./llm-travel-data/09-阶段B航班功能实施计划.md) |
 | 航班 P3-UX | `leftPanelMode: flight` 全高 | [10](./llm-travel-data/10-阶段B航班UX问题分析.md) |
 | 住宿 P5z | 片区倒推 + 地图 + hotel 节点 | [13](./llm-travel-data/13-阶段B住宿区域实施计划.md) · [12](./llm-travel-data/12-阶段B住宿区域倒推方案.md) |
@@ -70,4 +75,4 @@
 
 ---
 
-*索引版本：v1.2 · 2026-08-06 · 按 [16](./llm-travel-data/16-产品能力优先级纠偏分析.md) 纠偏优先级*
+*索引版本：v1.3 · 2026-08-07 · Wave 1–2 完成后按 [分析报告](./分析报告-travelAI-drag_dev.md) 补录 SEC/DATA*

@@ -1,4 +1,4 @@
-"""常见目的地中文/别名 → OSM/Photon 友好检索串（P64）。"""
+"""常见目的地中文/别名 → OSM/Photon 友好检索串（P64）与国家码（GEO-01）。"""
 
 CITY_ALIASES: dict[str, str] = {
     "亚庇": "Kota Kinabalu, Malaysia",
@@ -25,6 +25,32 @@ CITY_ALIASES: dict[str, str] = {
     "悉尼": "Sydney, Australia",
 }
 
+# ISO 3166-1 alpha-2（Nominatim countrycodes / Photon 过滤）
+CITY_COUNTRY_CODES: dict[str, str] = {
+    "亚庇": "my",
+    "哥打基纳巴卢": "my",
+    "沙巴": "my",
+    "吉隆坡": "my",
+    "槟城": "my",
+    "兰卡威": "my",
+    "新加坡": "sg",
+    "曼谷": "th",
+    "清迈": "th",
+    "普吉": "th",
+    "东京": "jp",
+    "大阪": "jp",
+    "京都": "jp",
+    "首尔": "kr",
+    "巴厘岛": "id",
+    "雅加达": "id",
+    "香港": "hk",
+    "台北": "tw",
+    "巴黎": "fr",
+    "伦敦": "gb",
+    "纽约": "us",
+    "悉尼": "au",
+}
+
 
 def normalize_city(destination: str) -> str:
     """将 trip_request.destination 等中文别名转为 geocoder 友好 city 串。"""
@@ -37,3 +63,16 @@ def normalize_city(destination: str) -> str:
         if key in raw and len(key) >= 2:
             return value
     return raw
+
+
+def country_code_for_destination(destination: str) -> str | None:
+    """目的地 → ISO country code（小写）；未知则 None。"""
+    raw = destination.strip()
+    if not raw:
+        return None
+    if raw in CITY_COUNTRY_CODES:
+        return CITY_COUNTRY_CODES[raw]
+    for key, code in CITY_COUNTRY_CODES.items():
+        if key in raw and len(key) >= 2:
+            return code
+    return None

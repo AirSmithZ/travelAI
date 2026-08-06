@@ -10,7 +10,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 from app.schemas.flight import FlightQuote  # noqa: E402
-from app.services.flight.rank import rank_offers  # noqa: E402
+from app.services.flight.rank import _arrival_time_fit, rank_offers  # noqa: E402
 
 
 def _offer(**kwargs) -> FlightQuote:
@@ -53,7 +53,41 @@ def test_rank_fast_prefers_shorter_duration():
     assert ranked[0].duration_minutes == 300
 
 
+def test_arrival_time_fit_bands():
+    assert _arrival_time_fit("14:30") == 0.0
+    assert _arrival_time_fit("2026-08-01T14:30:00") == 0.0
+    assert _arrival_time_fit("08:00") == 0.5
+    assert _arrival_time_fit("22:15") == 0.5
+    assert _arrival_time_fit("03:00") == 1.0
+    assert _arrival_time_fit("") == 0.5
+
+
+def test_rank_balanced_prefers_daytime_arrival_when_similar():
+    """With equal price/duration/stops, daytime arrival ranks higher."""
+    offers = [
+        _offer(id="night", price_amount=500, duration_minutes=300, arrive_time="02:00"),
+        _offer(id="day", price_amount=500, duration_minutes=300, arrive_time="15:00"),
+    ]
+    ranked = rank_offers(offers, "balanced", top_n=2)
+    assert ranked[0].id == "day"
+    assert ranked[0].rank_reason and "抵达时段适宜" in (ranked[0].rank_reason or "")
+    assert ranked[1].rank_reason and "抵达偏深夜/凌晨" in (ranked[1].rank_reason or "")
+
+
+def test_rank_balanced_price_still_matters():
+    """Price weight 0.5 should still prefer a clearly cheaper offer."""
+    offers = [
+        _offer(id="cheap", price_amount=300, duration_minutes=360, arrive_time="15:00"),
+        _offer(id="pricey", price_amount=900, duration_minutes=300, arrive_time="15:00"),
+    ]
+    ranked = rank_offers(offers, "balanced", top_n=2)
+    assert ranked[0].id == "cheap"
+
+
 if __name__ == "__main__":
     test_rank_cheap_prefers_lower_price()
     test_rank_fast_prefers_shorter_duration()
+    test_arrival_time_fit_bands()
+    test_rank_balanced_prefers_daytime_arrival_when_similar()
+    test_rank_balanced_price_still_matters()
     print("OK: flight rank tests passed")

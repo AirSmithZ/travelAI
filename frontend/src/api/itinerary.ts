@@ -1,4 +1,5 @@
 import type { Itinerary } from '../types/itinerary';
+import type { TravelIntel } from '../types/travelIntel';
 import type { TripRequest } from '../types/tripRequest';
 import { consumeSsePost } from '../utils/parseSse';
 
@@ -15,6 +16,8 @@ export class ItineraryApiError extends Error {
 export interface GenerateItineraryOptions {
   /** 默认 false：首包快速返回，坐标由前端异步 geocode-nodes 补全 */
   geocode?: boolean;
+  /** 已确认机酒锚点；generate Prompt 硬约束 */
+  travel_intel?: TravelIntel | null;
 }
 
 export interface GenerateItineraryResult {
@@ -24,13 +27,14 @@ export interface GenerateItineraryResult {
 }
 
 export interface GenerateProgressEvent {
-  step: 'llm' | 'geocoding';
+  step: 'llm' | 'geocoding' | 'evidence';
   status?: 'running' | 'done';
   latencyMs?: number | null;
   promptTokens?: number | null;
   completionTokens?: number | null;
   done?: number;
   total?: number;
+  count?: number;
 }
 
 export interface GeocodeProgressEvent {
@@ -66,12 +70,16 @@ export async function generateItineraryStream(
   tripRequest: TripRequest,
   options?: GenerateItineraryOptions & GenerateStreamHandlers,
 ): Promise<GenerateItineraryResult> {
-  const { geocode = false, onProgress, onDelta } = options ?? {};
+  const { geocode = false, travel_intel, onProgress, onDelta } = options ?? {};
   let result: GenerateItineraryResult | null = null;
 
   await consumeSsePost(
     `${apiBase()}/api/v1/itineraries/generate/stream`,
-    { trip_request: tripRequest, geocode },
+    {
+      trip_request: tripRequest,
+      geocode,
+      ...(travel_intel ? { travel_intel } : {}),
+    },
     {
       onEvent: (event, data) => {
         if (event === 'delta') {
@@ -107,6 +115,7 @@ export async function generateItinerary(
     body: JSON.stringify({
       trip_request: tripRequest,
       geocode: options?.geocode ?? false,
+      ...(options?.travel_intel ? { travel_intel: options.travel_intel } : {}),
     }),
   });
 

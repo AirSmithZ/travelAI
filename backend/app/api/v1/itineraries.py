@@ -25,17 +25,30 @@ router = APIRouter(prefix="/itineraries", tags=["itineraries"])
 SSE_HEARTBEAT_SEC = 15
 
 
+def _require_confirmed_flights(body: GenerateItineraryRequest) -> None:
+    """FLOW-01b: backend gate — cannot bypass frontend flight confirmation."""
+    flights = (body.travel_intel.flights if body.travel_intel else None) or []
+    if not flights:
+        raise HTTPException(
+            status_code=400,
+            detail="请先确认航班后再生成玩法行程（travel_intel.flights 不能为空）",
+        )
+
+
 @router.post("/generate", response_model=GenerateItineraryResponse)
 async def generate_itinerary_endpoint(
     body: GenerateItineraryRequest,
     client: LLMClient | None = Depends(get_llm_client),
 ) -> GenerateItineraryResponse:
+    _require_confirmed_flights(body)
     settings = get_settings()
+    travel_intel = body.travel_intel.model_dump() if body.travel_intel else None
     itinerary, llm_ms, geocode_ms = await generate_itinerary_async(
         body.trip_request,
         client,
         geocode=body.geocode,
         settings=settings,
+        travel_intel=travel_intel,
     )
     return GenerateItineraryResponse(
         itinerary=itinerary,
@@ -50,6 +63,7 @@ async def generate_itinerary_stream_endpoint(
     client: LLMClient | None = Depends(get_llm_client),
 ) -> StreamingResponse:
     """SSE：llm delta（preview）→ llm done → result。"""
+    _require_confirmed_flights(body)
 
     async def event_generator():
         queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
@@ -61,11 +75,13 @@ async def generate_itinerary_stream_endpoint(
                     await queue.put(("error", {"detail": "LLM 未配置：请设置 DEEPSEEK_API_KEY"}))
                     return
 
+                travel_intel = body.travel_intel.model_dump() if body.travel_intel else None
                 async for item in generate_itinerary_stream_events(
                     body.trip_request,
                     client,
                     geocode=body.geocode,
                     settings=settings,
+                    travel_intel=travel_intel,
                 ):
                     await queue.put((item["event"], item["data"]))
             except Exception as e:

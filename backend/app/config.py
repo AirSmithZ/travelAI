@@ -37,6 +37,12 @@ class Settings(BaseSettings):
         validation_alias="LLM_MAX_TOKENS_GENERATE",
     )
     geocode_max_workers: int = Field(default=4, validation_alias="GEOCODE_MAX_WORKERS")
+    geocode_timeout_sec: float = Field(default=6.0, validation_alias="GEOCODE_TIMEOUT_SEC")
+    nominatim_timeout_sec: float = Field(
+        default=6.0,
+        validation_alias="NOMINATIM_TIMEOUT_SEC",
+    )
+    geocode_fence_km: float = Field(default=150.0, validation_alias="GEOCODE_FENCE_KM")
     cors_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
         validation_alias="CORS_ORIGINS",
@@ -127,6 +133,14 @@ class Settings(BaseSettings):
     tikhub_api_base: str = Field(
         default="https://api.tikhub.io",
         validation_alias="TIKHUB_API_BASE",
+    )
+    tikhub_timeout_sec: float = Field(
+        default=30.0,
+        validation_alias="TIKHUB_TIMEOUT_SEC",
+    )
+    tikhub_max_results: int = Field(
+        default=8,
+        validation_alias="TIKHUB_MAX_RESULTS",
     )
 
     @property

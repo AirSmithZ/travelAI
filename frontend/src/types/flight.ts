@@ -110,7 +110,7 @@ export interface FlightVerifyTurn {
 const PREFERENCE_LABELS: Record<RankPreference, string> = {
   cheap: '便宜优先',
   fast: '省时优先',
-  balanced: '综合平衡',
+  balanced: '性价比（价时中转到）',
 };
 
 export function formatPreference(pref: RankPreference): string {

@@ -208,7 +208,8 @@ L-price 多少钱          → Ignav / OTA / 深链（禁止网页摘要当价�
 | 认证 | `Authorization: Bearer $TIKHUB_API_KEY` |
 | 搜笔记（推荐 App V2） | `GET /api/v1/xiaohongshu/app_v2/search_notes`（`sort_type=popularity_descending` ≈ 高赞） |
 | 配置 | 根目录 `.env`：`TIKHUB_API_KEY` / `TIKHUB_API_BASE`（**已 gitignore**）；模板见 `.env.example` |
-| 代码 | `Settings.tikhub_configured`；客户端封装待 `WS-07` |
+| 代码 | ✅ `backend/app/services/ugc/tikhub.py` · `evidence_pack.py` · generate 注入 · `POST /api/v1/ugc/evidence/preview` |
+| 联调 | `python backend/scripts/test_tikhub_evidence.py`；preview 若 **402** 则为 TikHub 余额/套餐问题 |
 
 **安全**：登录密码**禁止**写入 `.env` / 文档 / git。若 Key 曾出现在聊天记录，请在控制台**轮换 API Key** 并改密。
 

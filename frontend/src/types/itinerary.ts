@@ -40,11 +40,23 @@ export interface DayWeather {
   source?: WeatherSource;
 }
 
+/** Public-note corroboration links from EvidencePack (WS-04 / WS-07). */
+export interface ItineraryEvidenceItem {
+  title: string;
+  url: string;
+  snippet?: string;
+  likes?: number | null;
+  source?: string;
+  query?: string;
+  note_id?: string;
+}
+
 export interface ItineraryMeta {
   generated_at: string;
   model: string;
   locale: 'zh-CN';
   warnings: string[];
+  evidence?: ItineraryEvidenceItem[];
 }
 
 export interface ItineraryNode {
