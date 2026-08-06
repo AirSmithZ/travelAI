@@ -1,6 +1,6 @@
 # 项目待办总索引
 
-> **更新**：2026-07-05  
+> **更新**：2026-08-06  
 > **用途**：从各分析/方案文档汇总的 **开放待办**；实施完成后在本索引与子清单中勾选，并在源文档同步状态。  
 > **原则**：每条待办必须有 **TODO ID** 与 **关联文档** 链接，便于后续 PR / 实施计划引用。
 
@@ -10,28 +10,26 @@
 
 | 域 | 文件 | 范围 |
 |----|------|------|
-| **机酒 / LLM 数据 / 阶段 B** | [llm-travel-data/TODO.md](./llm-travel-data/TODO.md) | P3–P6、Chat Tool、Ignav/Trip、P5b |
+| **机酒 / LLM 数据 / 阶段 B** | [llm-travel-data/TODO.md](./llm-travel-data/TODO.md) | P3–P6、Chat Tool、Ignav/Trip、P5b、**WX/WS/AG** |
 | **布局 / 前端 UX** | [TODO-布局与前端.md](./TODO-布局与前端.md) | 预览区折叠、移动端 Phase 4 |
-| **路线图 / 总览 / 导出** | [TODO-路线图与总览.md](./TODO-路线图与总览.md) | 总览抛光、导出主题、表单债务 |
+| **路线图 / 总览 / 导出** | [TODO-路线图与总览.md](./TODO-路线图与总览.md) | 总览抛光、导出主题、表单债务、`fetch_weather` UI |
 
-**进度快照**：[开发进度.md](./开发进度.md) · **问题跟踪**：[问题日志.md](./问题日志.md)
+**进度快照**：[开发进度.md](./开发进度.md) · **问题跟踪**：[问题日志.md](./问题日志.md)  
+**能力缺口分析**：[15-天气联网与决策Agent缺口分析.md](./llm-travel-data/15-天气联网与决策Agent缺口分析.md)
 
 ---
 
 ## 优先级摘要（开放项）
 
+> **纠偏**：当前主路线见 [16-产品能力优先级纠偏分析](./llm-travel-data/16-产品能力优先级纠偏分析.md)。天气/Tavily/完整 Agent **降为 P2+**，待地址与 B-P4 稳定。
+
 | 优先级 | ID 前缀 | 项 | 关联 |
 |--------|---------|-----|------|
+| **P0** | `GEO-*` | **生成 geocode 错点**：目的地围栏 + Top1 校验 | [17 §3](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
+| **P0** | `B-P4-*` | generate 读 `travel_intel` 硬约束 | [06 §7](./llm-travel-data/06-机酒确认与行程生成流程方案.md) · [16](./llm-travel-data/16-产品能力优先级纠偏分析.md) |
+| **P1** | `HOT-*` / 性价比流程 | 酒店源探路 + 机酒决策顺序重排 | [17 §2–5](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
 | **P0** | `UX-14-*` | 无路线图时预览区折叠 | [14-方案](./14-无路线图时预览区折叠方案.md) |
-| **P0** | `B-P4-*` | generate 读 `travel_intel` 硬约束 | [06 §7](./llm-travel-data/06-机酒确认与行程生成流程方案.md) · [09 §6](./llm-travel-data/09-阶段B航班功能实施计划.md) |
-| **P1** | `B-P3-*` | 多航段 / 城际航班模板 | [06](./llm-travel-data/06-机酒确认与行程生成流程方案.md) |
-| **P1** | `B-P4-*` | Chat Tool `search_flights` | [01-Trip.com §Phase2](./llm-travel-data/01-航班信息-Trip.com实施方案.md) · [Ignav报告](./llm-travel-data/01-航班信息-Ignav验证报告.md) |
-| **P2** | `B-P3-*` | 航班手动添加增强（URL 预填、validate API） | [09 §6](./llm-travel-data/09-阶段B航班功能实施计划.md) · [08](./llm-travel-data/08-手动添加航班方案.md) |
-| **P2** | `B-P6-*` | 多酒店 + 校验 | [06 §7](./llm-travel-data/06-机酒确认与行程生成流程方案.md) |
-| **P2** | `UX-M4-*` | 移动端响应式 + 触摸 | [项目分析 §Phase4](./项目分析与设计文档.md) |
-| **P3** | `OV-*` | 总览 ResizeObserver / 导出主题 | [总览路线图实现分析](./总览路线图实现分析.md) |
-| **⏸** | `B-P5b-*` | OTA 酒店 ranked 搜价 | [13 §1#14](./llm-travel-data/13-阶段B住宿区域实施计划.md) · [11 对称分析](./llm-travel-data/11-阶段B酒店对称方案分析.md) |
-| **⏸** | `B-R-*` | Duffel Sandbox / 境内旅行 | [Spike报告](./llm-travel-data/01-航班信息-Spike验证报告.md) |
+| **P2** / **⏸** | `WX-*` / `WS-*` | 天气/Tavily（用户同意暂缓） | [17 §4](./llm-travel-data/17-用户决策回应与Geocode机酒重排.md) |
 
 ---
 
@@ -72,4 +70,4 @@
 
 ---
 
-*索引版本：v1.0 · 2026-07-05*
+*索引版本：v1.2 · 2026-08-06 · 按 [16](./llm-travel-data/16-产品能力优先级纠偏分析.md) 纠偏优先级*

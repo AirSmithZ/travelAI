@@ -1,0 +1,435 @@
+{
+  "id": "mock-sg-2026",
+  "title": "新加坡 4 日游",
+  "destination": "新加坡",
+  "timezone": "Asia/Singapore",
+  "meta": {
+    "generated_at": "2026-06-29T10:00:00+08:00",
+    "model": "mock",
+    "locale": "zh-CN",
+    "warnings": [
+      "松发肉骨茶（备选）坐标待核实"
+    ]
+  },
+  "days": [
+    {
+      "day_index": 1,
+      "date": "2026-10-16",
+      "weekday": "周五",
+      "label": "第 1 天 · 抵达樟宜",
+      "region": "樟宜区",
+      "weather": {
+        "temp_min": 26,
+        "temp_max": 34,
+        "icon": "sunny",
+        "description": "晴"
+      },
+      "nodes": [
+        {
+          "id": "d1-n1",
+          "name": "樟宜机场 T1",
+          "category": "airport",
+          "lat": 1.3644,
+          "lng": 103.9915,
+          "floor": "L1",
+          "start_time": "06:00",
+          "end_time": "07:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "tips": [
+            "入境后先换汇",
+            "T2↔T3 可乘接驳轻轨"
+          ],
+          "region": "樟宜区"
+        },
+        {
+          "id": "d1-n2",
+          "name": "星耀樟宜 Jewel",
+          "category": "landmark",
+          "lat": 1.3602,
+          "lng": 103.9894,
+          "floor": "L1",
+          "start_time": "07:15",
+          "end_time": "09:00",
+          "duration_minutes": 105,
+          "is_optional": false,
+          "coord_confidence": "high",
+          "tips": [
+            "瀑布在室内，可提前换票"
+          ],
+          "region": "樟宜区"
+        },
+        {
+          "id": "d1-n3",
+          "name": "松发肉骨茶",
+          "category": "restaurant",
+          "lat": 1.3006,
+          "lng": 103.8552,
+          "start_time": "12:00",
+          "end_time": "13:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "region": "牛车水"
+        },
+        {
+          "id": "d1-n4",
+          "name": "天天海南鸡饭",
+          "category": "restaurant",
+          "lat": 1.3138,
+          "lng": 103.8545,
+          "is_optional": true,
+          "coord_confidence": "medium",
+          "region": "牛车水"
+        },
+        {
+          "id": "d1-n5",
+          "name": "滨海湾金沙酒店",
+          "category": "hotel",
+          "lat": 1.2834,
+          "lng": 103.8607,
+          "start_time": "15:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "region": "滨海湾区"
+        }
+      ],
+      "edges": [
+        {
+          "id": "d1-e1",
+          "from": "d1-n1",
+          "to": "d1-n2",
+          "type": "primary",
+          "transport_mode": "walk",
+          "duration_minutes": 5,
+          "label": "步行 5 分钟"
+        },
+        {
+          "id": "d1-e2",
+          "from": "d1-n2",
+          "to": "d1-n3",
+          "type": "primary",
+          "transport_mode": "subway",
+          "duration_minutes": 50,
+          "depart_time": "09:30",
+          "arrive_time": "10:20",
+          "label": "地铁 50 分钟"
+        },
+        {
+          "id": "d1-e3",
+          "from": "d1-n3",
+          "to": "d1-n4",
+          "type": "alternative",
+          "transport_mode": "walk",
+          "duration_minutes": 8,
+          "label": "备选餐厅"
+        },
+        {
+          "id": "d1-e4",
+          "from": "d1-n3",
+          "to": "d1-n5",
+          "type": "primary",
+          "transport_mode": "taxi",
+          "duration_minutes": 23,
+          "label": "打车 23 分钟"
+        }
+      ]
+    },
+    {
+      "day_index": 2,
+      "date": "2026-10-18",
+      "weekday": "周日",
+      "label": "第 2 天 · 武吉士",
+      "region": "武吉士区",
+      "weather": {
+        "temp_min": 27,
+        "temp_max": 33,
+        "icon": "cloudy",
+        "description": "多云"
+      },
+      "nodes": [
+        {
+          "id": "d2-n1",
+          "name": "滨海湾金沙",
+          "category": "hotel",
+          "lat": 1.2834,
+          "lng": 103.8607,
+          "start_time": "08:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "region": "滨海湾区"
+        },
+        {
+          "id": "d2-n2",
+          "name": "国家博物馆",
+          "category": "attraction",
+          "lat": 1.2966,
+          "lng": 103.8484,
+          "floor": "3F",
+          "start_time": "10:00",
+          "end_time": "12:30",
+          "duration_minutes": 150,
+          "is_optional": false,
+          "coord_confidence": "high",
+          "tips": [
+            "门票可在官网预约"
+          ],
+          "region": "市中心"
+        },
+        {
+          "id": "d2-n3",
+          "name": "武吉士街",
+          "category": "landmark",
+          "lat": 1.3009,
+          "lng": 103.8558,
+          "start_time": "14:00",
+          "end_time": "16:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "region": "武吉士区"
+        },
+        {
+          "id": "d2-n4",
+          "name": "拉茶/咖椰吐司",
+          "category": "snack",
+          "lat": 1.3012,
+          "lng": 103.8562,
+          "is_optional": true,
+          "coord_confidence": "high",
+          "region": "武吉士区"
+        },
+        {
+          "id": "d2-n5",
+          "name": "滨海湾花园",
+          "category": "attraction",
+          "lat": 1.2816,
+          "lng": 103.8636,
+          "start_time": "17:00",
+          "end_time": "20:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "tips": [
+            "夜间灯光秀 19:45"
+          ],
+          "region": "滨海湾区"
+        }
+      ],
+      "edges": [
+        {
+          "id": "d2-e1",
+          "from": "d2-n1",
+          "to": "d2-n2",
+          "type": "primary",
+          "transport_mode": "subway",
+          "duration_minutes": 18,
+          "label": "地铁 18 分钟"
+        },
+        {
+          "id": "d2-e2",
+          "from": "d2-n2",
+          "to": "d2-n3",
+          "type": "primary",
+          "transport_mode": "walk",
+          "duration_minutes": 12,
+          "label": "步行 12 分钟"
+        },
+        {
+          "id": "d2-e3",
+          "from": "d2-n3",
+          "to": "d2-n4",
+          "type": "alternative",
+          "transport_mode": "walk",
+          "duration_minutes": 3,
+          "label": "小吃备选"
+        },
+        {
+          "id": "d2-e4",
+          "from": "d2-n3",
+          "to": "d2-n5",
+          "type": "primary",
+          "transport_mode": "taxi",
+          "duration_minutes": 15,
+          "label": "打车 15 分钟"
+        }
+      ]
+    },
+    {
+      "day_index": 3,
+      "date": "2026-10-19",
+      "weekday": "周一",
+      "label": "第 3 天 · 河川/小印度",
+      "region": "市中心",
+      "weather": {
+        "temp_min": 26,
+        "temp_max": 34,
+        "icon": "sunny",
+        "description": "晴"
+      },
+      "nodes": [
+        {
+          "id": "d3-n1",
+          "name": "河川生态园",
+          "category": "attraction",
+          "lat": 1.4037,
+          "lng": 103.794,
+          "start_time": "09:00",
+          "end_time": "12:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "tips": [
+            "不要穿鲜艳首饰",
+            "游船需另购票"
+          ],
+          "region": "万礼野生动物保护区"
+        },
+        {
+          "id": "d3-n2",
+          "name": "新加坡动物园",
+          "category": "attraction",
+          "lat": 1.4043,
+          "lng": 103.793,
+          "start_time": "13:00",
+          "end_time": "17:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "region": "万礼野生动物保护区"
+        },
+        {
+          "id": "d3-n3",
+          "name": "小印度",
+          "category": "landmark",
+          "lat": 1.3066,
+          "lng": 103.85,
+          "start_time": "18:30",
+          "end_time": "20:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "region": "小印度"
+        },
+        {
+          "id": "d3-n4",
+          "name": "竹脚中心榴莲",
+          "category": "snack",
+          "lat": 1.3072,
+          "lng": 103.8512,
+          "is_optional": true,
+          "coord_confidence": "medium",
+          "region": "小印度"
+        }
+      ],
+      "edges": [
+        {
+          "id": "d3-e1",
+          "from": "d3-n1",
+          "to": "d3-n2",
+          "type": "primary",
+          "transport_mode": "walk",
+          "duration_minutes": 10,
+          "label": "步行 10 分钟"
+        },
+        {
+          "id": "d3-e2",
+          "from": "d3-n2",
+          "to": "d3-n3",
+          "type": "primary",
+          "transport_mode": "taxi",
+          "duration_minutes": 35,
+          "label": "打车 35 分钟"
+        },
+        {
+          "id": "d3-e3",
+          "from": "d3-n3",
+          "to": "d3-n4",
+          "type": "alternative",
+          "transport_mode": "walk",
+          "duration_minutes": 5,
+          "label": "小吃备选"
+        }
+      ]
+    },
+    {
+      "day_index": 4,
+      "date": "2026-10-20",
+      "weekday": "周二",
+      "label": "第 4 天 · 万礼与返程",
+      "region": "万礼野生动物保护区",
+      "weather": {
+        "temp_min": 27,
+        "temp_max": 33,
+        "icon": "cloudy",
+        "description": "多云"
+      },
+      "nodes": [
+        {
+          "id": "d4-n1",
+          "name": "夜间野生动物园",
+          "category": "attraction",
+          "lat": 1.402,
+          "lng": 103.788,
+          "start_time": "19:00",
+          "end_time": "22:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "tips": [
+            "建议提前预约"
+          ],
+          "region": "万礼野生动物保护区"
+        },
+        {
+          "id": "d4-n2",
+          "name": "樟宜机场 T3",
+          "category": "airport",
+          "lat": 1.356,
+          "lng": 103.989,
+          "floor": "L2",
+          "start_time": "06:00",
+          "end_time": "08:00",
+          "is_optional": false,
+          "coord_confidence": "high",
+          "region": "樟宜区"
+        }
+      ],
+      "edges": [
+        {
+          "id": "d4-e1",
+          "from": "d4-n1",
+          "to": "d4-n2",
+          "type": "primary",
+          "transport_mode": "taxi",
+          "duration_minutes": 40,
+          "depart_time": "22:30",
+          "arrive_time": "23:10",
+          "label": "打车 40 分钟"
+        }
+      ]
+    }
+  ],
+  "cross_day_edges": [
+    {
+      "id": "xd-e1",
+      "from": "d1-n5",
+      "to": "d2-n1",
+      "type": "primary",
+      "transport_mode": "walk",
+      "duration_minutes": 0,
+      "label": "隔夜衔接"
+    },
+    {
+      "id": "xd-e2",
+      "from": "d2-n5",
+      "to": "d3-n1",
+      "type": "primary",
+      "transport_mode": "taxi",
+      "duration_minutes": 25,
+      "label": "次日前往河川"
+    },
+    {
+      "id": "xd-e3",
+      "from": "d3-n4",
+      "to": "d4-n1",
+      "type": "primary",
+      "transport_mode": "taxi",
+      "duration_minutes": 30,
+      "label": "次日夜间动物园"
+    }
+  ]
+}

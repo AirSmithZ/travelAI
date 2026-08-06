@@ -25,6 +25,8 @@ cp .env.example .env
 # 2. 编辑 .env，至少填写：
 #    DEEPSEEK_API_KEY=...        # 对话 / 行程生成（必填）
 #    IGNAV_API_KEY=...           # 航班 App 内查价（阶段 B，推荐）
+#    QWEATHER_API_KEY=...        # 和风天气（WX-*，推荐）
+#    TAVILY_API_KEY=...          # Tavily 联网（WS-*，推荐）
 
 # 3. 创建并激活虚拟环境
 cd backend

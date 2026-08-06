@@ -1,7 +1,8 @@
 """
-天气查询 tool（Phase 0 stub）。
+天气查询 tool。
 
-后续 Phase 2 接入 Open-Meteo 等 API；当前由 LLM 根据目的地与日期推断。
+Phase 1：接入和风天气（QWeather）— 见 docs/llm-travel-data/15 §1.3。
+Fallback：Open-Meteo / LLM 推断。当前仍为 stub。
 """
 
 from __future__ import annotations

@@ -102,6 +102,34 @@ class Settings(BaseSettings):
         validation_alias="FLIGHT_IGNAV_TIMEOUT_SEC",
     )
 
+    # 和风天气 QWeather（WX-*）
+    qweather_credential_id: str = Field(
+        default="",
+        validation_alias="QWEATHER_CREDENTIAL_ID",
+    )
+    qweather_api_key: str = Field(default="", validation_alias="QWEATHER_API_KEY")
+    qweather_api_host: str = Field(
+        default="https://devapi.qweather.com",
+        validation_alias="QWEATHER_API_HOST",
+    )
+
+    # Tavily 联网（WS-*）
+    tavily_api_key: str = Field(default="", validation_alias="TAVILY_API_KEY")
+    tavily_mcp_url: str = Field(default="", validation_alias="TAVILY_MCP_URL")
+    tavily_search_depth: str = Field(
+        default="basic",
+        validation_alias="TAVILY_SEARCH_DEPTH",
+    )
+    tavily_max_results: int = Field(default=5, validation_alias="TAVILY_MAX_RESULTS")
+
+    @property
+    def weather_configured(self) -> bool:
+        return bool(self.qweather_api_key.strip())
+
+    @property
+    def web_search_configured(self) -> bool:
+        return bool(self.tavily_api_key.strip())
+
     @property
     def geocode_provider_chain(self) -> list[str]:
         return [p.strip().lower() for p in self.geocode_providers.split(",") if p.strip()]

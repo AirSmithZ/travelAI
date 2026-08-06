@@ -21,7 +21,12 @@
 | [05-行前细节清单.md](./05-行前细节清单.md) | 签证、支付、通讯、应急等行前 Intel |
 | [06-机酒确认与行程生成流程方案.md](./06-机酒确认与行程生成流程方案.md) | **Ignav 接入位置**、TravelIntel、多段机酒、generate 门槛 |
 | [07-航班号与中文地名分析.md](./07-航班号与中文地名分析.md) · … · [12-阶段B住宿区域倒推方案.md](./12-阶段B住宿区域倒推方案.md) · [13-阶段B住宿区域实施计划.md](./13-阶段B住宿区域实施计划.md) | 阶段 B：航班 ✅ · 住宿 **P5z ✅** |
-| [**TODO.md**（机酒域）](./TODO.md) | **开放待办索引**（P3–P6、P5b、Chat Tool） |
+| [15-天气联网与决策Agent缺口分析.md](./15-天气联网与决策Agent缺口分析.md) | 天气 / 联网 / Planner 技术附录（**优先级见 16**） |
+| [**16-产品能力优先级纠偏分析.md**](./16-产品能力优先级纠偏分析.md) | **主诉纠偏**：机酒/地址优先于天气·Agent；待确认问题 |
+| [**17-用户决策回应与Geocode机酒重排.md**](./17-用户决策回应与Geocode机酒重排.md) | L1/L2/L3 释义 · 酒店源核验 · geocode 根因 · 性价比流程 |
+| [**18-机酒优先与迭代行程产品决策.md**](./18-机酒优先与迭代行程产品决策.md) | **已拍板**：机酒→玩法 · 5:2:2:1 · 迭代 optimize/regenerate · Agent 边界 · 单多城同公式 |
+| [**19-玩法印证与UGC数据源分析.md**](./19-玩法印证与UGC数据源分析.md) | 玩法可信度：联网印证 · 旅行例子数据源 · Tavily vs 小红书 |
+| [**TODO.md**（机酒域）](./TODO.md) | **开放待办索引** |
 | [附录-示例与占位.md](./附录-示例与占位.md) | 新加坡示例、境内旅行占位 |
 
 ---
@@ -66,7 +71,7 @@
 | 阶段 | 航班 | 酒店 | 其他 | 产出 |
 |------|------|------|------|------|
 | **Phase 1**（1～2 周） | deep link，不比价 | Booking/Agoda 搜索链接 | 行程编排不变 | 诚实型 MVP |
-| **Phase 2**（1～2 月） | LetsFG / AWeirdDev/flights 实测 | Google Places | Directions、Open-Meteo、Klook/Viator | 半结构化 Intel |
+| **Phase 2**（1～2 月） | LetsFG / AWeirdDev/flights 实测 | Google Places | Directions、**和风天气**、Tavily、Klook/Viator | 半结构化 Intel |
 | **Phase 3**（3～6 月+） | Duffel / Amadeus Enterprise | Expedia EPS / Hotelbeds | 交通卡/签证 YAML | 可展示参考价 |
 | **Phase 4** | 弹性日期、延误重排 | 多 OTA 归一（若合规） | 境内旅行专项 | 智能优化 |
 
