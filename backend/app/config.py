@@ -122,6 +122,13 @@ class Settings(BaseSettings):
     )
     tavily_max_results: int = Field(default=5, validation_alias="TAVILY_MAX_RESULTS")
 
+    # TikHub（小红书等 UGC · WS-07）
+    tikhub_api_key: str = Field(default="", validation_alias="TIKHUB_API_KEY")
+    tikhub_api_base: str = Field(
+        default="https://api.tikhub.io",
+        validation_alias="TIKHUB_API_BASE",
+    )
+
     @property
     def weather_configured(self) -> bool:
         return bool(self.qweather_api_key.strip())
@@ -129,6 +136,10 @@ class Settings(BaseSettings):
     @property
     def web_search_configured(self) -> bool:
         return bool(self.tavily_api_key.strip())
+
+    @property
+    def tikhub_configured(self) -> bool:
+        return bool(self.tikhub_api_key.strip())
 
     @property
     def geocode_provider_chain(self) -> list[str]:

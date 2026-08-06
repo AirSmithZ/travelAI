@@ -139,13 +139,110 @@ L-price 多少钱          → Ignav / OTA / 深链（禁止网页摘要当价�
 
 ---
 
-## 7. 一句话答
+## 7. Google Places：能拿到什么？够不够判断「符不符合本次旅行」？
 
-- **现在玩法没有联网。**  
-- **应该用联网做「例子/口碑印证」，不是当票价源。**  
-- **最好的工程入口是 Tavily（公开网页 + 权威域）+ 可点击出处；不要把小红书高赞爬虫当主库。**  
-- **机酒与坐标仍优先；印证接在精排前，作为玩法可信度层。**
+### 7.1 能拿到（个人项目：开 GCP Places API New + 计费账号即可）
+
+本仓库 **尚未接线**；能力上 Text Search / Place Details 可要字段包括：
+
+| 字段类 | 例子 | 对「符不符合旅行」的用处 |
+|--------|------|--------------------------|
+| 身份 | `displayName`、`formattedAddress`、`location` | 是什么店、在哪 |
+| 类型 | `types` / `primaryType`（museum、park、restaurant…） | **比裸评分重要**：可对齐 preference_tags |
+| 口碑 | `rating`、`userRatingCount` | 热度/口碑过滤（建议同时看评价数） |
+| 摘要 | `editorialSummary`、`generativeSummary`、`reviewSummary` | 短描述，给 LLM 判断氛围 |
+| 评论 | `reviews`（通常少量） | 文本信号，非完整高赞帖 |
+| 其它 | `priceLevel`、营业时间、`websiteUri` | 预算档、是否当天可去 |
+
+所以：**不是「只能拿到一个分数」**；类型 + 摘要 + 少量评论，再交给 LLM 对照「亲子 / 美食 / 徒步」等，**可以做点级筛选**。
+
+### 7.2 仍然不够的地方（你的直觉对）
+
+| Places 擅长 | Places 不擅长 |
+|-------------|----------------|
+| 「滨海湾金沙是什么、评分如何」 | 「5 天新加坡怎么排才像高赞游记」 |
+| 候选 POI 去垃圾店 | 日序、通勤节奏、避坑组合 |
+| 校验 LLM 瞎编的店名是否存在 | 中文社区「本季流行玩法」 |
+
+结论：**Places = 点级校验层**；**行程例子仍要 UGC/检索层**。两者叠加才合理，不是二选一。
 
 ---
 
-*文档版本：v1.0 · 2026-08-06*
+## 8. 个人项目路径（不建 KB · 合规自担）
+
+> 用户决策：不建自研玩法 KB；个人项目可接受更高风险的 UGC 抓取；希望找 GitHub / Skill。
+
+不建 KB **合理**：个人维护成本 > 收益；用 **每次精排即时检索**（EvidencePack）即可，质量上限跟线上平台走。
+
+合规：即使个人用，仍可能面对 **封号 / 接口失效 / 不稳定**；下文按「工程可维护性」排序，不展开法律意见。
+
+### 8.1 推荐信息获取栈（由稳到「像小红书」）
+
+| 序 | 方案 | 得到什么 | 维护成本 | 备注 |
+|----|------|----------|----------|------|
+| 1 | **Tavily**（已有 Key）± `site:xiaohongshu.com` | 公开索引到的笔记摘要 + URL | 低 | 覆盖不全，但零接入成本 |
+| 2 | **TikHub 类第三方 API**（多项目在用） | 小红书搜索/正文/点赞等结构化 | 中（付费） | 比自签稳；[skills-travel-planner](https://github.com/huanyuzhilv/skills-travel-planner) 走这条 |
+| 3 | **Apify Actor**（如 rednote scraper） | 按赞过滤的笔记列表 | 中（按次付费） | 托管反爬，适合个人 |
+| 4 | **GitHub 自建 xhs 库** | 直连接口 | **高**（签名常挂） | 仅当愿意持续修 |
+| 5 | **用户粘贴链接/文案**（TripPick 模式） | 用户选定的「可信帖」 | 最低 | 最稳产品形态：人选题，系统结构化 |
+
+**建议组合（个人项目）**：
+
+```text
+（主）用户粘贴 1～3 条小红书/游记链接或全文
+  +（辅）Tavily / TikHub 按「{城} {天数} 自由行」搜高赞摘要
+  → LLM 抽 POI / 日序候选
+  →（可选）Places：校验存在 + types + rating
+  → 再硬吃机酒精排
+```
+
+不建 KB；缓存最多做「同城同天数 TTL」减少重复扣费即可。
+
+### 8.1.1 TikHub 已选作 UGC 主 API（2026-08-07）
+
+| 项 | 值 |
+|----|-----|
+| 控制台 | [user.tikhub.io/dashboard/ai](https://user.tikhub.io/dashboard/ai) |
+| API 文档 | [api.tikhub.io](https://api.tikhub.io) · [docs.tikhub.io](https://docs.tikhub.io) |
+| Base | `https://api.tikhub.io` |
+| 认证 | `Authorization: Bearer $TIKHUB_API_KEY` |
+| 搜笔记（推荐 App V2） | `GET /api/v1/xiaohongshu/app_v2/search_notes`（`sort_type=popularity_descending` ≈ 高赞） |
+| 配置 | 根目录 `.env`：`TIKHUB_API_KEY` / `TIKHUB_API_BASE`（**已 gitignore**）；模板见 `.env.example` |
+| 代码 | `Settings.tikhub_configured`；客户端封装待 `WS-07` |
+
+**安全**：登录密码**禁止**写入 `.env` / 文档 / git。若 Key 曾出现在聊天记录，请在控制台**轮换 API Key** 并改密。
+
+### 8.2 可参考的 GitHub / Skill（调研 2026-08）
+
+| 项目 | 类型 | 可借鉴点 |
+|------|------|----------|
+| [zjgttz/trippick](https://github.com/zjgttz/trippick) | 完整 Next 应用 | **粘贴小红书 → 清洗/抓取 → LLM 结构化 → 人勾选 POI**；决策权在人 |
+| [huanyuzhilv/skills-travel-planner](https://github.com/huanyuzhilv/skills-travel-planner) | Cursor/Claude **Skill** | TikHub 拉小红书；路书 JSON→HTML；可当 Agent 侧技能参考 |
+| [tianxingyang/skills-travel-planner](https://github.com/tianxingyang/skills-travel-planner) | Skill | 多源搜索（含小红书 MCP / `site:` 回退）生成行程 HTML |
+| [Ryanuppp/On-The-Road](https://github.com/Ryanuppp/On-The-Road) | MCP + Skill 工具链 | 小红书搜索 MCP + 地图排路；星数少，作思路参考 |
+| Apify `*xiaohongshu*` / `rednote*` Actors | 托管爬虫 | `filterByMinLikes` 贴近「高赞」 |
+| 开源 `xhs` / `xhs-api` 等 | Python 库 | 需看 **最近 commit**；停更即废 |
+
+本仓库现有 skills（`ai-chat-ui`、`llm-api-engineering` 等）**不含**小红书采集；若要固化流程，可另装/自写 skill：`xhs-evidence-pack`（触发词：印证、小红书、EvidencePack）。
+
+### 8.3 和 Places 怎么配合（回答「光有评分不好判断」）
+
+1. UGC 先给出「候选玩法 / POI 列表」（有语义、有场景）。  
+2. Places（或现有 geocode）做：**是否真实存在、类型是否对、评分/评价数门槛、坐标**。  
+3. LLM 只在「UGC 候选 ∩ Places 校验通过」里排日序，并服从机酒。  
+
+单独 Places 评分排序 → 容易变成「热门景点清单」，**不符合「像帖子一样的旅行要求」**；单独 UGC 不校验 → 假店/错坐标。个人项目也应保留这层校验（Places 或至少 geocode）。
+
+---
+
+## 9. 一句话答
+
+- **现在玩法没有联网。**  
+- **Places 评分能拿到，且不止评分（类型/摘要/少量评论）——适合点级过滤，不适合当整趟玩法例子。**  
+- **个人项目可不建 KB；印证用即时 UGC/检索。**  
+- **工程上优先：粘贴链接 + Tavily/TikHub/Apify；GitHub Skill 可参考 TripPick / skills-travel-planner。**  
+- **机酒与坐标仍优先；印证接在精排前。**
+
+---
+
+*文档版本：v1.1 · 2026-08-06*

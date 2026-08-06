@@ -108,6 +108,8 @@
 | **WS-04** | 🔲 | P1 | 精排前组装 `EvidencePack`（Tavily）注入 generate；`meta.evidence[]` | [19 §4](./19-玩法印证与UGC数据源分析.md) |
 | **WS-05** | 🔲 | P1 | 目的地 query 模板 + 权威 `include_domains` | [19 §4.1](./19-玩法印证与UGC数据源分析.md) |
 | **WS-06** | 🔲 | P1 | 前端「参考依据」列表（链接自点、不自动打开） | [19 §4](./19-玩法印证与UGC数据源分析.md) |
+| **WS-07** | 🔲 | P1 | 个人项目 UGC：粘贴小红书链接/文案 → 抽 POI（可参考 TripPick）；可选 TikHub/Apify | [19 §8](./19-玩法印证与UGC数据源分析.md) |
+| **WS-08** | 🔲 | P2 | Places（类型+评分+摘要）校验 UGC 候选 POI；不单独用评分排玩法 | [19 §7](./19-玩法印证与UGC数据源分析.md) |
 | **WS-04** | 🔲 | P3 | 本机 Cursor 配置 Tavily MCP（开发辅助，非运行时） | [15 §2.3](./15-天气联网与决策Agent缺口分析.md) |
 
 ### 4.3 决策 Agent `AG-*`
