@@ -1,7 +1,12 @@
 import { PlanSelector } from './plan/PlanSelector';
 import { InputPanel } from './input/InputPanel';
 import { PreviewPane } from './preview/PreviewPane';
-import { usePlanStore, selectLeftPanelCollapsed } from '../stores/usePlanStore';
+import { IntelDirtyBanner } from './flow/IntelDirtyBanner';
+import {
+  usePlanStore,
+  selectLeftPanelCollapsed,
+  selectPreviewCollapsed,
+} from '../stores/usePlanStore';
 import { useLeftPanelWidth } from '../hooks/useLeftPanelWidth';
 import { GlobalToast } from './ui/GlobalToast';
 import './AppShell.css';
@@ -9,6 +14,7 @@ import './AppShell.css';
 export function AppShell() {
   const { width: panelWidth, startResize } = useLeftPanelWidth();
   const leftPanelCollapsed = usePlanStore(selectLeftPanelCollapsed);
+  const previewCollapsed = usePlanStore(selectPreviewCollapsed);
 
   return (
     <div className="app-shell">
@@ -23,28 +29,43 @@ export function AppShell() {
         </div>
         <PlanSelector />
       </header>
+      <IntelDirtyBanner />
 
       <div className="app-shell__body">
         <div
           className={`app-shell__panel${leftPanelCollapsed ? ' app-shell__panel--collapsed' : ''}`}
-          style={leftPanelCollapsed ? undefined : { width: panelWidth }}
+          style={
+            leftPanelCollapsed
+              ? undefined
+              : {
+                  width: previewCollapsed ? undefined : panelWidth,
+                  flex: previewCollapsed ? 1 : undefined,
+                }
+          }
         >
           <InputPanel />
         </div>
         <div
-          className={`app-shell__resize-handle${leftPanelCollapsed ? ' app-shell__resize-handle--hidden' : ''}`}
+          className={`app-shell__resize-handle${
+            leftPanelCollapsed || previewCollapsed
+              ? ' app-shell__resize-handle--hidden'
+              : ''
+          }`}
           role="separator"
           aria-orientation="vertical"
           aria-label="调整左栏宽度"
-          aria-hidden={leftPanelCollapsed}
+          aria-hidden={leftPanelCollapsed || previewCollapsed}
           onMouseDown={(e) => {
-            if (leftPanelCollapsed) return;
+            if (leftPanelCollapsed || previewCollapsed) return;
             e.preventDefault();
             startResize(e.clientX);
           }}
         />
-        <div className="app-shell__preview">
-          <PreviewPane />
+        <div
+          className={`app-shell__preview${previewCollapsed ? ' app-shell__preview--collapsed' : ''}`}
+          aria-hidden={previewCollapsed}
+        >
+          {!previewCollapsed && <PreviewPane />}
         </div>
       </div>
     </div>

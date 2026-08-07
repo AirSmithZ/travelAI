@@ -84,6 +84,25 @@
   color: var(--text-dim);
 }
 
+.stay-zone__budget {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.stay-zone__budget input {
+  max-width: 160px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text);
+}
+
 .stay-zone__hint,
 .stay-zone__meta,
 .stay-zone__warning {

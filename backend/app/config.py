@@ -1,13 +1,42 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 # 官方模型 ID；404 时按序回退（P1）
 DEFAULT_LLM_FALLBACKS = "deepseek-v4-flash,deepseek-chat"
+
+# SEC-04: 外部 base URL 主机白名单（防 Key 外泄到不可信主机）
+_ALLOWED_API_HOSTS = frozenset(
+    {
+        "api.deepseek.com",
+        "api.tikhub.io",
+        "serpapi.com",
+        "nominatim.openstreetmap.org",
+        "photon.komoot.io",
+        "devapi.qweather.com",
+        "api.qweather.com",
+        "api.tavily.com",
+        "mcp.tavily.com",
+    }
+)
+
+
+def _validate_https_allowlisted_url(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return raw
+    parsed = urlparse(raw)
+    if parsed.scheme != "https":
+        raise ValueError(f"SEC-04: URL must use https (got {parsed.scheme or 'empty'}): {raw}")
+    host = (parsed.hostname or "").lower()
+    if host not in _ALLOWED_API_HOSTS and not host.endswith(".qweather.com"):
+        raise ValueError(f"SEC-04: host not allowlisted: {host}")
+    return raw
 
 
 class Settings(BaseSettings):
@@ -50,8 +79,18 @@ class Settings(BaseSettings):
     chat_max_message_chars: int = 8000
     chat_history_limit: int = 20
     geocode_providers: str = Field(
-        default="photon,nominatim",
+        default="serpapi,photon,nominatim",
         validation_alias="GEOCODE_PROVIDERS",
+    )
+    # SerpApi Google Maps（L1 主地理源 · https://serpapi.com/）
+    serpapi_api_key: str = Field(default="", validation_alias="SERPAPI_API_KEY")
+    serpapi_base_url: str = Field(
+        default="https://serpapi.com",
+        validation_alias="SERPAPI_BASE_URL",
+    )
+    serpapi_timeout_sec: float = Field(
+        default=20.0,
+        validation_alias="SERPAPI_TIMEOUT_SEC",
     )
     geocode_user_agent: str = Field(
         default="TravelPlanner/0.2 (https://github.com/travel-planner)",
@@ -143,6 +182,24 @@ class Settings(BaseSettings):
         validation_alias="TIKHUB_MAX_RESULTS",
     )
 
+    @field_validator(
+        "deepseek_api_base",
+        "serpapi_base_url",
+        "nominatim_base_url",
+        "photon_base_url",
+        "qweather_api_host",
+        "tikhub_api_base",
+        mode="after",
+    )
+    @classmethod
+    def _sec04_external_bases(cls, v: str) -> str:
+        return _validate_https_allowlisted_url(v)
+
+    @field_validator("tavily_mcp_url", mode="after")
+    @classmethod
+    def _sec04_tavily_mcp(cls, v: str) -> str:
+        return _validate_https_allowlisted_url(v)
+
     @property
     def weather_configured(self) -> bool:
         return bool(self.qweather_api_key.strip())
@@ -154,6 +211,10 @@ class Settings(BaseSettings):
     @property
     def tikhub_configured(self) -> bool:
         return bool(self.tikhub_api_key.strip())
+
+    @property
+    def serpapi_configured(self) -> bool:
+        return bool(self.serpapi_api_key.strip())
 
     @property
     def geocode_provider_chain(self) -> list[str]:

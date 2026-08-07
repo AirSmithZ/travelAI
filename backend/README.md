@@ -168,7 +168,8 @@ Ignav 单次请求可能 **5～30 秒**；前端超时已设为 130s。需配置
 | `IGNAV_API_KEY` | 航班查价 | [ignav.com](https://ignav.com/) API Key |
 | `FLIGHT_INCLUDE_IGNAV` | 否 | 默认 `true` |
 | `FLIGHT_IGNAV_TIMEOUT_SEC` | 否 | 默认 `120` |
-| `FLIGHT_INCLUDE_LETSFG` | 否 | LetsFG fallback，默认 `false` |
+| `FLIGHT_INCLUDE_LETSFG` | 否 | **FLT-LETSFG**：LetsFG fallback，**默认 `false` 且保持关闭**。主源为 Ignav；`flight-spike/` 不进主链。可选外部 CLI（不在 requirements）；启用须自装并自担合规/ToS |
+| `*_API_BASE` / hosts | — | **SEC-04**：须 `https` 且主机在 allowlist（DeepSeek / TikHub / SerpApi / Nominatim / Photon / QWeather 等），非法配置会拒绝启动 |
 
 ---
 

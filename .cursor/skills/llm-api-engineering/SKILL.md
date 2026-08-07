@@ -113,6 +113,8 @@ data: {"itinerary": {...}}
 - [ ] 输入长度上限（如 `free_text` ≤ 8k 字符）
 - [ ] 输出经 Pydantic 校验后再写库/返回前端
 - [ ] CORS 仅允许配置的来源（`CORS_ORIGINS`）
+- [ ] **Prompt 注入面**：勿用「若 user 消息含某标记则遵守」类用户文本触发开关；结构化硬约束与 UGC/用户偏好分块隔离（`HARD CONSTRAINTS` / `USER_DATA` / `UNTRUSTED_UGC`）
+- [ ] 公网部署前：鉴权或限流（`SEC-02`）；勿将 `*_API_BASE` 指向不可信主机（`SEC-04`）
 
 ## 反模式
 
@@ -120,6 +122,7 @@ data: {"itinerary": {...}}
 - ❌ 解析失败返回空对象糊弄前端
 - ❌ 在 prompt 里塞 web_search 猜坐标（本项目走 Geocoding API）
 - ❌ 同步阻塞 Event Loop（用 `async` + `httpx`/`openai` async client）
+- ❌ system prompt 把用户可控字符串当作指令开关（会覆盖结构化约束）
 
 ## 延伸阅读
 

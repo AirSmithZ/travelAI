@@ -46,6 +46,9 @@ export function TipsEditor({ value, presets, onChange }: TipsEditorProps) {
 
   return (
     <div className="tips-editor">
+      <p className="tips-editor__unverified" role="note">
+        提示与开放时间等尚未联网核实，请以官方信息为准
+      </p>
       {value.length > 0 && (
         <ul className="tips-editor__list">
           {value.map((tip, index) => (

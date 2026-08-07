@@ -154,6 +154,22 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+  transition: flex-basis 0.2s ease, opacity 0.18s ease;
+}
+
+.app-shell__preview--collapsed {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.app-shell__body:has(.app-shell__preview--collapsed) .app-shell__panel:not(.app-shell__panel--collapsed) {
+  flex: 1;
+  max-width: none;
+  width: auto !important;
 }
 
 @media (max-width: 960px) {
@@ -166,7 +182,16 @@
     max-height: 45vh;
   }
 
+  .app-shell__body:has(.app-shell__preview--collapsed) .app-shell__panel:not(.app-shell__panel--collapsed) {
+    max-height: none;
+    flex: 1;
+  }
+
   .app-shell__panel--collapsed {
+    max-height: 0;
+  }
+
+  .app-shell__preview--collapsed {
     max-height: 0;
   }
 

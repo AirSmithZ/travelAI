@@ -4,6 +4,13 @@
   gap: 8px;
 }
 
+.tips-editor__unverified {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
 .tips-editor__list {
   list-style: none;
   margin: 0;

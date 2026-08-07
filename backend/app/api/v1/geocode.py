@@ -36,7 +36,11 @@ def geocode_autocomplete_endpoint(
 @router.post("/search", response_model=GeocodeResponse)
 def geocode_search(body: GeocodeRequest) -> GeocodeResponse:
     try:
-        result = geocode_place(body.query, body.destination or "")
+        result = geocode_place(
+            body.query,
+            body.destination or "",
+            raise_on_provider_error=True,
+        )
     except GeocodeProviderError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     if not result:

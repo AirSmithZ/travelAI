@@ -12,8 +12,13 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
+    "resolveJsonModule": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@mock/*": ["../backend/app/data/*"]
+    },
 
     /* Linting */
     "noUnusedLocals": true,

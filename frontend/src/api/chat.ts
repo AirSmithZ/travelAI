@@ -23,12 +23,26 @@ export interface ChatParseRequest {
   client_request_id?: string;
 }
 
+/** B-FLT-01: client-executed tools from /chat/parse (Ignav runs on frontend). */
+export interface ChatToolCall {
+  name: 'search_flights';
+  args: {
+    origin: string;
+    destination: string;
+    date: string;
+    return_date?: string | null;
+    adults?: number;
+    preference?: 'cheap' | 'fast' | 'balanced';
+  };
+}
+
 export interface ChatParseResponse {
   reply: string;
   patches: FormPatch[];
   warnings?: string[];
   dropped_patch_count?: number;
   chat_mode_used?: ChatMode;
+  tool_calls?: ChatToolCall[];
 }
 
 export class ChatApiError extends Error {
@@ -108,8 +122,20 @@ async function parseChatMessageOnce(
     warnings?: string[];
     dropped_patch_count?: number;
     chat_mode_used?: ChatMode;
+    tool_calls?: ChatToolCall[];
   };
   return normalizeParseResponse(data);
+}
+
+function normalizeToolCalls(raw: ChatToolCall[] | undefined): ChatToolCall[] {
+  if (!raw?.length) return [];
+  return raw.filter(
+    (t): t is ChatToolCall =>
+      t?.name === 'search_flights' &&
+      typeof t.args?.origin === 'string' &&
+      typeof t.args?.destination === 'string' &&
+      typeof t.args?.date === 'string',
+  );
 }
 
 function normalizeParseResponse(data: {
@@ -118,6 +144,7 @@ function normalizeParseResponse(data: {
   warnings?: string[];
   dropped_patch_count?: number;
   chat_mode_used?: ChatMode;
+  tool_calls?: ChatToolCall[];
 }): ChatParseResponse {
   const normalized = data.patches.map((p) => normalizeFormPatch(p));
   const { patches, rejected } = sanitizeFormPatches(normalized);
@@ -130,6 +157,7 @@ function normalizeParseResponse(data: {
     warnings: [...extraWarnings, ...(data.warnings ?? [])],
     dropped_patch_count: (data.dropped_patch_count ?? 0) + rejected.length,
     chat_mode_used: data.chat_mode_used,
+    tool_calls: normalizeToolCalls(data.tool_calls),
   };
 }
 
@@ -171,6 +199,7 @@ export async function parseChatMessageStream(
             warnings?: string[];
             dropped_patch_count?: number;
             chat_mode_used?: ChatMode;
+            tool_calls?: ChatToolCall[];
           });
         }
       },

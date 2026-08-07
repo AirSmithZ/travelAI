@@ -1,10 +1,17 @@
 import json
 import logging
+import re
 from typing import Any
 
 from pydantic import ValidationError
 
-from app.schemas.chat import ChatParseRequest, ChatParseResponse, ChatParseSelectionIn, expected_chat_mode
+from app.schemas.chat import (
+    ChatParseRequest,
+    ChatParseResponse,
+    ChatParseSelectionIn,
+    ChatToolCallOut,
+    expected_chat_mode,
+)
 from app.services.form_patch_tool import (
     LLMParseToolResult,
     form_patch_tool_schema_doc,
@@ -16,6 +23,68 @@ from app.services.streaming_json import extract_streaming_reply
 logger = logging.getLogger(__name__)
 
 _TOOL_DOC = form_patch_tool_schema_doc()
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_IATA_RE = re.compile(r"^[A-Za-z]{3}$")
+_PREF = frozenset({"cheap", "fast", "balanced"})
+
+
+def _norm_place(value: str) -> str:
+    s = value.strip()
+    if _IATA_RE.match(s):
+        return s.upper()
+    return s
+
+
+def _sanitize_tool_calls(
+    raw_calls: list[Any],
+    trip_request: Any,
+) -> tuple[list[ChatToolCallOut], list[str]]:
+    """B-FLT-01/02: keep only complete search_flights; never invent fares here."""
+    out: list[ChatToolCallOut] = []
+    warnings: list[str] = []
+    tr = trip_request.model_dump() if hasattr(trip_request, "model_dump") else (trip_request or {})
+    for item in raw_calls or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if name != "search_flights":
+            warnings.append(f"未知 tool {name or '?'}，已忽略")
+            continue
+        args = item.get("args") if isinstance(item.get("args"), dict) else {}
+        origin = _norm_place(str(args.get("origin") or tr.get("departure") or ""))
+        destination = _norm_place(str(args.get("destination") or tr.get("destination") or ""))
+        date = str(args.get("date") or tr.get("date_start") or "").strip()[:10]
+        return_date = args.get("return_date") or tr.get("date_end")
+        return_date_s = str(return_date).strip()[:10] if return_date else None
+        if not origin or not destination or not date or not _DATE_RE.match(date):
+            warnings.append("search_flights 缺少 origin/destination/date，已忽略（请在回复中追问）")
+            continue
+        if return_date_s and not _DATE_RE.match(return_date_s):
+            return_date_s = None
+        adults = args.get("adults")
+        try:
+            adults_n = int(adults) if adults is not None else int(tr.get("travelers") or 1)
+        except (TypeError, ValueError):
+            adults_n = 1
+        adults_n = max(1, min(adults_n, 9))
+        pref = str(args.get("preference") or "balanced").strip().lower()
+        if pref not in _PREF:
+            pref = "balanced"
+        out.append(
+            ChatToolCallOut(
+                name="search_flights",
+                args={
+                    "origin": origin,
+                    "destination": destination,
+                    "date": date,
+                    "return_date": return_date_s,
+                    "adults": adults_n,
+                    "preference": pref,
+                },
+            )
+        )
+    return out, warnings
+
 
 GLOBAL_SYSTEM = f"""你是旅行规划助手。用户用中文描述行程需求（global 模式，尚未生成详细行程）。
 
@@ -27,7 +96,8 @@ GLOBAL_SYSTEM = f"""你是旅行规划助手。用户用中文描述行程需求
   "patches": [
     {{"action": "set", "field": "destination", "value": "亚庇", "summary": "目的地：亚庇"}},
     {{"action": "append", "field": "preference_tags", "value": "潜水", "summary": "偏好：潜水"}}
-  ]
+  ],
+  "tool_calls": []
 }}
 
 规则：
@@ -40,6 +110,7 @@ GLOBAL_SYSTEM = f"""你是旅行规划助手。用户用中文描述行程需求
 7. 用户说改去/换成另一城市 → action=fork_plan + fork_plan.destination
 8. 禁止 add_node、add_day、update_edge、禁止输出完整 Itinerary
 9. patches 可为空；reply 用中文
+10. 搜机票/查价：可填 tool_calls search_flights（见工具说明）；**严禁编造票价或航班时刻**
 """
 
 SUPPLEMENT_SYSTEM = f"""你是旅行规划助手。用户已有详细行程（supplement 模式）。
@@ -66,7 +137,8 @@ SUPPLEMENT_SYSTEM = f"""你是旅行规划助手。用户已有详细行程（su
       }},
       "summary": "第 2 天新增：滨海湾花园"
     }}
-  ]
+  ],
+  "tool_calls": []
 }}
 
 规则：
@@ -77,6 +149,7 @@ SUPPLEMENT_SYSTEM = f"""你是旅行规划助手。用户已有详细行程（su
 5. 不要输出完整 Itinerary；禁止 TripRequest 未定义字段
 6. 若提供了 selection，优先围绕该节点理解指代
 7. patches 可为空；reply 用中文
+8. 若用户要搜机票，可输出 tool_calls search_flights；**严禁编造票价**
 """
 
 
@@ -279,19 +352,24 @@ async def _fix_truncated_json_async(
     )
 
 
-async def _finalize_parse_response(
+def _build_parse_response(
     req: ChatParseRequest,
-    reply: str,
-    patches: list,
-    warnings: list[str],
-    dropped: int,
+    parsed: LLMParseToolResult,
 ) -> ChatParseResponse:
+    patches, warnings, dropped = process_llm_patches(
+        parsed.patches, req.chat_mode, req.trip_request, req.itinerary
+    )
+    tool_calls, tool_warnings = _sanitize_tool_calls(
+        [c.model_dump() if hasattr(c, "model_dump") else c for c in (parsed.tool_calls or [])],
+        req.trip_request,
+    )
     return ChatParseResponse(
-        reply=reply,
+        reply=parsed.reply,
         patches=patches,
-        warnings=warnings,
+        warnings=[*warnings, *tool_warnings],
         dropped_patch_count=dropped,
         chat_mode_used=req.chat_mode,
+        tool_calls=tool_calls,
     )
 
 
@@ -307,16 +385,7 @@ def parse_chat(req: ChatParseRequest, client: LLMClient) -> ChatParseResponse:
         endpoint="parse",
     )
     parsed = _validate_llm_result(raw, req.message, client, system)
-    patches, warnings, dropped = process_llm_patches(
-        parsed.patches, req.chat_mode, req.trip_request, req.itinerary
-    )
-    return ChatParseResponse(
-        reply=parsed.reply,
-        patches=patches,
-        warnings=warnings,
-        dropped_patch_count=dropped,
-        chat_mode_used=req.chat_mode,
-    )
+    return _build_parse_response(req, parsed)
 
 
 async def parse_chat_async(req: ChatParseRequest, client: LLMClient) -> ChatParseResponse:
@@ -331,12 +400,7 @@ async def parse_chat_async(req: ChatParseRequest, client: LLMClient) -> ChatPars
         endpoint="parse",
     )
     parsed = await _validate_llm_result_async(raw, req.message, client, system)
-    patches, warnings, dropped = process_llm_patches(
-        parsed.patches, req.chat_mode, req.trip_request, req.itinerary
-    )
-    return await _finalize_parse_response(
-        req, parsed.reply, patches, warnings, dropped
-    )
+    return _build_parse_response(req, parsed)
 
 
 async def parse_chat_stream_async(req: ChatParseRequest, client: LLMClient):
@@ -383,12 +447,7 @@ async def parse_chat_stream_async(req: ChatParseRequest, client: LLMClient):
         yield {"event": "progress", "data": {"step": "validate", "status": "fixing"}}
         parsed = await _validate_llm_result_async(raw, req.message, client, system)
 
-    patches, warnings, dropped = process_llm_patches(
-        parsed.patches, req.chat_mode, req.trip_request, req.itinerary
-    )
-    response = await _finalize_parse_response(
-        req, parsed.reply, patches, warnings, dropped
-    )
+    response = _build_parse_response(req, parsed)
     yield {"event": "result", "data": response.model_dump()}
 
 

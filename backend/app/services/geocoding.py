@@ -12,10 +12,17 @@ from app.data.city_aliases import country_code_for_destination, normalize_city
 from app.services.geocode_providers import (
     AutocompleteResult,
     GeocodeBias,
+    GeocodeHit,
     GeocodeProviderError,
     bbox_from_center,
+    haversine_km,
     run_autocomplete,
 )
+
+# 名称分与距离加权：约每 50km 扣 1 名称分，避免围栏内远距同名抢 Top1
+_GEOCODE_DIST_PENALTY_PER_KM = 0.02
+# 次优与最优名称分接近且更近时，标 low 促人工复核
+_GEOCODE_AMBIGUOUS_NAME_GAP = 0.5
 
 logger = logging.getLogger(__name__)
 
@@ -201,36 +208,101 @@ def _name_relevance(query: str, hit_name: str, hit_address: str) -> float:
     return 0.0
 
 
-def geocode_place(name: str, destination: str = "") -> dict[str, Any] | None:
-    """批量编码用：失败返回 None，不抛异常。"""
+def _candidate_score(
+    query: str,
+    hit: GeocodeHit,
+    *,
+    center_lat: float | None,
+    center_lng: float | None,
+) -> float:
+    """名称相关性 − 距目的地中心惩罚；无中心时退化为纯名称分。"""
+    name_score = _name_relevance(query, hit.name, hit.address)
+    if center_lat is None or center_lng is None:
+        return name_score
+    dist = haversine_km(center_lat, center_lng, hit.lat, hit.lng)
+    return name_score - dist * _GEOCODE_DIST_PENALTY_PER_KM
+
+
+def _pick_best_hit(
+    query: str,
+    hits: list[GeocodeHit],
+    *,
+    center_lat: float | None,
+    center_lng: float | None,
+) -> tuple[GeocodeHit, bool]:
+    """选融合分最高候选；名称近分的多候选标 ambiguous→low 促复核。"""
+    scored = [
+        (
+            _candidate_score(query, h, center_lat=center_lat, center_lng=center_lng),
+            _name_relevance(query, h.name, h.address),
+            h,
+        )
+        for h in hits
+    ]
+    scored.sort(key=lambda t: t[0], reverse=True)
+    _best_fused, best_name, best = scored[0]
+    ambiguous = any(
+        abs(best_name - name_s) <= _GEOCODE_AMBIGUOUS_NAME_GAP for _, name_s, _ in scored[1:]
+    )
+    return best, ambiguous
+
+
+def _hit_payload(
+    hit: GeocodeHit,
+    *,
+    fence_km: float | None,
+    destination: str,
+    ambiguous: bool,
+) -> dict[str, Any]:
+    conf = "medium"
+    if (fence_km is None and destination.strip()) or ambiguous:
+        conf = "low"
+    return {
+        "lat": hit.lat,
+        "lng": hit.lng,
+        "address": hit.address,
+        "coord_confidence": conf,
+        "coord_source": hit.coord_source,
+    }
+
+
+def geocode_place(
+    name: str,
+    destination: str = "",
+    *,
+    raise_on_provider_error: bool = False,
+) -> dict[str, Any] | None:
+    """批量编码用：失败默认返回 None。
+
+    HTTP `/geocode/search` 应传 ``raise_on_provider_error=True``，
+    避免上游全挂时被误报成 404。
+    """
     key = _cache_key(name, destination)
     if key in _GEOCODE_CACHE:
         return _GEOCODE_CACHE[key]
 
     try:
-        # 多候选 + 名称相关性，减轻围栏内同名错点
+        # 多候选 + 名称/距离融合，减轻围栏内同名错点
         result = geocode_autocomplete(name, destination, limit=5)
         if not result.results:
             hit: dict[str, Any] | None = None
         else:
-            best = max(
-                result.results,
-                key=lambda h: _name_relevance(name, h.name, h.address),
-            )
-            # 与 _apply_geocode_to_node 对齐：成功命中默认 medium；
-            # 仅当无距离围栏（中心解析失败降级）时标 low 促复核
             bias, fence_km, _ = _bias_for_destination(destination)
-            conf = "medium"
-            if fence_km is None and destination.strip():
-                conf = "low"
-            hit = {
-                "lat": best.lat,
-                "lng": best.lng,
-                "address": best.address,
-                "coord_confidence": conf,
-                "coord_source": best.coord_source,
-            }
+            best, ambiguous = _pick_best_hit(
+                name,
+                result.results,
+                center_lat=bias.lat if bias else None,
+                center_lng=bias.lng if bias else None,
+            )
+            hit = _hit_payload(
+                best,
+                fence_km=fence_km,
+                destination=destination,
+                ambiguous=ambiguous,
+            )
     except GeocodeProviderError as e:
+        if raise_on_provider_error:
+            raise
         logger.warning("geocode_place failed for %s: %s", name, e)
         hit = None
 
@@ -307,21 +379,19 @@ def _apply_geocode_to_node(node: dict[str, Any], destination: str) -> _GeocodeNo
         result = geocode_autocomplete(name, destination, limit=5)
         out_of_fence = result.rejected_out_of_fence > 0 and not result.results
         if result.results:
-            first = max(
+            bias, fence_km, _ = _bias_for_destination(destination)
+            first, ambiguous = _pick_best_hit(
+                name,
                 result.results,
-                key=lambda h: _name_relevance(name, h.name, h.address),
+                center_lat=bias.lat if bias else None,
+                center_lng=bias.lng if bias else None,
             )
-            _, fence_km, _ = _bias_for_destination(destination)
-            conf = "medium"
-            if fence_km is None and destination.strip():
-                conf = "low"
-            hit = {
-                "lat": first.lat,
-                "lng": first.lng,
-                "address": first.address,
-                "coord_confidence": conf,
-                "coord_source": first.coord_source,
-            }
+            hit = _hit_payload(
+                first,
+                fence_km=fence_km,
+                destination=destination,
+                ambiguous=ambiguous,
+            )
             node.update(hit)
             if len(_GEOCODE_CACHE) >= _GEOCODE_CACHE_MAX:
                 _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))

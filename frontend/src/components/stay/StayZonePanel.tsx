@@ -294,6 +294,8 @@ function StayZonePreferenceForm({
   preferences?: StayZonePreferences;
   onChange: (p: StayZonePreferences) => void;
 }) {
+  const updateTripRequest = usePlanStore((s) => s.updateTripRequest);
+  const hotelBudget = usePlanStore((s) => s.getActivePlan().trip_request.hotel_budget_per_night);
   const p = preferences ?? { transit: 1.0, minimize_hotel_moves: true, walk_tolerance: 'medium' };
   return (
     <div className="stay-zone__prefs">
@@ -316,6 +318,28 @@ function StayZonePreferenceForm({
           安全敏感
         </label>
       </FormRow>
+      <label className="stay-zone__budget">
+        <span>每晚预算上限（可选）</span>
+        <input
+          type="number"
+          min={0}
+          step={50}
+          placeholder="如 800"
+          value={hotelBudget ?? p.budget ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === '') {
+              updateTripRequest({ hotel_budget_per_night: undefined });
+              onChange({ ...p, budget: undefined });
+              return;
+            }
+            const n = Number(raw);
+            if (!Number.isFinite(n) || n < 0) return;
+            updateTripRequest({ hotel_budget_per_night: n });
+            onChange({ ...p, budget: n });
+          }}
+        />
+      </label>
     </div>
   );
 }

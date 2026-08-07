@@ -18,6 +18,7 @@ export const TRIP_REQUEST_FIELDS = [
   'day_count',
   'travelers',
   'budget_level',
+  'hotel_budget_per_night',
   'preference_tags',
   'notes',
 ] as const;
@@ -36,6 +37,9 @@ export const NODE_SETTABLE_FIELDS = [
   'tags',
   'cost_label',
   'cost',
+  'scene_group',
+  'duration_minutes',
+  'address',
 ] as const;
 
 export const DAY_WEATHER_FIELDS = [
@@ -104,6 +108,7 @@ export const FIELD_LABELS: Record<TripRequestField, string> = {
   day_count: '天数',
   travelers: '人数',
   budget_level: '预算',
+  hotel_budget_per_night: '每晚酒店预算',
   preference_tags: '偏好标签',
   notes: '备注',
 };
@@ -138,6 +143,12 @@ export function coerceTripRequestValue(
 
   if (field === 'day_count' || field === 'travelers') {
     return coercePositiveInt(value);
+  }
+
+  if (field === 'hotel_budget_per_night') {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : null;
   }
 
   if (field === 'budget_level') {

@@ -13,11 +13,16 @@ export class ItineraryApiError extends Error {
   }
 }
 
+export type GenerateMode = 'generate' | 'optimize' | 'regenerate';
+
 export interface GenerateItineraryOptions {
   /** 默认 false：首包快速返回，坐标由前端异步 geocode-nodes 补全 */
   geocode?: boolean;
   /** 已确认机酒锚点；generate Prompt 硬约束 */
   travel_intel?: TravelIntel | null;
+  /** FLOW-02 */
+  mode?: GenerateMode;
+  current_itinerary?: Itinerary | null;
 }
 
 export interface GenerateItineraryResult {
@@ -70,7 +75,14 @@ export async function generateItineraryStream(
   tripRequest: TripRequest,
   options?: GenerateItineraryOptions & GenerateStreamHandlers,
 ): Promise<GenerateItineraryResult> {
-  const { geocode = false, travel_intel, onProgress, onDelta } = options ?? {};
+  const {
+    geocode = false,
+    travel_intel,
+    mode = 'generate',
+    current_itinerary,
+    onProgress,
+    onDelta,
+  } = options ?? {};
   let result: GenerateItineraryResult | null = null;
 
   await consumeSsePost(
@@ -78,7 +90,9 @@ export async function generateItineraryStream(
     {
       trip_request: tripRequest,
       geocode,
+      mode,
       ...(travel_intel ? { travel_intel } : {}),
+      ...(current_itinerary ? { current_itinerary } : {}),
     },
     {
       onEvent: (event, data) => {
@@ -115,7 +129,11 @@ export async function generateItinerary(
     body: JSON.stringify({
       trip_request: tripRequest,
       geocode: options?.geocode ?? false,
+      mode: options?.mode ?? 'generate',
       ...(options?.travel_intel ? { travel_intel: options.travel_intel } : {}),
+      ...(options?.current_itinerary
+        ? { current_itinerary: options.current_itinerary }
+        : {}),
     }),
   });
 

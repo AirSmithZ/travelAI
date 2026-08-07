@@ -12,6 +12,8 @@ class TripRequestIn(BaseModel):
     day_count: Optional[int] = None
     travelers: Optional[int] = None
     budget_level: Optional[Literal["economy", "comfort", "luxury"]] = None
+    # HOT-03: 每晚酒店预算上限（与 budget_level 并存；有数字时优先）
+    hotel_budget_per_night: Optional[float] = Field(default=None, ge=0)
     preference_tags: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
 
@@ -60,6 +62,7 @@ FIELD_LABELS: dict[str, str] = {
     "day_count": "天数",
     "travelers": "人数",
     "budget_level": "预算",
+    "hotel_budget_per_night": "每晚酒店预算",
     "preference_tags": "偏好标签",
     "notes": "备注",
 }
@@ -80,12 +83,20 @@ class FormPatchOut(BaseModel):
     fork_plan: Optional[ForkPlanPatch] = None
 
 
+class ChatToolCallOut(BaseModel):
+    """B-FLT-01: client-executed tools (e.g. search_flights). Not FormPatch."""
+
+    name: Literal["search_flights"]
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
 class ChatParseResponse(BaseModel):
     reply: str
     patches: list[FormPatchOut]
     warnings: list[str] = Field(default_factory=list)
     dropped_patch_count: int = 0
     chat_mode_used: Literal["global", "supplement"]
+    tool_calls: list[ChatToolCallOut] = Field(default_factory=list)
 
 
 def expected_chat_mode(plan_phase: Literal["empty", "planning", "detailed"]) -> Literal["global", "supplement"]:

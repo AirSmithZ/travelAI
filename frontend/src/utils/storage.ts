@@ -48,10 +48,11 @@ export function loadPlansFromStorage(): StoragePayload | null {
 
     const leftPanelMode =
       'left_panel_mode' in data &&
-      (        data.left_panel_mode === 'chat' ||
+      (data.left_panel_mode === 'chat' ||
         data.left_panel_mode === 'form' ||
         data.left_panel_mode === 'flight' ||
-        data.left_panel_mode === 'stay')
+        data.left_panel_mode === 'stay' ||
+        data.left_panel_mode === 'evidence')
         ? data.left_panel_mode
         : undefined;
 

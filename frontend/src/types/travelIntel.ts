@@ -331,12 +331,7 @@ export function flightLegFromManualInput(
 }
 
 export function formatFlightLegSummary(leg: ConfirmedFlightLeg): string {
-  const roleLabel: Record<FlightLegRole, string> = {
-    outbound: '去程',
-    return: '回程',
-    intercity: '城际',
-    other: '航段',
-  };
+  const roleLabel = flightRoleLabel(leg.role);
   const route = formatLegRoute({
     route_label: leg.quote.route_label,
     origin_iata: leg.origin_iata,
@@ -352,5 +347,95 @@ export function formatFlightLegSummary(leg: ConfirmedFlightLeg): string {
         ? ' · 往返组合'
         : '';
   const tag = sourceTag ? ` · ${sourceTag}` : '';
-  return `${roleLabel[leg.role]} · ${route} · ${leg.airline}${flights}${price}${tag}`;
+  return `#${leg.sequence} · ${roleLabel} · ${route} · ${leg.airline}${flights}${price}${tag}`;
+}
+
+const ROLE_SORT: Record<FlightLegRole, number> = {
+  outbound: 0,
+  return: 1,
+  intercity: 2,
+  other: 3,
+};
+
+export function flightRoleLabel(role: FlightLegRole): string {
+  switch (role) {
+    case 'outbound':
+      return '去程';
+    case 'return':
+      return '回程';
+    case 'intercity':
+      return '城际';
+    default:
+      return '航段';
+  }
+}
+
+/** B-P3：按 sequence 排序（同序时去程→回程→城际） */
+export function sortFlightsBySequence(flights: ConfirmedFlightLeg[]): ConfirmedFlightLeg[] {
+  return [...flights].sort(
+    (a, b) => a.sequence - b.sequence || ROLE_SORT[a.role] - ROLE_SORT[b.role],
+  );
+}
+
+/** 写入后重排为连续 1..n */
+export function renumberFlightSequences(flights: ConfirmedFlightLeg[]): ConfirmedFlightLeg[] {
+  return sortFlightsBySequence(flights).map((f, i) =>
+    f.sequence === i + 1 ? f : { ...f, sequence: i + 1 },
+  );
+}
+
+export interface NextFlightLegSuggestion {
+  role: FlightLegRole;
+  origin: string;
+  destination: string;
+  /** 清空返程日，强制单程搜下一段 */
+  clearReturnDate: boolean;
+  hint: string;
+}
+
+/**
+ * B-P3-01/02：根据已确认航段建议下一段 OD / role。
+ * 无航段 → 去程；有去无回 → 回程反转；否则 → 城际（起点=上一段到达）。
+ */
+export function suggestNextFlightLeg(
+  flights: ConfirmedFlightLeg[],
+  trip?: {
+    departure?: string | null;
+    destination?: string | null;
+    date_end?: string | null;
+  },
+): NextFlightLegSuggestion {
+  const sorted = sortFlightsBySequence(flights);
+  if (sorted.length === 0) {
+    return {
+      role: 'outbound',
+      origin: (trip?.departure ?? '').trim(),
+      destination: (trip?.destination ?? '').trim(),
+      clearReturnDate: false,
+      hint: '模板：去程（可填返程日搜往返）',
+    };
+  }
+
+  const hasOutbound = sorted.some((f) => f.role === 'outbound');
+  const hasReturn = sorted.some((f) => f.role === 'return');
+  const outbound = sorted.find((f) => f.role === 'outbound');
+
+  if (hasOutbound && !hasReturn && outbound) {
+    return {
+      role: 'return',
+      origin: outbound.dest_iata,
+      destination: outbound.origin_iata,
+      clearReturnDate: true,
+      hint: '建议：回程（已反转去程 OD）',
+    };
+  }
+
+  const last = sorted[sorted.length - 1]!;
+  return {
+    role: 'intercity',
+    origin: last.dest_iata,
+    destination: '',
+    clearReturnDate: true,
+    hint: `建议：城际（自 ${last.dest_iata} 继续）`,
+  };
 }

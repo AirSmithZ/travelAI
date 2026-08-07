@@ -9,6 +9,8 @@ export interface TripRequest {
   day_count?: number;
   travelers?: number;
   budget_level?: BudgetLevel;
+  /** HOT-03: 每晚酒店预算上限（CNY 等，与 budget_level 并存） */
+  hotel_budget_per_night?: number;
   preference_tags: string[];
   notes?: string;
 }

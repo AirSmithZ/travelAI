@@ -8,11 +8,14 @@ from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
 from app.dependencies import get_llm_client
+from pydantic import ValidationError
+
 from app.schemas.itinerary import (
     GenerateItineraryRequest,
     GenerateItineraryResponse,
     GeocodeItineraryRequest,
     GeocodeItineraryResponse,
+    validate_itinerary_dict,
 )
 from app.services.geocoding import geocode_itinerary
 from app.services.itinerary_llm import generate_itinerary_async, generate_itinerary_stream_events
@@ -35,12 +38,30 @@ def _require_confirmed_flights(body: GenerateItineraryRequest) -> None:
         )
 
 
+def _require_generate_mode(body: GenerateItineraryRequest) -> None:
+    """FLOW-02: optimize needs current_itinerary; regenerate may omit but prefers it."""
+    if body.mode == "optimize" and not body.current_itinerary:
+        raise HTTPException(
+            status_code=400,
+            detail="optimize 模式需要 current_itinerary（现有行程骨架）",
+        )
+
+
+def _validated_itinerary(itinerary: dict) -> dict:
+    try:
+        return validate_itinerary_dict(itinerary)
+    except ValidationError as e:
+        logger.warning("itinerary schema validation failed: %s", e)
+        raise HTTPException(status_code=422, detail="行程结构校验失败") from e
+
+
 @router.post("/generate", response_model=GenerateItineraryResponse)
 async def generate_itinerary_endpoint(
     body: GenerateItineraryRequest,
     client: LLMClient | None = Depends(get_llm_client),
 ) -> GenerateItineraryResponse:
     _require_confirmed_flights(body)
+    _require_generate_mode(body)
     settings = get_settings()
     travel_intel = body.travel_intel.model_dump() if body.travel_intel else None
     itinerary, llm_ms, geocode_ms = await generate_itinerary_async(
@@ -49,9 +70,11 @@ async def generate_itinerary_endpoint(
         geocode=body.geocode,
         settings=settings,
         travel_intel=travel_intel,
+        mode=body.mode,
+        current_itinerary=body.current_itinerary,
     )
     return GenerateItineraryResponse(
-        itinerary=itinerary,
+        itinerary=_validated_itinerary(itinerary),
         llm_latency_ms=llm_ms,
         geocode_latency_ms=geocode_ms,
     )
@@ -64,6 +87,7 @@ async def generate_itinerary_stream_endpoint(
 ) -> StreamingResponse:
     """SSE：llm delta（preview）→ llm done → result。"""
     _require_confirmed_flights(body)
+    _require_generate_mode(body)
 
     async def event_generator():
         queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
@@ -82,8 +106,17 @@ async def generate_itinerary_stream_endpoint(
                     geocode=body.geocode,
                     settings=settings,
                     travel_intel=travel_intel,
+                    mode=body.mode,
+                    current_itinerary=body.current_itinerary,
                 ):
-                    await queue.put((item["event"], item["data"]))
+                    evt, data = item["event"], item["data"]
+                    if evt == "result" and isinstance(data.get("itinerary"), dict):
+                        try:
+                            data = {**data, "itinerary": validate_itinerary_dict(data["itinerary"])}
+                        except ValidationError as e:
+                            await queue.put(("error", {"detail": f"行程结构校验失败: {e}"}))
+                            return
+                    await queue.put((evt, data))
             except Exception as e:
                 logger.exception("generate/stream failed: %s", type(e).__name__)
                 await queue.put(("error", {"detail": str(e)}))
@@ -140,7 +173,10 @@ def geocode_itinerary_nodes_endpoint(body: GeocodeItineraryRequest) -> GeocodeIt
         max_workers=settings.geocode_max_workers,
     )
     geocode_ms = int((time.perf_counter() - started) * 1000)
-    return GeocodeItineraryResponse(itinerary=itinerary, geocode_latency_ms=geocode_ms)
+    return GeocodeItineraryResponse(
+        itinerary=_validated_itinerary(itinerary),
+        geocode_latency_ms=geocode_ms,
+    )
 
 
 @router.post("/geocode-nodes/stream")

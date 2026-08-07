@@ -16,6 +16,7 @@ import { ChatComposer } from './ChatComposer';
 import { ChatStatusBar } from './ChatStatusBar';
 import { PatchConfirmPanel } from './PatchConfirmPanel';
 import { getChatModeLabel, parseDemoChat } from './chatDemo';
+import { executeChatToolCalls } from './executeChatToolCalls';
 import type { ChatMode, ChatParseSelection } from '../../types/travelPlan';
 import './Chat.css';
 
@@ -163,6 +164,8 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
         ...(patches.length > 0 ? { patches, patch_status: 'pending' as const } : {}),
       });
 
+      const toolResult = await executeChatToolCalls(result.tool_calls);
+
       if (patches.length > 0) {
         addPendingPatches(patches);
         const conflictNote =
@@ -178,12 +181,26 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
         showToast(
           `已解析 ${patches.length} 项修改，请在消息中查看摘要并展开确认${conflictNote}${warnNote}`,
         );
+      } else if (toolResult.searched) {
+        if (toolResult.found > 0) {
+          showToast(`已搜索到 ${toolResult.found} 条航班报价，请在左侧机票面板确认`);
+        } else {
+          showToast(toolResult.error ?? '未找到航班报价', 'warning');
+        }
       } else {
         const warnMsg =
           droppedNote ||
           result.warnings?.join('；') ||
           '解析完成，但未提取到可写入的字段，请补充目的地、天数等信息';
-        showToast(warnMsg, droppedNote || (result.warnings?.length ?? 0) > 0 ? 'warning' : 'warning');
+        showToast(warnMsg, 'warning');
+      }
+
+      if (patches.length > 0 && toolResult.searched) {
+        if (toolResult.found > 0) {
+          showToast(`同时已搜索到 ${toolResult.found} 条航班报价`);
+        } else if (toolResult.error) {
+          showToast(toolResult.error, 'warning');
+        }
       }
     } catch (err) {
       setStreamingHint(null);

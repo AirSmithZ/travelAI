@@ -321,6 +321,41 @@ def test_name_relevance_picks_better_match():
     print("name relevance OK")
 
 
+def test_candidate_score_prefers_nearer_same_name():
+    """GEO-08：同名分时更近中心者胜出。"""
+    from app.services.geocode_providers import GeocodeHit
+    from app.services.geocoding import _candidate_score, _pick_best_hit
+
+    near = GeocodeHit(
+        name="中央车站",
+        address="near",
+        lat=1.30,
+        lng=103.85,
+        place_id="near",
+        coord_source="test",
+    )
+    far = GeocodeHit(
+        name="中央车站",
+        address="far",
+        lat=2.20,
+        lng=103.85,
+        place_id="far",
+        coord_source="test",
+    )
+    center_lat, center_lng = 1.28, 103.85
+    assert _candidate_score(
+        "中央车站", near, center_lat=center_lat, center_lng=center_lng
+    ) > _candidate_score(
+        "中央车站", far, center_lat=center_lat, center_lng=center_lng
+    )
+    best, ambiguous = _pick_best_hit(
+        "中央车站", [far, near], center_lat=center_lat, center_lng=center_lng
+    )
+    assert best.place_id == "near"
+    assert ambiguous is True  # 同名近分 → low 促复核
+    print("candidate score + distance OK")
+
+
 def main() -> None:
     test_haversine_singapore_changi()
     test_filter_fence_keeps_near_rejects_far()
@@ -332,6 +367,7 @@ def main() -> None:
     test_geocode_place_accepts_in_fence()
     test_country_only_filters_wrong_country()
     test_name_relevance_picks_better_match()
+    test_candidate_score_prefers_nearer_same_name()
     print("all geocode fence tests passed")
 
 

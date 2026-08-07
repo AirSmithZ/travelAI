@@ -37,6 +37,9 @@ NODE_SETTABLE_FIELDS: frozenset[str] = frozenset(
         "tags",
         "cost_label",
         "cost",
+        "scene_group",
+        "duration_minutes",
+        "address",
     }
 )
 
@@ -86,9 +89,15 @@ class LLMPatchItem(BaseModel):
     fork_plan: dict[str, Any] | None = None
 
 
+class LLMParseToolCall(BaseModel):
+    name: str
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
 class LLMParseToolResult(BaseModel):
     reply: str
     patches: list[LLMPatchItem] = Field(default_factory=list)
+    tool_calls: list[LLMParseToolCall] = Field(default_factory=list)
 
 
 def form_patch_tool_schema_doc() -> str:
@@ -97,11 +106,17 @@ def form_patch_tool_schema_doc() -> str:
         "【update_trip_request 工具】仅允许 field："
         + ", ".join(sorted(TRIP_REQUEST_FIELDS))
         + "。preference_tags 必须用 action=append 且每次一个标签。"
-        " budget_level 仅 economy|comfort|luxury。"
+        " budget_level 仅 economy/comfort/luxury。"
         " 禁止返回 TripRequest 以外的字段名。"
         "\n【update_itinerary 工具】supplement 模式：add_node / update_edge / 节点 set。"
         f" add_node.node 仅允许：{', '.join(sorted(NODE_SETTABLE_FIELDS))}。"
         f" update_edge.patch 仅允许：{', '.join(sorted(EDGE_PATCHABLE_FIELDS))}。"
+        "\n【search_flights 工具】用户明确要求搜机票/查价时，可另输出 tool_calls："
+        '[{"name":"search_flights","args":{"origin":"PVG","destination":"SIN","date":"2026-10-16",'
+        '"return_date":null,"adults":1,"preference":"balanced"}}]。'
+        " origin/destination 优先 IATA 三字码；date 为 YYYY-MM-DD。"
+        " **禁止在 reply 或 patches 中编造票价、航班号或时刻**；真实报价由后端 Ignav 返回。"
+        " 缺 OD 或日期时不要发 tool_calls，只在 reply 追问。"
     )
 
 
@@ -152,6 +167,15 @@ def coerce_trip_request_value(field: str, action: str, value: Any) -> Any | None
 
     if field in ("day_count", "travelers"):
         return _coerce_positive_int(value)
+
+    if field == "hotel_budget_per_night":
+        if value is None or value == "":
+            return None
+        try:
+            n = float(value)
+        except (TypeError, ValueError):
+            return None
+        return n if n >= 0 else None
 
     if field == "budget_level":
         if value is None:

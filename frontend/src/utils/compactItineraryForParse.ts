@@ -18,6 +18,11 @@ export function compactItineraryForParse(itinerary: Itinerary): Record<string, u
         end_time: n.end_time,
         is_optional: n.is_optional,
         region: n.region,
+        tips: n.tips,
+        cost_label: n.cost_label,
+        scene_group: n.scene_group,
+        duration_minutes: n.duration_minutes,
+        address: n.address,
       })),
       edges: day.edges.map((e) => ({
         id: e.id,

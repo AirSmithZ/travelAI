@@ -57,6 +57,14 @@ export interface ItineraryMeta {
   locale: 'zh-CN';
   warnings: string[];
   evidence?: ItineraryEvidenceItem[];
+  /** B-P4-04 / FLOW-02 */
+  flight_quote_ids?: string[];
+  intel_fingerprint?: string;
+  intel_snapshot?: {
+    flights: unknown[];
+    hotels: unknown[];
+    zones: unknown[];
+  };
 }
 
 export interface ItineraryNode {

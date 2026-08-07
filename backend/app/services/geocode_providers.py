@@ -230,18 +230,141 @@ def _photon_address(props: dict[str, Any]) -> str:
     return ", ".join(parts) if parts else str(props.get("name") or "")
 
 
+# ISO → 英文国名，拼进 SerpApi 查询以偏置结果（无 ll 时）
+_SERPAPI_CC_HINT: dict[str, str] = {
+    "sg": "Singapore",
+    "jp": "Japan",
+    "th": "Thailand",
+    "kr": "South Korea",
+    "my": "Malaysia",
+    "id": "Indonesia",
+    "hk": "Hong Kong",
+    "tw": "Taiwan",
+    "cn": "China",
+    "fr": "France",
+    "gb": "United Kingdom",
+    "us": "United States",
+    "au": "Australia",
+}
+
+
+class SerpApiMapsProvider(GeocodeProvider):
+    """SerpApi Google Maps engine — L1 主源（治本：稳商用检索，非 Mock）。"""
+
+    name = "serpapi"
+
+    def __init__(self, settings: Settings) -> None:
+        self._api_key = (settings.serpapi_api_key or "").strip()
+        self._base = (settings.serpapi_base_url or "https://serpapi.com").rstrip("/")
+        self._timeout = float(settings.serpapi_timeout_sec)
+
+    def autocomplete(
+        self,
+        query: str,
+        *,
+        limit: int,
+        bias: GeocodeBias | None = None,
+    ) -> list[GeocodeHit]:
+        if not self._api_key:
+            return []
+
+        q = (query or "").strip()
+        if not q:
+            return []
+        if bias and bias.country_code:
+            hint = _SERPAPI_CC_HINT.get(bias.country_code.lower())
+            if hint and hint.lower() not in q.lower():
+                q = f"{q} {hint}"
+
+        params: dict[str, Any] = {
+            "engine": "google_maps",
+            "q": q,
+            "type": "search",
+            "hl": "en",
+            "api_key": self._api_key,
+        }
+        if bias and bias.lat is not None and bias.lng is not None:
+            params["ll"] = f"@{bias.lat},{bias.lng},14z"
+
+        url = f"{self._base}/search.json"
+        with httpx.Client(timeout=self._timeout) as client:
+            resp = client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+        if not isinstance(data, dict):
+            return []
+        if data.get("error"):
+            raise httpx.HTTPError(f"serpapi error: {data.get('error')}")
+
+        return _parse_serpapi_maps(data, limit=limit, bias=bias)
+
+
+def _parse_serpapi_maps(
+    data: dict[str, Any],
+    *,
+    limit: int,
+    bias: GeocodeBias | None,
+) -> list[GeocodeHit]:
+    raw_items: list[dict[str, Any]] = []
+    place = data.get("place_results")
+    if isinstance(place, dict):
+        raw_items.append(place)
+    local = data.get("local_results")
+    if isinstance(local, list):
+        raw_items.extend(x for x in local if isinstance(x, dict))
+
+    cc = bias.country_code.lower() if bias and bias.country_code else None
+    hits: list[GeocodeHit] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        gps = item.get("gps_coordinates") if isinstance(item.get("gps_coordinates"), dict) else {}
+        try:
+            lat = float(gps.get("latitude"))
+            lng = float(gps.get("longitude"))
+        except (TypeError, ValueError):
+            continue
+        title = str(item.get("title") or item.get("name") or "").strip()
+        if not title:
+            continue
+        address = str(item.get("address") or "").strip()
+        place_id = str(item.get("place_id") or item.get("data_id") or "")
+        key = place_id or f"{lat:.5f},{lng:.5f}"
+        if key in seen:
+            continue
+        seen.add(key)
+        hits.append(
+            GeocodeHit(
+                name=title,
+                address=address or title,
+                lat=lat,
+                lng=lng,
+                place_id=place_id,
+                coord_source="serpapi",
+                country_code=cc,
+            )
+        )
+        if len(hits) >= limit:
+            break
+    return hits
+
+
 def _build_providers(settings: Settings) -> list[GeocodeProvider]:
     registry: dict[str, type[GeocodeProvider]] = {
+        "serpapi": SerpApiMapsProvider,
         "nominatim": NominatimProvider,
         "photon": PhotonProvider,
     }
     providers: list[GeocodeProvider] = []
     for token in settings.geocode_provider_chain:
         cls = registry.get(token)
-        if cls:
-            providers.append(cls(settings))
-        else:
+        if not cls:
             logger.warning("unknown geocode provider: %s", token)
+            continue
+        if token == "serpapi" and not settings.serpapi_configured:
+            logger.debug("skip serpapi: SERPAPI_API_KEY not set")
+            continue
+        providers.append(cls(settings))
     return providers
 
 

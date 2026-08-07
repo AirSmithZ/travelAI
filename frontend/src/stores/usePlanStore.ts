@@ -5,8 +5,9 @@ import type { FormPatch, TravelPlan, ChatMode } from '../types/travelPlan';
 import type { TripRequest } from '../types/tripRequest';
 import type { FlightLegRole, FlightSearchSession, ManualFlightLegInput } from '../types/travelIntel';
 import {
-  flightLegFromManualInput,
   flightLegsFromQuote,
+  flightLegFromManualInput,
+  renumberFlightSequences,
   syncFlightSearchAfterLegRemoval,
   syncTravelIntelStatus,
 } from '../types/travelIntel';
@@ -89,7 +90,7 @@ export type EditorTarget =
   | { kind: 'form'; focus: 'day'; dayIndex: number }
   | { kind: 'form'; focus: 'region'; regionName: string };
 
-export type LeftPanelMode = 'chat' | 'flight' | 'stay' | 'form';
+export type LeftPanelMode = 'chat' | 'flight' | 'stay' | 'form' | 'evidence';
 
 export interface AddHotelFromZoneInput {
   name: string;
@@ -113,6 +114,8 @@ interface PlanState {
   /** 表头 / 区域轨编辑目标（与 node/edge 互斥） */
   editorTarget: EditorTarget | null;
   leftPanelMode: LeftPanelMode;
+  /** UX-14：无 itinerary 时用户手动展开右侧预览 */
+  previewExpandedWithoutItinerary: boolean;
   /** 地图选点校准目标节点（§3.6 方式 B） */
   mapPickNodeId: string | null;
   /** 住宿片区卡片 hover / 选中，驱动地图高亮 */
@@ -142,7 +145,9 @@ interface PlanState {
 
   updateTripRequest: (partial: Partial<TripRequest>) => void;
   setItinerary: (itinerary: Itinerary | null) => void;
-  generateItinerary: () => Promise<'api' | 'mock' | 'blocked'>;
+  generateItinerary: (
+    mode?: import('../api/itinerary').GenerateMode,
+  ) => Promise<'api' | 'mock' | 'blocked'>;
   maybeAutoGenerateItinerary: () => Promise<'api' | 'mock' | 'skipped' | 'blocked'>;
   setFlightSearchResult: (session: FlightSearchSession) => void;
   mergeFlightSearchResult: (patch: Partial<FlightSearchSession>) => void;
@@ -183,6 +188,7 @@ interface PlanState {
   removeCrossDayEdge: (edgeId: string) => void;
 
   setLeftPanelMode: (mode: LeftPanelMode) => void;
+  setPreviewExpandedWithoutItinerary: (expanded: boolean) => void;
 
   addChatMessage: (
     role: 'user' | 'assistant',
@@ -240,6 +246,15 @@ export function selectLeftPanelCollapsed(state: PlanState): boolean {
   if (state.graphViewMode === 'overview') return true;
   if (state.activeView === 'map') return true;
   return false;
+}
+
+/** UX-14：无路线图时折叠右侧预览；有 itinerary 或用户手动展开时展开 */
+export function selectPreviewCollapsed(state: PlanState): boolean {
+  const itinerary = selectActiveItinerary(state);
+  const hasItinerary = Boolean(itinerary?.days?.length);
+  if (hasItinerary) return false;
+  if (state.previewExpandedWithoutItinerary) return false;
+  return true;
 }
 
 function runBackgroundGeocode(
@@ -314,6 +329,7 @@ export const usePlanStore = create<PlanState>()(
     selectedEdgeId: null,
     editorTarget: null,
     leftPanelMode: initial.leftPanelMode,
+    previewExpandedWithoutItinerary: false,
     mapPickNodeId: null,
     selectedStayZoneId: null,
     exportOverviewCapture: false,
@@ -534,10 +550,14 @@ export const usePlanStore = create<PlanState>()(
       );
     },
 
-    generateItinerary: async () => {
+    generateItinerary: async (mode = 'generate') => {
       const p = get().getActivePlan();
       if (p.travel_intel.flights.length === 0) {
         useToastStore.getState().show('请先确认航班后再生成玩法行程', 'warning');
+        return 'blocked';
+      }
+      if (mode === 'optimize' && !p.itinerary) {
+        useToastStore.getState().show('优化适配需要已有行程', 'warning');
         return 'blocked';
       }
       const hasHotels = p.travel_intel.hotels.length > 0;
@@ -555,6 +575,9 @@ export const usePlanStore = create<PlanState>()(
         const { itinerary, llmLatencyMs } = await generateItineraryStream(p.trip_request, {
           geocode: false,
           travel_intel: p.travel_intel,
+          mode,
+          current_itinerary:
+            mode === 'optimize' || mode === 'regenerate' ? p.itinerary : null,
           onDelta: (preview) => {
             set((s) => ({
               generationProgress: {
@@ -589,6 +612,9 @@ export const usePlanStore = create<PlanState>()(
             .getState()
             .show(`已参考 ${evidenceCount} 条公开笔记印证（非票价）`, 'info');
         }
+        const modeLabel =
+          mode === 'optimize' ? '已优化适配机酒' : mode === 'regenerate' ? '已按新机酒重构' : null;
+        if (modeLabel) useToastStore.getState().show(modeLabel, 'info');
         const dest = p.trip_request.destination?.trim();
         if (dest) {
           runBackgroundGeocode(set, itinerary, dest, llmLatencyMs);
@@ -597,6 +623,11 @@ export const usePlanStore = create<PlanState>()(
         }
         return 'api';
       } catch {
+        if (mode !== 'generate') {
+          set({ isGeneratingItinerary: false, generationProgress: idleProgress });
+          useToastStore.getState().show('行程更新失败，请稍后重试', 'error');
+          return 'blocked';
+        }
         set((s) =>
           updateActivePlan(s, (plan) => {
             const itinerary = buildMockItinerary(plan.trip_request);
@@ -673,7 +704,7 @@ export const usePlanStore = create<PlanState>()(
             ...p,
             travel_intel: syncTravelIntelStatus({
               ...p.travel_intel,
-              flights,
+              flights: renumberFlightSequences(flights),
               last_flight_search: {
                 ...session,
                 confirmed_quote_id: quoteId,
@@ -683,9 +714,12 @@ export const usePlanStore = create<PlanState>()(
           };
         }),
       );
-      set({ leftPanelMode: 'form' });
+      // B-P3：留在航班面板，便于添加下一段 / 城际
+      set({ leftPanelMode: 'flight' });
       useToastStore.getState().show(
-        isRoundTrip ? '已确认往返航段，已切换到行程编辑' : '已确认航班航段，已切换到行程编辑',
+        isRoundTrip
+          ? '已确认往返航段，可继续添加城际或前往住宿'
+          : '已确认航段，可继续添加下一段或前往住宿',
         'info',
       );
     },
@@ -710,12 +744,15 @@ export const usePlanStore = create<PlanState>()(
 
           return {
             ...p,
-            travel_intel: syncTravelIntelStatus({ ...p.travel_intel, flights }),
+            travel_intel: syncTravelIntelStatus({
+              ...p.travel_intel,
+              flights: renumberFlightSequences(flights),
+            }),
           };
         }),
       );
-      set({ leftPanelMode: 'form' });
-      useToastStore.getState().show('已添加航段，已切换到行程编辑', 'info');
+      set({ leftPanelMode: 'flight' });
+      useToastStore.getState().show('已添加航段，可继续添加下一段或前往住宿', 'info');
     },
 
     removeFlightLeg: (legId) => {
@@ -726,6 +763,7 @@ export const usePlanStore = create<PlanState>()(
           if (removed?.bundle_id) {
             flights = flights.filter((f) => f.bundle_id !== removed.bundle_id);
           }
+          flights = renumberFlightSequences(flights);
 
           const session = p.travel_intel.last_flight_search;
           const last_flight_search = session
@@ -743,16 +781,26 @@ export const usePlanStore = create<PlanState>()(
     },
 
     recommendStayZones: (zones, fetchedAt) => {
-      set((s) =>
-        updateActivePlan(s, (p) => ({
+      const hasGeometry = zones.some((z) => Boolean(z.geometry));
+      set((s) => {
+        const next = updateActivePlan(s, (p) => ({
           ...p,
           travel_intel: syncTravelIntelStatus({
             ...p.travel_intel,
             recommended_stay_zones: zones,
             stay_zones_fetched_at: fetchedAt,
           }),
-        })),
-      );
+        }));
+        // UX-14-05：有 geometry 时强制展开预览并切 map
+        if (hasGeometry) {
+          return {
+            ...next,
+            previewExpandedWithoutItinerary: true,
+            activeView: 'map' as const,
+          };
+        }
+        return next;
+      });
     },
 
     setStayZonePreferences: (prefs) => {
@@ -1276,6 +1324,8 @@ export const usePlanStore = create<PlanState>()(
     },
 
     setLeftPanelMode: (mode) => set({ leftPanelMode: mode }),
+    setPreviewExpandedWithoutItinerary: (expanded) =>
+      set({ previewExpandedWithoutItinerary: expanded }),
 
     setActiveDay: (index) =>
       set({

@@ -5,7 +5,10 @@ import type { FlightLegRole, ConfirmedFlightLeg } from '../../types/travelIntel'
 import {
   formatFlightLegSummary,
   flightIntelPanelBadgeLabel,
+  flightRoleLabel,
   getFlightIntelPanelPhase,
+  sortFlightsBySequence,
+  suggestNextFlightLeg,
 } from '../../types/travelIntel';
 import type { FlightQuote, RankPreference } from '../../types/flight';
 import {
@@ -87,7 +90,10 @@ function OfferCard({
         <span className="flight-intel__offer-airline">
           {roundTrip ? '往返组合' : offer.airline}
         </span>
-        <span className="flight-intel__offer-price">{formatPrice(offer)}</span>
+        <div className="flight-intel__offer-price-wrap">
+          <span className="flight-intel__offer-price">{formatPrice(offer)}</span>
+          <span className="flight-intel__offer-price-note">参考价，以 OTA 为准</span>
+        </div>
       </div>
 
       {offer.rank_reason && (
@@ -139,32 +145,38 @@ function ConfirmedFlightsSummary({
   flights,
   purchaseUrl,
   onContinue,
+  onAddNextLeg,
 }: {
   flights: ConfirmedFlightLeg[];
   purchaseUrl?: string;
   onContinue: () => void;
+  onAddNextLeg: () => void;
 }) {
-  const outbound = flights.find((f) => f.role === 'outbound');
-  const inbound = flights.find((f) => f.role === 'return');
+  const sorted = sortFlightsBySequence(flights);
+  const outbound = sorted.find((f) => f.role === 'outbound');
+  const inbound = sorted.find((f) => f.role === 'return');
   const isRoundTrip = Boolean(outbound && inbound && outbound.bundle_id === inbound.bundle_id);
-  const priceLeg = flights.find((f) => f.quote.price_amount > 0) ?? flights[0];
+  const priceLeg = sorted.find((f) => f.quote.price_amount > 0) ?? sorted[0];
+  const hasIntercity = sorted.some((f) => f.role === 'intercity');
 
   return (
     <div className="flight-intel__confirmed">
       <p className="flight-intel__confirmed-title">
-        {isRoundTrip ? '已选往返组合' : '已选航班'}
+        {isRoundTrip && !hasIntercity
+          ? '已选往返组合'
+          : `已确认 ${sorted.length} 段航班`}
         {priceLeg && priceLeg.quote.price_amount > 0 && (
           <span className="flight-intel__confirmed-price">{formatPrice(priceLeg.quote)}</span>
         )}
       </p>
-      {isRoundTrip && outbound && inbound ? (
+      {isRoundTrip && outbound && inbound && !hasIntercity ? (
         <div className="flight-intel__legs">
-          <LegMetaRow label="去程" leg={outbound.quote} />
-          <LegMetaRow label="回程" leg={inbound.quote} />
+          <LegMetaRow label={`#${outbound.sequence} 去程`} leg={outbound.quote} />
+          <LegMetaRow label={`#${inbound.sequence} 回程`} leg={inbound.quote} />
         </div>
       ) : (
         <ul className="flight-intel__confirmed-legs">
-          {flights.map((leg) => (
+          {sorted.map((leg) => (
             <li key={leg.id} className="flight-intel__confirmed-leg">
               {formatFlightLegSummary(leg)}
             </li>
@@ -184,6 +196,13 @@ function ConfirmedFlightsSummary({
         )}
         <button
           type="button"
+          className="form-btn form-btn--sm"
+          onClick={onAddNextLeg}
+        >
+          添加下一段
+        </button>
+        <button
+          type="button"
           className="form-btn form-btn--sm form-btn--primary"
           onClick={onContinue}
         >
@@ -199,9 +218,14 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
   const confirmFlightQuote = usePlanStore((s) => s.confirmFlightQuote);
   const removeFlightLeg = usePlanStore((s) => s.removeFlightLeg);
   const setLeftPanelMode = usePlanStore((s) => s.setLeftPanelMode);
+  const mergeFlightSearchResult = usePlanStore((s) => s.mergeFlightSearchResult);
 
   const tr = plan.trip_request;
   const intel = plan.travel_intel;
+  const sortedFlights = useMemo(
+    () => sortFlightsBySequence(intel.flights),
+    [intel.flights],
+  );
 
   const [origin, setOrigin] = useState(tr.departure ?? '');
   const [destination, setDestination] = useState(tr.destination ?? '');
@@ -212,6 +236,7 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
   const [role, setRole] = useState<FlightLegRole>('outbound');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templateHint, setTemplateHint] = useState<string | null>(null);
 
   const searchResult = intel.last_flight_search;
   const ranked = searchResult?.ranked ?? [];
@@ -223,6 +248,76 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
   const isRoundTripSearch = Boolean(returnDate.trim());
 
   const canSearch = origin.trim() && destination.trim() && date.trim();
+
+  function applyNextLegSuggestion(opts?: { forceIntercity?: boolean }) {
+    let suggestion = suggestNextFlightLeg(intel.flights, tr);
+
+    if (opts?.forceIntercity) {
+      if (intel.flights.length === 0) {
+        suggestion = {
+          role: 'intercity',
+          origin: (tr.destination ?? '').trim(),
+          destination: '',
+          clearReturnDate: true,
+          hint: '模板：城际 · 请填写下一段到达',
+        };
+      } else {
+        const last = sortFlightsBySequence(intel.flights).at(-1)!;
+        suggestion = {
+          role: 'intercity',
+          origin: last.dest_iata,
+          destination: '',
+          clearReturnDate: true,
+          hint: `模板：城际 · 自 ${last.dest_iata} 继续`,
+        };
+      }
+    }
+
+    if (suggestion.origin) setOrigin(suggestion.origin);
+    setDestination(suggestion.destination);
+    setRole(suggestion.role);
+    if (suggestion.clearReturnDate) setReturnDate('');
+    setTemplateHint(suggestion.hint);
+
+    if (searchResult?.hide_ranked) {
+      mergeFlightSearchResult({ hide_ranked: false, confirmed_quote_id: null });
+    }
+    setError(null);
+    setLeftPanelMode('flight');
+  }
+
+  function applyTemplate(kind: 'roundtrip' | 'multicity' | 'intercity') {
+    if (kind === 'roundtrip') {
+      setOrigin(tr.departure ?? origin);
+      setDestination(tr.destination ?? destination);
+      setDate(tr.date_start ?? date);
+      setReturnDate((tr.date_end ?? returnDate) || '');
+      setRole('outbound');
+      setTemplateHint('模板：往返 · 填写返程日一次确认两程');
+      if (searchResult?.hide_ranked) {
+        mergeFlightSearchResult({ hide_ranked: false, confirmed_quote_id: null });
+      }
+      return;
+    }
+    if (kind === 'multicity') {
+      if (intel.flights.length === 0) {
+        setReturnDate('');
+        setRole('outbound');
+        setOrigin(tr.departure ?? '');
+        setDestination(tr.destination ?? '');
+        setTemplateHint('模板：多城 · 先确认去程，再逐段添加城际');
+      } else {
+        applyNextLegSuggestion();
+        setTemplateHint('模板：多城 · 已预填下一段，确认后继续追加');
+      }
+      if (searchResult?.hide_ranked) {
+        mergeFlightSearchResult({ hide_ranked: false, confirmed_quote_id: null });
+      }
+      return;
+    }
+    // intercity (B-P3-02)
+    applyNextLegSuggestion({ forceIntercity: true });
+  }
 
   async function handleSearch() {
     if (!canSearch || loading) return;
@@ -282,8 +377,8 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
     if (isRoundTripSearch) {
       return `往返搜索 · ${formatPreference(preference)} · 结果含去程+回程组合价`;
     }
-    return `单程搜索 · ${formatPreference(preference)} · 填返程日即切换往返`;
-  }, [isRoundTripSearch, preference]);
+    return `单程搜索 · ${formatPreference(preference)} · ${flightRoleLabel(role)} · 填返程日即切换往返`;
+  }, [isRoundTripSearch, preference, role]);
 
   return (
     <section
@@ -294,7 +389,7 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
         <div className="flight-intel__head-text">
           <h3 className="flight-intel__title">航班确认</h3>
           <p className="flight-intel__desc">
-            App 内查价与确认；填返程日搜往返并一次确认两程。预订请用 Trip.com。
+            支持往返 / 多城 / 城际多段确认；预订请用 Trip.com。
           </p>
         </div>
         <span className={`flight-intel__badge flight-intel__badge--${panelPhase}`}>
@@ -307,14 +402,15 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
           flights={intel.flights}
           purchaseUrl={searchResult?.purchase_url}
           onContinue={() => setLeftPanelMode('stay')}
+          onAddNextLeg={() => applyNextLegSuggestion()}
         />
       )}
 
-      {intel.flights.length > 0 && (
+      {sortedFlights.length > 0 && (
         <div className="flight-intel__section">
-          <p className="flight-intel__label">已确认航段</p>
+          <p className="flight-intel__label">已确认航段（按顺序）</p>
           <ul className="flight-intel__leg-list">
-            {intel.flights.map((leg) => (
+            {sortedFlights.map((leg) => (
               <li key={leg.id} className="flight-intel__leg">
                 <span className="flight-intel__leg-summary">{formatFlightLegSummary(leg)}</span>
                 <div className="flight-intel__leg-actions">
@@ -343,6 +439,39 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
       )}
 
       <div className="flight-intel__form">
+        <div className="flight-intel__templates" role="group" aria-label="航段模板">
+          <button
+            type="button"
+            className="flight-intel__template-chip"
+            onClick={() => applyTemplate('roundtrip')}
+          >
+            往返
+          </button>
+          <button
+            type="button"
+            className="flight-intel__template-chip"
+            onClick={() => applyTemplate('multicity')}
+          >
+            多城
+          </button>
+          <button
+            type="button"
+            className="flight-intel__template-chip"
+            onClick={() => applyTemplate('intercity')}
+          >
+            城际
+          </button>
+          {sortedFlights.length > 0 && (
+            <button
+              type="button"
+              className="flight-intel__template-chip flight-intel__template-chip--accent"
+              onClick={() => applyNextLegSuggestion()}
+            >
+              添加下一段
+            </button>
+          )}
+        </div>
+        {templateHint && <p className="flight-intel__template-hint">{templateHint}</p>}
         <p className="flight-intel__mode-hint">{searchModeHint}</p>
         {(searchResult?.purchase_url || canSearch) && (
           <div className="flight-intel__trip-cta">
@@ -458,6 +587,9 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
               </a>
             )}
           </div>
+          <p className="flight-intel__disclaimer">
+            列表价为参考价（综合价/时长/中转/到达），下单以 Trip.com 等 OTA 实时价为准
+          </p>
           {searchResult.warnings[0] && (
             <p className="flight-intel__warning">{searchResult.warnings[0]}</p>
           )}

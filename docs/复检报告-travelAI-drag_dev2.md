@@ -44,9 +44,9 @@
 - 原：`fence_km=None` + `allow_bare_without_fence=True` → 放开裸名 Top1。  
 - 现：有目的地时禁止裸名全球 Top1；保留 `countrycodes` 过滤异国命中；无距离围栏时 `coord_confidence=low`。单测：`country-only filter OK`。
 
-### 🟠 P1 — 围栏内「近但错」（**属实 · 部分缓解**）
+### 🟠 P1 — 围栏内「近但错」（**属实 · 已修 GEO-08**）
 
-- 现：`geocode_place` / `_apply_geocode_to_node` 取 top5 + `_name_relevance` 选名。非完整语义排序，但优于盲信第 1 条。
+- 现：`_candidate_score` = 名称相关性 − 距中心惩罚；同名近分多候选 → `coord_confidence=low`。
 
 ### 🟡 P2 — 信心降级不一致（**属实 · 已修**）
 
@@ -58,8 +58,11 @@
 |----|------|
 | DATA-02～06 | 完整时区表、Mock 合一、Pydantic 出参、schema/FormPatch |
 | SEC-02 | 公网鉴权/限速 |
+| SEC-01b | 账号轮换 / 历史 blob 清洗 |
+| FLT-LETSFG | LetsFG 合规与去重（默认关闭） |
 | WX-* | 天气 stub（产品 ⏸） |
-| flight-spike 双源 | 维护债，非本轮必修 |
+
+> 残留项处置见 [残留漏洞分析报告](./残留漏洞分析报告-travelAI-drag_dev2-2026-08-07.md)（SEC-03 / GEO-08 已修）。
 
 ---
 
@@ -67,9 +70,10 @@
 
 1. ~~SEC-01 出库 nested Chrome~~ ✅ 索引；**SEC-01b** 账号轮换 / 历史清洗 🔲  
 2. ~~中心失败 countrycodes + 禁裸名~~ ✅  
-3. ~~名称相关性 + 信心统一~~ ✅（轻量）  
-4. DATA-02/03/04/06 契约收敛 🔲  
-5. SEC-02 上线前 🔲；flight-spike 归档策略 🔲  
+3. ~~名称相关性 + 信心统一~~ ✅ · ~~名称+距离融合 GEO-08~~ ✅  
+4. ~~SEC-03 提示注入隔离~~ ✅  
+5. DATA-02/03/04/06 契约收敛 🔲  
+6. SEC-02 上线前 🔲；FLT-LETSFG 🔲  
 
 ---
 
@@ -77,6 +81,7 @@
 
 - 上轮点名的 GEO / B-P4 / FLOW-01b / 深链：**真修好**。  
 - SEC-01：**曾只清根目录、误标完成**；nested 两份属实，**现已清出 index**。  
+- 残留轮：提示注入 / 近但错已修；letsfg 与部署鉴权仍开放。  
 - 数据契约与天气：计划内未清，非回归。
 
 ---
@@ -84,10 +89,10 @@
 ## 5. 本轮核验方法
 
 - `git ls-files \| rg edreams_chrome` → 复检时 390 → 修复后 0  
-- `PYTHONPATH=. python scripts/test_geocode_fence.py`（含 country-only / name relevance）  
+- `PYTHONPATH=. python scripts/test_geocode_fence.py`（含 country-only / name relevance / distance fusion）  
 - HTTP 运行记录：[20-L1L2运行验证记录.md](./llm-travel-data/20-L1L2运行验证记录.md)  
 - Security skill：`review-security` 子代理确认 nested 档案仍在磁盘且 TODO 曾谎报  
 
 ---
 
-*报告版本：v1.1 · 2026-08-07 · 含处置回写*
+*报告版本：v1.2 · 2026-08-07 · 含处置回写 · 外部审计草稿（非产品规格）*

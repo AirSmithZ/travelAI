@@ -38,6 +38,29 @@ def test_timezone_japan():
     assert _timezone_for_destination("东京") == "Asia/Tokyo"
 
 
+def test_timezone_table_coverage():
+    """DATA-02: aliases + keywords; no fragile short tokens like 'sin'."""
+    cases = [
+        ("新加坡", "Asia/Singapore"),
+        ("Singapore 4日", "Asia/Singapore"),
+        ("吉隆坡", "Asia/Kuala_Lumpur"),
+        ("普吉", "Asia/Bangkok"),
+        ("巴厘岛", "Asia/Jakarta"),
+        ("香港", "Asia/Hong_Kong"),
+        ("台北", "Asia/Taipei"),
+        ("巴黎", "Europe/Paris"),
+        ("伦敦", "Europe/London"),
+        ("纽约", "America/New_York"),
+        ("悉尼", "Australia/Sydney"),
+        ("未知小岛XYZ", "UTC"),
+        # "Casino" must NOT match old buggy "sin" substring
+        ("Casino Resort", "UTC"),
+    ]
+    for dest, expect in cases:
+        got = _timezone_for_destination(dest)
+        assert got == expect, f"{dest!r}: {got} != {expect}"
+
+
 def test_fallback_without_date_start_uses_today():
     tr = TripRequestIn(destination="新加坡", day_count=1)
     assert _parse_trip_start_date(tr) == date.today()
@@ -55,5 +78,6 @@ if __name__ == "__main__":
     test_parse_date_start()
     test_llm_to_itinerary_dates()
     test_timezone_japan()
+    test_timezone_table_coverage()
     test_fallback_without_date_start_uses_today()
     print("OK: itinerary date tests passed")

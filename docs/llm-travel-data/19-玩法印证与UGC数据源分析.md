@@ -132,9 +132,9 @@ L-price 多少钱          → Ignav / OTA / 深链（禁止网页摘要当价�
 | ID | 内容 | 优先级 |
 |----|------|--------|
 | **WS-01** | Tavily REST 客户端（已有） | P1 → 上调与玩法绑定后为 **P0′**（次于 GEO） |
-| **WS-04**（新） | generate 前组装 `EvidencePack` + `meta.evidence[]` | P1 |
+| **WS-04**（新） | generate 前组装 `EvidencePack` + `meta.evidence[]` | ✅ |
 | **WS-05**（新） | 目的地 query 模板 + `include_domains` 配置 | P1 |
-| **WS-06**（新） | 前端「参考依据」列表（不自动打开） | P1 |
+| **WS-06**（新） | 前端「参考依据」列表（不自动打开） | ✅ `EvidencePanel` + `leftPanelMode: evidence` |
 | **ACT-KB-01** | 高频城玩法卡人审 KB | P2 |
 
 ---

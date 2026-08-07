@@ -209,7 +209,14 @@ def recommend_stay_zones(
             flights=body.flights,
             prefs=prefs_dict,
         )
-        attach_purchase_url(z, adults=adults)
+        budget = tr.get("hotel_budget_per_night")
+        if budget is None and prefs_dict:
+            budget = prefs_dict.get("budget")
+        try:
+            max_price = float(budget) if budget is not None else None
+        except (TypeError, ValueError):
+            max_price = None
+        attach_purchase_url(z, adults=adults, max_price=max_price)
         if not z.get("geometry"):
             warnings.append(f"「{z.get('label')}」未能 geocode 枢纽，仅文本推荐")
         enriched.append(z)

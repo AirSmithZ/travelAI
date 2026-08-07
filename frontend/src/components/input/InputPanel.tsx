@@ -4,6 +4,7 @@ import { getFlightIntelPanelPhase } from '../../types/travelIntel';
 import { getStayZonePanelPhase, stayZonePanelBadgeLabel } from '../../types/stayZone';
 import type { EditorTarget } from '../../stores/usePlanStore';
 import { ChatPanel } from '../chat/ChatPanel';
+import { EvidencePanel } from '../evidence/EvidencePanel';
 import { FlightIntelPanel } from '../flight/FlightIntelPanel';
 import { StayZonePanel } from '../stay/StayZonePanel';
 import { ItineraryEditor } from './ItineraryEditor';
@@ -65,9 +66,12 @@ export function InputPanel() {
     }
   }, [plan.phase, leftPanelMode, setLeftPanelMode]);
 
+  const evidenceItems = itinerary?.meta?.evidence ?? [];
+  const evidenceCount = evidenceItems.length;
   const showChat = leftPanelMode === 'chat';
   const showFlight = leftPanelMode === 'flight' && plan.phase !== 'detailed';
   const showStay = leftPanelMode === 'stay' && plan.phase !== 'detailed';
+  const showEvidence = leftPanelMode === 'evidence';
   const showForm = leftPanelMode === 'form';
   const showPhaseBEntry = plan.phase !== 'detailed';
 
@@ -90,7 +94,9 @@ export function InputPanel() {
       ? 'input-panel--flight'
       : showStay
         ? 'input-panel--stay'
-        : 'input-panel--form';
+        : showEvidence
+          ? 'input-panel--evidence'
+          : 'input-panel--form';
 
   return (
     <aside className={`input-panel ${panelClass}`}>
@@ -127,6 +133,19 @@ export function InputPanel() {
         </button>
       )}
 
+      {showChat && evidenceCount > 0 && (
+        <button
+          type="button"
+          className="input-panel__form-strip input-panel__form-strip--evidence"
+          onClick={() => setLeftPanelMode('evidence')}
+        >
+          <span>参考依据</span>
+          <span className="input-panel__form-strip-hint">
+            {evidenceCount} 条公开笔记 · 自行打开
+          </span>
+        </button>
+      )}
+
       {showChat && (
         <button
           type="button"
@@ -136,6 +155,46 @@ export function InputPanel() {
           <span>行程编辑</span>
           <span className="input-panel__form-strip-hint">点击展开表单</span>
         </button>
+      )}
+
+      {showChat && !itinerary?.days?.length && (
+        <button
+          type="button"
+          className="input-panel__form-strip input-panel__form-strip--preview"
+          onClick={() => {
+            usePlanStore.getState().setPreviewExpandedWithoutItinerary(true);
+          }}
+        >
+          <span>路线预览</span>
+          <span className="input-panel__form-strip-hint">生成行程后可用 · 点击展开</span>
+        </button>
+      )}
+
+      {showEvidence && (
+        <>
+          <div className="input-panel__flight-scroll">
+            <EvidencePanel
+              items={evidenceItems}
+              onClose={() => setLeftPanelMode('chat')}
+            />
+          </div>
+          <footer className="input-panel__flight-foot">
+            <button
+              type="button"
+              className="input-panel__flight-btn"
+              onClick={() => setLeftPanelMode('chat')}
+            >
+              返回对话
+            </button>
+            <button
+              type="button"
+              className="input-panel__flight-btn input-panel__flight-btn--primary"
+              onClick={() => setLeftPanelMode('form')}
+            >
+              继续编辑行程
+            </button>
+          </footer>
+        </>
       )}
 
       {showFlight && (
@@ -228,6 +287,15 @@ export function InputPanel() {
                   onClick={() => setLeftPanelMode('stay')}
                 >
                   住宿片区
+                </button>
+              )}
+              {evidenceCount > 0 && (
+                <button
+                  type="button"
+                  className="input-panel__expand-chat"
+                  onClick={() => setLeftPanelMode('evidence')}
+                >
+                  参考依据 ({evidenceCount})
                 </button>
               )}
               <button

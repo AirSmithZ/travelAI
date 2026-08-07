@@ -11,6 +11,8 @@ import { FormField, FormInput, FormRow } from '../ui/FormField';
 import './NodeCoordEditor.css';
 
 const MIN_QUERY_LEN = 2;
+/** GEO-05: typing debounce for autocomplete (P65 / docs 问题日志) */
+const SEARCH_DEBOUNCE_MS = 400;
 
 interface NodeCoordEditorProps {
   node: ItineraryNode;
@@ -33,8 +35,11 @@ export function NodeCoordEditor({ node, destination, onApply }: NodeCoordEditorP
   const [manualLng, setManualLng] = useState(String(node.lng));
   const [providerHint, setProviderHint] = useState<string | null>(null);
   const requestSeq = useRef(0);
+  /** Skip debounce once after node sync so we don't auto-hit API on open */
+  const skipDebounceRef = useRef(true);
 
   useEffect(() => {
+    skipDebounceRef.current = true;
     setQuery(node.name);
     setManualLat(String(node.lat));
     setManualLng(String(node.lng));
@@ -106,6 +111,17 @@ export function NodeCoordEditor({ node, destination, onApply }: NodeCoordEditorP
     [destination, selectCandidate],
   );
 
+  useEffect(() => {
+    if (skipDebounceRef.current) {
+      skipDebounceRef.current = false;
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void runSearch(query);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [query, runSearch]);
+
   const applyPreview = () => {
     if (!preview) return;
     onApply(
@@ -149,7 +165,7 @@ export function NodeCoordEditor({ node, destination, onApply }: NodeCoordEditorP
         <div className="node-coord-editor__search-wrap">
           <FormInput
             value={query}
-            placeholder="输入地点名称"
+            placeholder="输入后自动联想，或点立即搜索"
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -160,6 +176,7 @@ export function NodeCoordEditor({ node, destination, onApply }: NodeCoordEditorP
           />
           {loading && <span className="node-coord-editor__search-loading">搜索中…</span>}
         </div>
+        <p className="node-coord-editor__search-hint">停顿约 0.4s 自动联想候选；也可 Enter / 立即搜索</p>
       </FormField>
 
       <div className="form-btn-row">
