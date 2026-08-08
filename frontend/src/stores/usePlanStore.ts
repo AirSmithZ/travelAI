@@ -80,7 +80,7 @@ import {
   syncIntelHotelFromNode,
 } from '../utils/hotelIntelSync';
 
-export type GenerationPhase = 'idle' | 'llm' | 'geocode' | 'evidence';
+export type GenerationPhase = 'idle' | 'llm' | 'geocode' | 'evidence' | 'weather';
 
 export interface GenerationProgress {
   phase: GenerationPhase;
@@ -737,6 +737,27 @@ export const usePlanStore = create<PlanState>()(
                         detail:
                           evt.status === 'done' && evt.count != null
                             ? `${evt.count} 条`
+                            : undefined,
+                      })
+                    : s.chatActivity,
+              }));
+              return;
+            }
+            if (evt.step === 'weather') {
+              set((s) => ({
+                generationProgress: {
+                  ...s.generationProgress,
+                  phase: 'weather',
+                },
+                chatActivity:
+                  s.chatActivity?.op === 'generate'
+                    ? patchActivityStep(s.chatActivity, 'weather', {
+                        status: evt.status === 'done' ? 'done' : 'running',
+                        detail:
+                          evt.status === 'done'
+                            ? evt.count
+                              ? `${evt.count} 天预报`
+                              : '无预报（跳过）'
                             : undefined,
                       })
                     : s.chatActivity,

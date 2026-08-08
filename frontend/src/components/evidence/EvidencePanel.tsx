@@ -19,7 +19,11 @@ function sourceLabel(source?: string): string {
 /** UX-EVD-01: 非官方免责 + 已核验 / 仅网友 */
 export function EvidencePanel({ items, poiCandidates = [], onClose }: EvidencePanelProps) {
   const verifiedCount = items.filter((i) => i.verified).length;
-  const ratedPois = poiCandidates.filter((p) => p.verified && (p.rating != null || p.place_types?.length));
+  const factPois = poiCandidates.filter(
+    (p) =>
+      p.verified &&
+      (p.rating != null || p.place_types?.length || p.hours_text || p.open_state),
+  );
 
   return (
     <section className="evidence-panel" aria-label="参考依据">
@@ -45,9 +49,9 @@ export function EvidencePanel({ items, poiCandidates = [], onClose }: EvidencePa
         )}
       </header>
 
-      {ratedPois.length > 0 && (
+      {factPois.length > 0 && (
         <ul className="evidence-panel__poi-list" aria-label="已核验地点">
-          {ratedPois.slice(0, 8).map((p) => (
+          {factPois.slice(0, 8).map((p) => (
             <li key={p.place_id || p.name} className="evidence-panel__poi">
               <span className="evidence-panel__poi-name">{p.display_name || p.name}</span>
               {p.rating != null && (
@@ -55,6 +59,11 @@ export function EvidencePanel({ items, poiCandidates = [], onClose }: EvidencePa
               )}
               {p.place_types?.[0] && (
                 <span className="evidence-panel__poi-type">{p.place_types[0]}</span>
+              )}
+              {(p.open_state || p.hours_text) && (
+                <span className="evidence-panel__poi-hours" title={p.hours_text || undefined}>
+                  {p.open_state || p.hours_text}
+                </span>
               )}
             </li>
           ))}

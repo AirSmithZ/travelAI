@@ -287,17 +287,37 @@ class SerpApiMapsProvider(GeocodeProvider):
             params["ll"] = f"@{bias.lat},{bias.lng},14z"
 
         url = f"{self._base}/search.json"
-        with httpx.Client(timeout=self._timeout) as client:
-            resp = client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        import time
 
-        if not isinstance(data, dict):
-            return []
-        if data.get("error"):
-            raise httpx.HTTPError(f"serpapi error: {data.get('error')}")
+        from app.services.api_usage import record_usage
 
-        return _parse_serpapi_maps(data, limit=limit, bias=bias)
+        t0 = time.perf_counter()
+        try:
+            with httpx.Client(timeout=self._timeout) as client:
+                resp = client.get(url, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+            ms = int((time.perf_counter() - t0) * 1000)
+            if not isinstance(data, dict):
+                record_usage("serpapi", "geocode", ok=False, latency_ms=ms, error="bad_json")
+                return []
+            if data.get("error"):
+                record_usage(
+                    "serpapi",
+                    "geocode",
+                    ok=False,
+                    latency_ms=ms,
+                    error=str(data.get("error"))[:200],
+                )
+                raise httpx.HTTPError(f"serpapi error: {data.get('error')}")
+            hits = _parse_serpapi_maps(data, limit=limit, bias=bias)
+            record_usage("serpapi", "geocode", ok=True, latency_ms=ms)
+            return hits
+        except Exception as e:
+            ms = int((time.perf_counter() - t0) * 1000)
+            if not isinstance(e, httpx.HTTPError) or "serpapi error" not in str(e):
+                record_usage("serpapi", "geocode", ok=False, latency_ms=ms, error=str(e)[:200])
+            raise
 
 
 def _parse_serpapi_maps(

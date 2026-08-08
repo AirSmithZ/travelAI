@@ -86,6 +86,12 @@ curl http://127.0.0.1:8000/health
 | `llm_configured: false` | 未配置 `DEEPSEEK_API_KEY`，对话/生成接口会 503 |
 | `llm_configured: true` | LLM 可用 |
 
+**API 用量看板（OPS-01 · 开发旁路）**：前端 Vite 启动后打开  
+`http://localhost:5173/ops.html`（主应用无入口）。  
+后端：`GET /api/v1/ops/usage` · `POST /api/v1/ops/usage/reset`。  
+**官方账户**：DeepSeek `/user/balance` · SerpAPI `/account.json` · Tavily `/usage` · TikHub `get_user_info` · 和风 `/finance/v1/summary`（需控制台开通财务权限）。  
+会话表仅计本进程 calls/latency；勿用旧 Est.$ 当账单。
+
 交互式文档（开发环境）：
 
 - Swagger UI：<http://127.0.0.1:8000/docs>

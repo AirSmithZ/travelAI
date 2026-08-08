@@ -45,6 +45,7 @@ export function createGenerateActivity(hasFlights: boolean): ChatActivitySession
     steps: [
       { id: 'ack', label: hasFlights ? '已确认航班与目的地' : '已受理生成请求', status: 'done' },
       { id: 'evidence', label: '检索玩法参考', status: 'pending' },
+      { id: 'weather', label: '拉取天气预报', status: 'pending' },
       { id: 'generate_llm', label: '生成日程', status: 'pending' },
       { id: 'geocode', label: '补全地图坐标', status: 'pending' },
     ],

@@ -18,6 +18,7 @@
 | **SEC-04** | ✅ | P3 | 外部 base_url：`https` + 主机 allowlist（field_validator）；单测 `test_sec04_allowlist.py` | `config.py` · [backend README](../../backend/README.md) |
 | **FLT-LETSFG** | ✅ | P2 | 默认关闭；主源 Ignav；合规/spike 边界已文档化 | `.env.example` · [backend README](../../backend/README.md) |
 | **GEO-06/07/08** | ✅ | — | 围栏降级 / 名称相关 / 距离融合 | [复检/残留报告](../复检报告-travelAI-drag_dev2.md) |
+| **OPS-01** | ✅ | P2 | 独立 `/ops.html` 用量看板：官方余额 API + 会话计数（主壳零入口） | `ops_provider_accounts.py` · `GET /api/v1/ops/usage` · [backend README](../../backend/README.md) |
 
 ---
 
@@ -93,8 +94,9 @@
 
 | ID | 状态 | 说明 |
 |----|------|------|
-| **WX-01/02** | ⏸ | 产品暂缓（预报；Geo 已用于 GEO-09） |
-| **WX-03/04** | 🔲 | Chat weather / rain_plan（等 WX-01） |
+| **WX-01** | ✅ | 和风每日预报 → generate 注入 + `days[].weather` source=api；雨日软约束 | [15 §1.3](./15-天气联网与决策Agent缺口分析.md) · `qweather_forecast.py` |
+| **WX-02** | ⏸ | 天气指数 / 预警增强（非主路径） | [15](./15-天气联网与决策Agent缺口分析.md) |
+| **WX-03/04** | 🔲 | Chat `fetch_weather` / rain_plan UI（等产品排期） | [15](./15-天气联网与决策Agent缺口分析.md) · OV-04 |
 | **WS-01/02/03/05** | 🔲 | Tavily 完整网页桶（authority soft-merge 已随 WS-09） |
 | **WS-04/06/07** | ✅ | EvidencePack + 侧栏 + TikHub（**成本决策：保留 TikHub 主源**，见 [21 §0.1](./21-Agent-Reach与玩法印证多源实施调研.md)） |
 | **WS-CACHE** | ✅ | EvidencePack TTL 缓存降本（`EVIDENCE_CACHE_TTL_SEC`） |
@@ -117,13 +119,13 @@
 
 **建议实施顺序**：
 
-1. ~~对话编排 Wave A/B/C~~ ✅ · ~~WS-09 / WS-08a/b / CACHE~~ ✅ · ~~B-P6-02 / B-FLT-06~~ ✅  
-2. **运维 / 商务**：`SEC-01b` · `HOT-01` · 部署前 `SEC-02`  
+1. ~~对话编排 Wave A/B/C~~ ✅ · ~~WS-09 / WS-08a/b / CACHE~~ ✅ · ~~WX-01 玩法可信度~~ ✅  
+2. **运维 / 商务**：`SEC-01b` · `HOT-01` · 部署前 `SEC-02`（~~`OPS-01`~~ ✅）  
 3. **扩张（按需）**：完整 Tavily 网页桶 `WS-01…` · `AG-02…` · KB skill（**保持 TikHub**；Reach 仅对照）  
-4. （⏸ 移动端 · WX · Exa/Agent-Reach 生产依赖 · P5b）  
+4. （⏸ 移动端 · WX-02/03 · Exa/Agent-Reach 生产依赖 · P5b）  
 
 > 对话为主 / 只读摘要见 [22](./22-对话编排与玩法印证UX调研.md)。印证多源见 [21](./21-Agent-Reach与玩法印证多源实施调研.md)。偏离复核见 [20 §6](./20-L1L2运行验证记录.md)。
 
 ---
 
-*清单版本：v1.15 · 2026-08-08 · Wave C + 可选增强已勾 · 变更请同步 [总索引](../TODO.md)*
+*清单版本：v1.17 · 2026-08-08 · WX-01 + OPS-01 · 变更请同步 [总索引](../TODO.md)*

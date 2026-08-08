@@ -182,3 +182,15 @@
   font-size: 11px;
   color: var(--text-dim);
 }
+
+.evidence-panel__poi-hours {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

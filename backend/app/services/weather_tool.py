@@ -1,8 +1,8 @@
 """
 天气查询 tool。
 
-Phase 1：接入和风天气（QWeather）— 见 docs/llm-travel-data/15 §1.3。
-Fallback：Open-Meteo / LLM 推断。当前仍为 stub。
+WX-01：和风每日预报见 ``qweather_forecast.fetch_trip_forecast``。
+对话 ``fetch_weather`` 确认 UI（WX-03）仍后续；当前 stub 保留给 Chat。
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def stub_fetch_weather(
     *,
     llm_weather: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Phase 0：优先使用 LLM 推断结果，否则返回占位。"""
+    """Phase 0 / Chat：优先使用 LLM 推断结果，否则返回占位。"""
     if llm_weather:
         icon = str(llm_weather.get("icon", "cloudy")).strip().lower()
         if icon not in WEATHER_ICONS:

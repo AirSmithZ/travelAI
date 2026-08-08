@@ -35,6 +35,8 @@
 
 | 域 | 里程碑 | 关联文档 |
 |----|--------|----------|
+| **OPS-01** | 独立 `/ops.html` API 用量看板（主壳零入口） | [llm TODO](./llm-travel-data/TODO.md) · [backend README](../backend/README.md) |
+| **玩法可信度** | `WX-01` 预报注入 · POI hours · 雨日/通勤 warnings | [15](./llm-travel-data/15-天气联网与决策Agent缺口分析.md) |
 | **Wave C + 可选增强** | `04/07` · FLT-CACHE · WS-08b · P6-02 · FLT-06 · GEN-01/02 · OV-01/02 | [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 | **印证 P1** | `WS-CACHE` · `WS-08a/b` · `UX-EVD-01`（**保留 TikHub**；Reach 仅 bench） | [21 §0.1](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 | **Wave B** | 只读摘要卡 · 生成 checklist · 低风险自动写+Undo · 确认本批 | [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
@@ -57,4 +59,4 @@
 
 ---
 
-*索引版本：v1.11 · 2026-08-08（Wave C + 可选增强）*
+*索引版本：v1.13 · 2026-08-08（WX-01 + OPS-01）*

@@ -1,0 +1,241 @@
+:root {
+  --ops-bg: #f6f4ef;
+  --ops-ink: #1c1a16;
+  --ops-muted: #6b6560;
+  --ops-line: #d9d2c5;
+  --ops-accent: #0f5c4c;
+  --ops-warn: #8a3b12;
+  --ops-card: #fffdf8;
+  --ops-font: "IBM Plex Sans", "Source Han Sans SC", "Noto Sans SC", sans-serif;
+  --ops-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ops-bg);
+  color: var(--ops-ink);
+  font-family: var(--ops-font);
+}
+
+.ops-usage {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+}
+
+.ops-usage__header {
+  margin-bottom: 20px;
+}
+
+.ops-usage__badge {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ops-muted);
+}
+
+.ops-usage__title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.ops-usage__desc {
+  margin: 0 0 14px;
+  max-width: 52rem;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ops-muted);
+}
+
+.ops-usage__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ops-usage__btn {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ops-accent);
+  background: var(--ops-card);
+  border: 1px solid color-mix(in srgb, var(--ops-accent) 35%, var(--ops-line));
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ops-usage__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ops-usage__btn--danger {
+  color: var(--ops-warn);
+  border-color: color-mix(in srgb, var(--ops-warn) 40%, var(--ops-line));
+}
+
+.ops-usage__error {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--ops-warn);
+  background: color-mix(in srgb, var(--ops-warn) 10%, var(--ops-card));
+  border-radius: 6px;
+}
+
+.ops-usage__meta {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--ops-muted);
+}
+
+.ops-usage__section {
+  margin-bottom: 28px;
+}
+
+.ops-usage__section h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ops-usage__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ops-muted);
+}
+
+.ops-usage__hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ops-muted);
+}
+
+.ops-usage__accounts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.ops-usage__acct {
+  padding: 12px;
+  background: var(--ops-card);
+  border: 1px solid var(--ops-line);
+  border-radius: 8px;
+}
+
+.ops-usage__acct--fail {
+  border-color: color-mix(in srgb, var(--ops-warn) 40%, var(--ops-line));
+}
+
+.ops-usage__acct-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.ops-usage__acct-sum {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.ops-usage__acct-src {
+  margin: 8px 0 0;
+  font-size: 10px;
+  color: var(--ops-muted);
+  font-family: var(--ops-mono);
+}
+
+.ops-usage__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: var(--ops-card);
+  border: 1px solid var(--ops-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ops-usage__table th,
+.ops-usage__table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--ops-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.ops-usage__table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ops-muted);
+  background: color-mix(in srgb, var(--ops-bg) 70%, var(--ops-card));
+}
+
+.ops-usage__row--warn td {
+  color: var(--ops-warn);
+}
+
+.ops-usage__events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--ops-mono);
+  font-size: 11px;
+}
+
+.ops-usage__events li {
+  display: grid;
+  grid-template-columns: 72px 80px 120px 40px 64px 1fr;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--ops-card);
+  border: 1px solid var(--ops-line);
+  border-radius: 4px;
+}
+
+.ops-usage__evt--fail {
+  border-color: color-mix(in srgb, var(--ops-warn) 45%, var(--ops-line));
+}
+
+.ops-usage__evt-time {
+  color: var(--ops-muted);
+}
+
+.ops-usage__evt-prov {
+  font-weight: 600;
+}
+
+.ops-usage__evt-err {
+  color: var(--ops-warn);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .ops-usage__events li {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ops-usage__table {
+    display: block;
+    overflow-x: auto;
+  }
+}

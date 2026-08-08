@@ -2,10 +2,9 @@
 
 ← [返回索引](./README.md) · [00-概述与架构](./00-概述与架构.md) · [总索引 TODO](../TODO.md) · [本域 TODO](./TODO.md)
 
-> **分析日期**：2026-08-06 · **版本**：v1.1  
-> **结论**：**是，四块均缺口明显**——天气仅 LLM 推断 stub；联网检索未接线；旅游决策 Agent（Planner）未落地；「决策 → 该拉什么数据源」缺统一矩阵。本文补齐分析与实施映射，开放项见 `AG-*` / `WX-*` / `WS-*`。  
-> **v1.1**：已选定和风 / Tavily 并写入 `.env`。  
-> **优先级纠偏（必读）**：能力扩张不等于当前主路线 — 见 **[16-产品能力优先级纠偏分析](./16-产品能力优先级纠偏分析.md)**（地址搜索与 B-P4 优先于本文 WX/WS/AG 大上线）。
+> **分析日期**：2026-08-06 · **版本**：v1.2  
+> **结论（历史）**：四块曾缺口明显。**v1.2 更新**：`WX-01` 和风每日预报已接入 generate（soft-fail）；Tavily authority soft-merge / Evidence 已部分落地；完整 Planner / Chat `fetch_weather`（WX-03）仍开放。  
+> **优先级纠偏（必读）**：见 **[16](./16-产品能力优先级纠偏分析.md)**。
 
 ---
 
@@ -13,7 +12,7 @@
 
 | 能力 | 设计文档位置 | 代码现状 | 缺口级别 |
 |------|--------------|----------|----------|
-| **天气查询** | [总览路线图 §7.3](../总览路线图实现分析.md)、`weather_tool.py` | Schema + 手动编辑 + LLM 填；**和风 Key 已入 `.env`，未接线**；对话 `fetch_weather` 未接通 | **高** |
+| **天气查询** | [总览路线图 §7.3](../总览路线图实现分析.md)、`weather_tool.py` | **WX-01 ✅** generate 前拉预报写入 `days[].weather`；对话 `fetch_weather`（WX-03）未接通 | **中**（对话 UI） |
 | **联网查询** | [项目分析 §7](../项目分析与设计文档.md)、[00 §3](./00-概述与架构.md) | **Tavily Key 已入 `.env`，未接线**；无 tool loop | **高** |
 | **旅游决策 Agent** | [00 §2–3 Planner 多 Agent](./00-概述与架构.md) | 单次 `chat/parse` + 单次 `itineraries/generate`；阶段 B 机酒为 **人机 Panel**，非 Agent 编排 | **高** |
 | **按决策选数据源** | 各专题 01～05 分散 | 航班 Ignav ✅、住宿 P5z ✅、其余专题多为文档；**无「决策树 → Tool → Provider」统一表** | **中高** |
@@ -264,9 +263,9 @@ curl -s https://api.tavily.com/search \
 | 飞哪班 / 何时到 | Flight / 用户 Panel | **Ignav** | LetsFG；手动腿 | `travel_intel.flights[]` | ✅ Panel |
 | 住哪片区 | Stay | LLM+score + Geocode circle | 粗推无 itinerary | `recommended_stay_zones` | ✅ P5z |
 | 订哪家酒店价 | Hotel OTA | Partner API | Trip deep link | `hotels[]` / 节点 | ⏸ P5b |
-| 今天室外还是室内？ | Weather | **和风天气**（QWeather） | Open-Meteo → LLM | `days[].weather` | ❌ Key 已配 |
-| 景点是否开放 / 需预约 | Activity | Places / 官方 / **Tavily** | KB YAML | `activity_detail` / tips | ❌ Key 已配 |
-| A→B 几分钟？ | Transit | OSRM / Directions / LTA | LLM 估 + warning | `edges.duration_minutes` | ❌ 估 |
+| 今天室外还是室内？ | Weather | **和风天气**（QWeather） | LLM | `days[].weather` | ✅ WX-01（Chat UI 仍缺） |
+| 景点是否开放 / 需预约 | Activity | Places / 官方 / **Tavily** | KB YAML | `activity_detail` / tips | ⚠️ Places hours soft（WS-08b） |
+| A→B 几分钟？ | Transit | OSRM / Directions / LTA | LLM 估 + warning | `edges.duration_minutes` | ⚠️ 通勤粗审计 warning |
 | 要不要办交通卡？ | Compliance/Transit | **目的地 YAML KB** | web_search 核验 | `meta.transit_cards[]` | ❌ 文档 |
 | 签证 / 入境 | Compliance | KB + 官方 URL | web_search | `pre_trip_checklist[]` | ❌ |
 | POI 坐标 | resolve_place | **Geocode** | Wikidata；地图点选 | `nodes.lat/lng` | ✅ |

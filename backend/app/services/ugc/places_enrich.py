@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
 
 from app.config import Settings, get_settings
+from app.services.api_usage import record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,7 @@ def enrich_poi_places(
         name = str(cand.get("name") or "").strip()
         if lat is None or lng is None or not name:
             continue
+        t0 = time.perf_counter()
         try:
             params = {
                 "engine": "google_maps",
@@ -56,12 +59,28 @@ def enrich_poi_places(
                 resp = client.get(f"{base}/search.json", params=params)
                 resp.raise_for_status()
                 data = resp.json()
+            ms = int((time.perf_counter() - t0) * 1000)
         except Exception as e:
+            record_usage(
+                "serpapi",
+                "places",
+                ok=False,
+                latency_ms=int((time.perf_counter() - t0) * 1000),
+                error=str(e)[:200],
+            )
             logger.debug("places enrich skip %s: %s", name, e)
             continue
 
         if not isinstance(data, dict) or data.get("error"):
+            record_usage(
+                "serpapi",
+                "places",
+                ok=False,
+                latency_ms=ms,
+                error=str((data or {}).get("error") if isinstance(data, dict) else "bad")[:200],
+            )
             continue
+        record_usage("serpapi", "places", ok=True, latency_ms=ms)
 
         item: dict[str, Any] | None = None
         place = data.get("place_results")
@@ -90,6 +109,25 @@ def enrich_poi_places(
         pid = item.get("place_id") or item.get("data_id")
         if pid:
             cand["place_id"] = str(pid)
+
+        # Soft open-hours signals (may be stale; never treat as official)
+        hours_text = item.get("hours") or item.get("operating_hours")
+        if isinstance(hours_text, str) and hours_text.strip():
+            cand["hours_text"] = hours_text.strip()[:160]
+        elif isinstance(hours_text, list):
+            bits = [str(x).strip() for x in hours_text if x][:4]
+            if bits:
+                cand["hours_text"] = "；".join(bits)[:160]
+        elif isinstance(hours_text, dict):
+            # e.g. {"wednesday": "9 AM–6 PM", ...}
+            bits = [f"{k}:{v}" for k, v in list(hours_text.items())[:3] if v]
+            if bits:
+                cand["hours_text"] = "；".join(bits)[:160]
+
+        open_state = item.get("open_state") or item.get("hours_status")
+        if isinstance(open_state, str) and open_state.strip():
+            cand["open_state"] = open_state.strip()[:80]
+
         n += 1
 
     return candidates

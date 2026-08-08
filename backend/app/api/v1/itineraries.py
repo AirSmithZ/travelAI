@@ -18,6 +18,10 @@ from app.schemas.itinerary import (
     validate_itinerary_dict,
 )
 from app.services.geocoding import geocode_itinerary
+from app.services.itinerary_credibility import (
+    append_credibility_warnings,
+    audit_commute_load,
+)
 from app.services.itinerary_llm import generate_itinerary_async, generate_itinerary_stream_events
 from app.services.llm_client import LLMClient
 from app.utils.sse import sse_event, sse_ping
@@ -26,6 +30,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/itineraries", tags=["itineraries"])
 
 SSE_HEARTBEAT_SEC = 15
+
+
+def _post_geocode_credibility(itinerary: dict) -> dict:
+    """Commute soft-audit once coords are present (async geocode path)."""
+    return append_credibility_warnings(itinerary, audit_commute_load(itinerary))
 
 
 def _require_confirmed_flights(body: GenerateItineraryRequest) -> None:
@@ -172,6 +181,7 @@ def geocode_itinerary_nodes_endpoint(body: GeocodeItineraryRequest) -> GeocodeIt
         dest,
         max_workers=settings.geocode_max_workers,
     )
+    itinerary = _post_geocode_credibility(itinerary)
     geocode_ms = int((time.perf_counter() - started) * 1000)
     return GeocodeItineraryResponse(
         itinerary=_validated_itinerary(itinerary),
@@ -210,6 +220,7 @@ async def geocode_itinerary_nodes_stream_endpoint(
                     max_workers=settings.geocode_max_workers,
                     on_progress=on_progress,
                 )
+                itinerary = _post_geocode_credibility(itinerary)
                 geocode_ms = int((time.perf_counter() - started) * 1000)
                 await queue.put(
                     ("result", {"itinerary": itinerary, "geocode_latency_ms": geocode_ms})

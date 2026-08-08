@@ -133,6 +133,8 @@ def search_ignav(
 
     is_round_trip = bool(body.return_date)
     path, payload = _build_fare_payload(body, origin_iata, dest_iata)
+    from app.services.api_usage import record_usage
+
     t0 = time.perf_counter()
     try:
         with httpx.Client(timeout=DEFAULT_TIMEOUT_SEC) as client:
@@ -142,6 +144,7 @@ def search_ignav(
         if resp.status_code >= 400:
             err = raw.get("error") or {}
             msg = err.get("message") or resp.text[:300]
+            record_usage("ignav", "search", ok=False, latency_ms=latency_ms, error=str(msg)[:200])
             return [], latency_ms, f"ignav: {msg}"
 
         offers: list[FlightQuote] = []
@@ -166,11 +169,21 @@ def search_ignav(
                 offers[idx] = cheapest.model_copy(update={"purchase_url": link})
 
         if not offers:
+            record_usage(
+                "ignav",
+                "search",
+                ok=False,
+                latency_ms=latency_ms,
+                error="no_itineraries",
+            )
             return [], latency_ms, "ignav: no itineraries in response"
+        record_usage("ignav", "search", ok=True, latency_ms=latency_ms)
         return offers, latency_ms, None
     except httpx.TimeoutException:
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        record_usage("ignav", "search", ok=False, latency_ms=latency_ms, error="timeout")
         return [], latency_ms, f"ignav: timeout after {DEFAULT_TIMEOUT_SEC}s"
     except Exception as e:
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        record_usage("ignav", "search", ok=False, latency_ms=latency_ms, error=repr(e)[:200])
         return [], latency_ms, f"ignav: {e!r}"

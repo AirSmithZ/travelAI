@@ -89,6 +89,20 @@ class LLMClient:
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
         }
+        try:
+            from app.services.api_usage import record_usage
+
+            record_usage(
+                "llm",
+                endpoint or "chat_json",
+                ok=True,
+                latency_ms=latency_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                meta={"model": model},
+            )
+        except Exception:
+            pass
         logger.info(
             "llm ok endpoint=%s model=%s latency_ms=%s prompt_tokens=%s completion_tokens=%s",
             endpoint or "-",
@@ -228,6 +242,20 @@ class LLMClient:
                         "finish_reason": finish_reason,
                         "reasoning": reasoning_text[:4000] if reasoning_text else None,
                     }
+                    try:
+                        from app.services.api_usage import record_usage
+
+                        record_usage(
+                            "llm",
+                            endpoint or "chat_stream",
+                            ok=True,
+                            latency_ms=latency_ms,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            meta={"model": m},
+                        )
+                    except Exception:
+                        pass
                     logger.info(
                         "llm stream ok endpoint=%s model=%s latency_ms=%s prompt_tokens=%s completion_tokens=%s",
                         endpoint or "-",

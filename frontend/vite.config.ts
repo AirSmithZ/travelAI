@@ -17,6 +17,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         flightVerify: 'flight-verify.html',
+        ops: 'ops.html',
       },
     },
   },

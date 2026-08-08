@@ -65,6 +65,9 @@ export interface ItineraryPoiCandidate {
   place_types?: string[];
   rating?: number;
   place_id?: string;
+  /** Soft open-hours from Places (may be stale) */
+  hours_text?: string;
+  open_state?: string;
 }
 
 export interface ItineraryMeta {

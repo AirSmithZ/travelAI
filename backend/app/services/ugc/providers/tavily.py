@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Literal
 from urllib.parse import urlparse
 
 import httpx
 
 from app.config import Settings, get_settings
+from app.services.api_usage import record_usage
 from app.services.ugc.tikhub import EvidenceItem
 
 logger = logging.getLogger(__name__)
@@ -52,18 +54,29 @@ def search_tavily(
     if include_domains:
         body["include_domains"] = include_domains
 
+    t0 = time.perf_counter()
     try:
         with httpx.Client(timeout=20.0) as client:
             resp = client.post(TAVILY_SEARCH_URL, json=body)
             resp.raise_for_status()
             data = resp.json()
+        ms = int((time.perf_counter() - t0) * 1000)
     except Exception as e:
+        record_usage(
+            "tavily",
+            source,
+            ok=False,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            error=str(e)[:200],
+        )
         logger.warning("tavily search failed: %s", e)
         return []
 
     results = data.get("results") if isinstance(data, dict) else None
     if not isinstance(results, list):
+        record_usage("tavily", source, ok=False, latency_ms=ms, error="no_results")
         return []
+    record_usage("tavily", source, ok=True, latency_ms=ms)
 
     out: list[EvidenceItem] = []
     for row in results:

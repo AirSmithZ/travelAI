@@ -218,21 +218,50 @@ class TikHubClient:
 
         url = f"{self._base()}{SEARCH_NOTES_PATH}"
         to = timeout if timeout is not None else float(self.settings.tikhub_timeout_sec)
+        import time
+
+        from app.services.api_usage import record_usage
+
+        t0 = time.perf_counter()
         try:
             with httpx.Client(timeout=to) as client:
                 resp = client.get(url, headers=self._headers(), params=params)
                 resp.raise_for_status()
                 data = resp.json()
-                return data if isinstance(data, dict) else {}
+                ms = int((time.perf_counter() - t0) * 1000)
+                ok_payload = data if isinstance(data, dict) else {}
+                record_usage("tikhub", "search_notes", ok=bool(ok_payload), latency_ms=ms)
+                return ok_payload
         except httpx.TimeoutException:
+            record_usage(
+                "tikhub",
+                "search_notes",
+                ok=False,
+                latency_ms=int((time.perf_counter() - t0) * 1000),
+                error="timeout",
+            )
             logger.warning("TikHub search_notes timeout keyword=%r", kw)
         except httpx.HTTPStatusError as e:
+            record_usage(
+                "tikhub",
+                "search_notes",
+                ok=False,
+                latency_ms=int((time.perf_counter() - t0) * 1000),
+                error=f"http_{e.response.status_code}",
+            )
             logger.warning(
                 "TikHub search_notes HTTP %s keyword=%r",
                 e.response.status_code,
                 kw,
             )
         except Exception as e:
+            record_usage(
+                "tikhub",
+                "search_notes",
+                ok=False,
+                latency_ms=int((time.perf_counter() - t0) * 1000),
+                error=str(e)[:200],
+            )
             logger.warning("TikHub search_notes failed: %s", e)
         return {}
 

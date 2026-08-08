@@ -53,6 +53,9 @@ export function ChatStatusBar({ apiStatus, phase, generationProgress }: ChatStat
       typeof n === 'number' && n > 0
         ? `正在整理玩法参考（已取 ${n} 条）…`
         : '正在检索玩法参考（公开笔记，非官方）…';
+  } else if (generationProgress.phase === 'weather') {
+    tone = 'info';
+    content = '正在拉取目的地天气预报…';
   } else if (generationProgress.phase === 'geocode') {
     tone = 'info';
     const { geocodeDone = 0, geocodeTotal = 0, llmLatencyMs } = generationProgress;

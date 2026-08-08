@@ -32,7 +32,7 @@ export interface GenerateItineraryResult {
 }
 
 export interface GenerateProgressEvent {
-  step: 'llm' | 'geocoding' | 'evidence' | 'reasoning';
+  step: 'llm' | 'geocoding' | 'evidence' | 'weather' | 'reasoning';
   status?: 'running' | 'done';
   latencyMs?: number | null;
   promptTokens?: number | null;
