@@ -26,6 +26,8 @@ interface OverviewRouteChainProps {
     nodeId: string,
   ) => void;
   onNodePointerUp: (e: React.PointerEvent) => void;
+  /** B-P6-02 */
+  primaryHotelIds?: Set<string>;
 }
 
 export function OverviewRouteChain({
@@ -40,6 +42,7 @@ export function OverviewRouteChain({
   onOpenMap,
   onNodePointerDown,
   onNodePointerUp,
+  primaryHotelIds,
 }: OverviewRouteChainProps) {
   const blocks = useMemo(() => {
     const segments = buildCellRouteSegments(day, nodes);
@@ -166,6 +169,7 @@ export function OverviewRouteChain({
               node={node}
               compact={compact}
               selected={node.id === selectedNodeId}
+              primaryHotel={primaryHotelIds?.has(node.id)}
               onSelect={() => onSelectNode(node.id)}
               onOpenMap={() => onOpenMap(node.id)}
             />

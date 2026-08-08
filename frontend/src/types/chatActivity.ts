@@ -18,6 +18,8 @@ export interface ChatActivitySession {
   startedAt: number;
   steps: ChatActivityStep[];
   error?: string;
+  /** UX-CHAT-07: provider reasoning when present; UI collapses by default */
+  reasoning?: string;
 }
 
 export function createParseActivity(): ChatActivitySession {

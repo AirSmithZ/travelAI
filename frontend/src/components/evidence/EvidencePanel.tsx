@@ -1,8 +1,9 @@
-import type { ItineraryEvidenceItem } from '../../types/itinerary';
+import type { ItineraryEvidenceItem, ItineraryPoiCandidate } from '../../types/itinerary';
 import './EvidencePanel.css';
 
 interface EvidencePanelProps {
   items: ItineraryEvidenceItem[];
+  poiCandidates?: ItineraryPoiCandidate[];
   onClose?: () => void;
 }
 
@@ -16,8 +17,9 @@ function sourceLabel(source?: string): string {
 }
 
 /** UX-EVD-01: 非官方免责 + 已核验 / 仅网友 */
-export function EvidencePanel({ items, onClose }: EvidencePanelProps) {
+export function EvidencePanel({ items, poiCandidates = [], onClose }: EvidencePanelProps) {
   const verifiedCount = items.filter((i) => i.verified).length;
+  const ratedPois = poiCandidates.filter((p) => p.verified && (p.rating != null || p.place_types?.length));
 
   return (
     <section className="evidence-panel" aria-label="参考依据">
@@ -42,6 +44,22 @@ export function EvidencePanel({ items, onClose }: EvidencePanelProps) {
           </button>
         )}
       </header>
+
+      {ratedPois.length > 0 && (
+        <ul className="evidence-panel__poi-list" aria-label="已核验地点">
+          {ratedPois.slice(0, 8).map((p) => (
+            <li key={p.place_id || p.name} className="evidence-panel__poi">
+              <span className="evidence-panel__poi-name">{p.display_name || p.name}</span>
+              {p.rating != null && (
+                <span className="evidence-panel__poi-rating">{p.rating.toFixed(1)}★</span>
+              )}
+              {p.place_types?.[0] && (
+                <span className="evidence-panel__poi-type">{p.place_types[0]}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {items.length === 0 ? (
         <p className="evidence-panel__empty">本次生成未附带印证链接（可能上游未返回或未配置）</p>

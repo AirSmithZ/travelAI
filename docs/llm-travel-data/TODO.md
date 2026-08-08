@@ -40,7 +40,7 @@
 | **FLT-RANK-01/02** | ✅ | — | 5:2:2:1 + 参考价文案 | `rank.py` · FlightIntelPanel |
 | **FLOW-01/01b** | ✅ | — | 无航班阻断前后端 | [18](./18-机酒优先与迭代行程产品决策.md) |
 | **FLOW-02** | ✅ | P1 | `optimize` / `regenerate` + dirty banner（不自动重跑） | [18 §4](./18-机酒优先与迭代行程产品决策.md) · [20 §6](./20-L1L2运行验证记录.md) |
-| **UX-FLT-CACHE** | 🔲 | P2 | 航班 / lodging 同条件前端缓存 + TTL + 刷新（**未实施**） | [22 §2.4](./22-对话编排与玩法印证UX调研.md) |
+| **UX-FLT-CACHE** | ✅ | P2 | 航班 / lodging 同条件前端缓存 + TTL + 刷新 | [22 §2.4](./22-对话编排与玩法印证UX调研.md) · `searchResultCache.ts` |
 
 ---
 
@@ -62,7 +62,7 @@
 | **B-P3-01/02** | ✅ | P1 | 多航段 UI + 城际快捷 | FlightIntelPanel |
 | **B-P4-01/02/03/04** | ✅ | P0 | intel 硬约束 / 门禁 / snapshot | [18](./18-机酒优先与迭代行程产品决策.md) |
 | **B-P6-01** | ✅ | P2 | 多酒店覆盖/缺口/重叠软警告 | `hotelStayValidate.ts` · StayZonePanel |
-| **B-P6-02** | 🔲 | P2 | 总览图 cross_day ↔ 主酒店对齐（未做） | [06 §7 P6](./06-机酒确认与行程生成流程方案.md) |
+| **B-P6-02** | ✅ | P2 | 总览图主酒店高亮 + 跨天/绑定软警告 | [06 §7 P6](./06-机酒确认与行程生成流程方案.md) · `primaryHotelOverview.ts` |
 
 ---
 
@@ -74,7 +74,7 @@
 | **B-FLT-03** | ✅ | P2 | `parseTripcomSearchUrl` 预填手动表单 | `parseTripcomSearchUrl.ts` |
 | **B-FLT-04** | ✅ | P2 | `POST /flights/manual-validate` | `manual_validate.py` |
 | **B-FLT-05** | ✅ | P3 | FlightVerifyApp 中文航线列 `formatLegRoute` | FlightVerifyApp |
-| **B-FLT-06** | 🔲 | P3 | `sync-airport-labels` 脚本（未做） | [09](./09-阶段B航班功能实施计划.md) |
+| **B-FLT-06** | ✅ | P3 | `npm run sync:airport-labels` ← `city_codes.json` | [09](./09-阶段B航班功能实施计划.md) |
 | **B-FLT-07** | ✅ | P3 | 深链仅用户点击 `<a target="_blank">`，无 auto open（回归确认） | Flight/Stay panels |
 | **B-FLT-08** | ⏸ | — | flight-verify 合并或废弃 | [06](./06-机酒确认与行程生成流程方案.md) |
 
@@ -99,7 +99,7 @@
 | **WS-04/06/07** | ✅ | EvidencePack + 侧栏 + TikHub（**成本决策：保留 TikHub 主源**，见 [21 §0.1](./21-Agent-Reach与玩法印证多源实施调研.md)） |
 | **WS-CACHE** | ✅ | EvidencePack TTL 缓存降本（`EVIDENCE_CACHE_TTL_SEC`） |
 | **WS-08a** | ✅ | 轻量 POI 抽取 + geocode 围栏校验 → `meta.poi_candidates` |
-| **WS-08b** | 🔲 | 完整 Places 类型/评分（有预算再做） |
+| **WS-08b** | ✅ | SerpAPI Maps 类型/评分 enrich（soft-fail；`places_enrich.py`） |
 | **WS-09** | ✅ | Evidence 多源 bench + query/过滤 + Tavily authority soft-merge |
 | **AG-01** | ✅ | 规则管道注入 generate |
 | **AG-02/03/04** | 🔲 | 矩阵配置 / 意图路由 / 完整 Agent+KB |
@@ -117,14 +117,13 @@
 
 **建议实施顺序**：
 
-1. ~~对话编排 Wave A/B~~ ✅ · ~~WS-09 Phase 0–1~~ ✅  
-2. **对话编排 Wave C（[22](./22-对话编排与玩法印证UX调研.md)）**：`04/07` · `UX-FLT-CACHE`（`UX-EVD-01` ✅）  
-3. **玩法印证**：~~`WS-CACHE` / `WS-08a` / `UX-EVD-01`~~ ✅ → 再 `WS-08b` / 完整 `WS-01`（**保持 TikHub**；Reach 仅对照）  
-4. **`SEC-01b` / `HOT-01`** 运维与商务；**`B-P6-02`** · **`B-FLT-06`**  
-5. （⏸ 移动端 · WX · 未证明增益前的 Exa/Agent-Reach 生产依赖 · P5b）· **`SEC-02`** 仅部署前  
+1. ~~对话编排 Wave A/B/C~~ ✅ · ~~WS-09 / WS-08a/b / CACHE~~ ✅ · ~~B-P6-02 / B-FLT-06~~ ✅  
+2. **运维 / 商务**：`SEC-01b` · `HOT-01` · 部署前 `SEC-02`  
+3. **扩张（按需）**：完整 Tavily 网页桶 `WS-01…` · `AG-02…` · KB skill（**保持 TikHub**；Reach 仅对照）  
+4. （⏸ 移动端 · WX · Exa/Agent-Reach 生产依赖 · P5b）  
 
 > 对话为主 / 只读摘要见 [22](./22-对话编排与玩法印证UX调研.md)。印证多源见 [21](./21-Agent-Reach与玩法印证多源实施调研.md)。偏离复核见 [20 §6](./20-L1L2运行验证记录.md)。
 
 ---
 
-*清单版本：v1.13 · 2026-08-08 · 变更请同步 [总索引](../TODO.md)*
+*清单版本：v1.15 · 2026-08-08 · Wave C + 可选增强已勾 · 变更请同步 [总索引](../TODO.md)*

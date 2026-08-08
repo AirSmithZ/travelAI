@@ -32,7 +32,7 @@ export interface GenerateItineraryResult {
 }
 
 export interface GenerateProgressEvent {
-  step: 'llm' | 'geocoding' | 'evidence';
+  step: 'llm' | 'geocoding' | 'evidence' | 'reasoning';
   status?: 'running' | 'done';
   latencyMs?: number | null;
   promptTokens?: number | null;
@@ -40,6 +40,7 @@ export interface GenerateProgressEvent {
   done?: number;
   total?: number;
   count?: number;
+  text?: string;
 }
 
 export interface GeocodeProgressEvent {
@@ -68,6 +69,7 @@ function mapGenerateProgress(data: Record<string, unknown>): GenerateProgressEve
     done: data.done as number | undefined,
     total: data.total as number | undefined,
     count: typeof data.count === 'number' ? data.count : undefined,
+    text: typeof data.text === 'string' ? data.text : undefined,
   };
 }
 

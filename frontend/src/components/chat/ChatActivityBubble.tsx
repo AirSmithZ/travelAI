@@ -23,6 +23,7 @@ function statusMark(status: ChatActivitySession['steps'][0]['status']): string {
 
 export function ChatActivityBubble({ activity }: ChatActivityBubbleProps) {
   const [elapsed, setElapsed] = useState(0);
+  const [reasoningOpen, setReasoningOpen] = useState(false);
 
   useEffect(() => {
     const tick = () => setElapsed(Math.floor((Date.now() - activity.startedAt) / 1000));
@@ -30,6 +31,8 @@ export function ChatActivityBubble({ activity }: ChatActivityBubbleProps) {
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, [activity.startedAt, activity.id]);
+
+  const reasoning = activity.reasoning?.trim();
 
   return (
     <div
@@ -57,6 +60,21 @@ export function ChatActivityBubble({ activity }: ChatActivityBubbleProps) {
           </li>
         ))}
       </ul>
+      {reasoning && (
+        <div className="chat-activity__reasoning">
+          <button
+            type="button"
+            className="chat-activity__reasoning-toggle"
+            aria-expanded={reasoningOpen}
+            onClick={() => setReasoningOpen((v) => !v)}
+          >
+            {reasoningOpen ? '收起过程' : '展开过程'}
+          </button>
+          {reasoningOpen && (
+            <pre className="chat-activity__reasoning-body">{reasoning.slice(0, 2000)}</pre>
+          )}
+        </div>
+      )}
       {activity.error && <p className="chat-activity__error">{activity.error}</p>}
       <span className="chat-activity__cursor" aria-hidden>
         ▍

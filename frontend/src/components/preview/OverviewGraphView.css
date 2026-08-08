@@ -9,6 +9,24 @@
   --region-tint-c: hsl(155 35% 15%);
 }
 
+.overview-hotel-warn {
+  flex-shrink: 0;
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: color-mix(in srgb, #c45c5c 12%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, #c45c5c 35%, var(--border));
+  border-radius: var(--radius-sm);
+}
+
+/* OV-02 light export */
+.overview-shell[data-export-theme='light'][data-exporting] {
+  color: #0f172a;
+  background: #f8fafc;
+}
+
 .overview-shell {
   display: grid;
   grid-template-columns: var(--overview-rail-width, 96px) 1fr;

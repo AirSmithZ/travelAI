@@ -166,6 +166,8 @@ export type ParseStreamHandlers = {
   onDelta?: (replyPreview: string) => void;
   /** validate 修复轮 */
   onValidating?: () => void;
+  /** UX-CHAT-07: provider reasoning when present */
+  onReasoning?: (text: string) => void;
 };
 
 /** SSE 流式 parse：LLM token → reply_preview → result（P99） */
@@ -186,6 +188,9 @@ export async function parseChatMessageStream(
       onEvent: (event, data) => {
         if (event === 'delta') {
           handlers?.onDelta?.(String(data.reply_preview ?? ''));
+        }
+        if (event === 'progress' && data.step === 'reasoning' && data.text) {
+          handlers?.onReasoning?.(String(data.text));
         }
         if (event === 'progress' && data.step === 'validate') {
           if (data.status === 'fixing' || data.status === 'running') {

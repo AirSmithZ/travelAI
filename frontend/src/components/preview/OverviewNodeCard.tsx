@@ -7,6 +7,8 @@ interface OverviewNodeCardProps {
   node: ItineraryNode;
   selected: boolean;
   compact?: boolean;
+  /** B-P6-02 */
+  primaryHotel?: boolean;
   onSelect: () => void;
   onOpenMap: () => void;
 }
@@ -15,6 +17,7 @@ export function OverviewNodeCard({
   node,
   selected,
   compact,
+  primaryHotel,
   onSelect,
   onOpenMap,
 }: OverviewNodeCardProps) {
@@ -29,7 +32,7 @@ export function OverviewNodeCard({
     <button
       type="button"
       data-overview-node={node.id}
-      className={`trip-node overview-trip-node ${compact ? 'trip-node--compact' : ''} ${node.is_optional ? 'trip-node--optional' : ''} ${selected ? 'trip-node--selected' : ''}`}
+      className={`trip-node overview-trip-node ${compact ? 'trip-node--compact' : ''} ${node.is_optional ? 'trip-node--optional' : ''} ${selected ? 'trip-node--selected' : ''}${primaryHotel ? ' overview-trip-node--primary-hotel' : ''}`}
       style={
         {
           '--node-color': meta.color,

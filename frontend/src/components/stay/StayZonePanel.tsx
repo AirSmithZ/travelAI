@@ -1,5 +1,11 @@
 import { useMemo, useState } from 'react';
 import { recommendStayZones, searchStayZoneLodging, type StayZoneLodgingCandidate } from '../../api/stayZones';
+import {
+  LODGING_CACHE_TTL_MS,
+  cacheGet,
+  cacheSet,
+  lodgingCacheKey,
+} from '../../utils/searchResultCache';
 import { geocodeAutocomplete } from '../../api/geocode';
 import { usePlanStore } from '../../stores/usePlanStore';
 import type { StayZonePreferences } from '../../types/stayZone';
@@ -119,7 +125,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
     }
   }
 
-  async function handleSearchLodging(zoneId: string) {
+  async function handleSearchLodging(zoneId: string, opts?: { forceRefresh?: boolean }) {
     const zone = zones.find((z) => z.id === zoneId);
     if (!zone?.geometry || zone.geometry.type !== 'circle') {
       setError('该片区无圆心坐标，无法检索 lodging');
@@ -127,15 +133,37 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
     }
     setLodgingLoading(zoneId);
     setError(null);
+    const radius = zone.geometry.radius_m ?? 1200;
+    const key = lodgingCacheKey({
+      zoneId: zone.id,
+      lat: zone.geometry.center.lat,
+      lng: zone.geometry.center.lng,
+      radiusM: radius,
+    });
     try {
+      const cached = opts?.forceRefresh
+        ? null
+        : cacheGet<{ candidates: StayZoneLodgingCandidate[]; warnings: string[] }>(
+            'lodging',
+            key,
+            LODGING_CACHE_TTL_MS,
+          );
+      if (cached) {
+        setLodgingByZone((m) => ({ ...m, [zoneId]: cached.value.candidates }));
+        if (cached.value.warnings[0]) {
+          setWarnings((w) => [...w, `缓存：${cached.value.warnings[0]}`]);
+        }
+        return;
+      }
       const res = await searchStayZoneLodging({
         zone_id: zone.id,
         city: zone.city,
         label: zone.label,
         lat: zone.geometry.center.lat,
         lng: zone.geometry.center.lng,
-        radius_m: zone.geometry.radius_m ?? 1200,
+        radius_m: radius,
       });
+      cacheSet('lodging', key, { candidates: res.candidates, warnings: res.warnings });
       setLodgingByZone((m) => ({ ...m, [zoneId]: res.candidates }));
       if (res.warnings[0]) setWarnings((w) => [...w, res.warnings[0]!]);
     } catch (e) {
@@ -311,6 +339,15 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                           onClick={() => void handleSearchLodging(zone.id)}
                         >
                           {lodgingLoading === zone.id ? '检索中…' : '片区内找酒店'}
+                        </button>
+                        <button
+                          type="button"
+                          className="form-btn"
+                          disabled={lodgingLoading === zone.id}
+                          onClick={() => void handleSearchLodging(zone.id, { forceRefresh: true })}
+                          title="忽略缓存重新检索"
+                        >
+                          刷新
                         </button>
                         <button
                           type="button"

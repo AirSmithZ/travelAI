@@ -247,4 +247,12 @@ def enrich_evidence_pois(
 
     evidence = _mark_evidence_verified(evidence, verified_names)
     candidates.sort(key=lambda c: (not c.get("verified"), -int(c.get("mentions") or 0)))
+
+    # WS-08b: optional SerpAPI types/rating (soft-fail)
+    try:
+        from app.services.ugc.places_enrich import enrich_poi_places
+
+        candidates = enrich_poi_places(candidates, dest, settings=cfg)
+    except Exception as e:
+        logger.warning("places enrich failed: %s", e)
     return evidence, candidates

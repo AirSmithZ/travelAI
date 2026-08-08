@@ -81,12 +81,20 @@ export function InputPanel() {
   const stayBadge = stayZonePanelBadgeLabel(stayPanelPhase);
 
   const formHeading = formEditorHeading(editorTarget, itinerary);
+  const hasItineraryDays = Boolean(itinerary?.days?.length);
+  /** UX-CHAT-04: 需求阶段以对话+摘要为主；有行程后才强调节点编辑 */
+  const showNodeEditorStrip = showChat && hasItineraryDays;
+  const nodeEditorHint = nodeName
+    ? `当前：${nodeName}`
+    : edgeLabel
+      ? `连线：${edgeLabel}`
+      : '选中节点后精修';
 
   const heading = nodeName
-    ? `编辑 · ${nodeName}`
+    ? `节点 · ${nodeName}`
     : edgeLabel
       ? `连线 · ${edgeLabel}`
-      : formHeading ?? '当日概况';
+      : formHeading ?? (hasItineraryDays ? '节点编辑' : '计划摘要见对话');
 
   const panelClass = showChat
     ? 'input-panel--chat'
@@ -102,7 +110,10 @@ export function InputPanel() {
     <aside className={`input-panel ${panelClass}`}>
       {showChat && (
         <ChatPanel
-          onCollapse={() => setLeftPanelMode('form')}
+          onCollapse={() => {
+            // UX-CHAT-04: 无行程时折叠不进空表单，仍留对话
+            if (hasItineraryDays) setLeftPanelMode('form');
+          }}
           selectedNodeName={nodeName}
         />
       )}
@@ -146,18 +157,18 @@ export function InputPanel() {
         </button>
       )}
 
-      {showChat && (
+      {showNodeEditorStrip && (
         <button
           type="button"
           className="input-panel__form-strip"
           onClick={() => setLeftPanelMode('form')}
         >
-          <span>行程编辑</span>
-          <span className="input-panel__form-strip-hint">点击展开表单</span>
+          <span>节点编辑</span>
+          <span className="input-panel__form-strip-hint">{nodeEditorHint}</span>
         </button>
       )}
 
-      {showChat && !itinerary?.days?.length && (
+      {showChat && !hasItineraryDays && (
         <button
           type="button"
           className="input-panel__form-strip input-panel__form-strip--preview"
@@ -175,6 +186,7 @@ export function InputPanel() {
           <div className="input-panel__flight-scroll">
             <EvidencePanel
               items={evidenceItems}
+              poiCandidates={itinerary?.meta?.poi_candidates ?? []}
               onClose={() => setLeftPanelMode('chat')}
             />
           </div>
@@ -186,13 +198,15 @@ export function InputPanel() {
             >
               返回对话
             </button>
-            <button
-              type="button"
-              className="input-panel__flight-btn input-panel__flight-btn--primary"
-              onClick={() => setLeftPanelMode('form')}
-            >
-              继续编辑行程
-            </button>
+            {hasItineraryDays && (
+              <button
+                type="button"
+                className="input-panel__flight-btn input-panel__flight-btn--primary"
+                onClick={() => setLeftPanelMode('form')}
+              >
+                节点编辑
+              </button>
+            )}
           </footer>
         </>
       )}

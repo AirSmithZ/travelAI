@@ -235,6 +235,9 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
                   ),
                 );
               },
+              onReasoning: (text) => {
+                updateChatActivity((prev) => ({ ...prev, reasoning: text }));
+              },
             },
           )
         : await parseChatMessage({

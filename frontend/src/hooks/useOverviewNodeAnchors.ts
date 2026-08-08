@@ -33,6 +33,8 @@ export function useOverviewNodeAnchors(
 
     const ro = new ResizeObserver(measure);
     ro.observe(container);
+    // OV-01: also observe each node card so height drift updates edges
+    container.querySelectorAll('[data-overview-node]').forEach((el) => ro.observe(el));
     const body = container.closest('.overview-shell__body');
     body?.addEventListener('scroll', measure, { passive: true });
     window.addEventListener('resize', measure);

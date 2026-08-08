@@ -61,6 +61,10 @@ export interface ItineraryPoiCandidate {
   lat?: number;
   lng?: number;
   display_name?: string;
+  /** WS-08b */
+  place_types?: string[];
+  rating?: number;
+  place_id?: string;
 }
 
 export interface ItineraryMeta {

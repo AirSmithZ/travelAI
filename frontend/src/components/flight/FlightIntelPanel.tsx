@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
 import { searchFlights } from '../../api/flights';
+import type { FlightSearchResponse } from '../../types/flight';
+import {
+  FLIGHT_CACHE_TTL_MS,
+  cacheGet,
+  cacheSet,
+  flightCacheKey,
+} from '../../utils/searchResultCache';
 import { usePlanStore } from '../../stores/usePlanStore';
 import type { FlightLegRole, ConfirmedFlightLeg } from '../../types/travelIntel';
 import {
@@ -237,6 +244,7 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [templateHint, setTemplateHint] = useState<string | null>(null);
+  const [cacheHint, setCacheHint] = useState<string | null>(null);
 
   const searchResult = intel.last_flight_search;
   const ranked = searchResult?.ranked ?? [];
@@ -319,24 +327,43 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
     applyNextLegSuggestion({ forceIntercity: true });
   }
 
-  async function handleSearch() {
+  async function handleSearch(opts?: { forceRefresh?: boolean }) {
     if (!canSearch || loading) return;
     setLeftPanelMode('flight');
     setLoading(true);
     setError(null);
+    setCacheHint(null);
     const ret = returnDate.trim();
     const requestKey = `${origin}-${destination}-${date}${ret ? `-rt-${ret}` : ''}`;
+    const cacheKey = flightCacheKey({
+      origin,
+      destination,
+      date,
+      returnDate: ret || undefined,
+      adults,
+      preference,
+    });
     try {
-      const res = await searchFlights({
-        origin: origin.trim(),
-        destination: destination.trim(),
-        date: date.trim(),
-        return_date: ret || undefined,
-        adults,
-        preference,
-        include_ignav: true,
-        include_letsfg: false,
-      });
+      let res: FlightSearchResponse;
+      const cached = opts?.forceRefresh
+        ? null
+        : cacheGet<FlightSearchResponse>('flight', cacheKey, FLIGHT_CACHE_TTL_MS);
+      if (cached) {
+        res = cached.value;
+        setCacheHint(`缓存命中（${Math.round((Date.now() - cached.fetchedAt) / 1000)}s 前）· 可刷新`);
+      } else {
+        res = await searchFlights({
+          origin: origin.trim(),
+          destination: destination.trim(),
+          date: date.trim(),
+          return_date: ret || undefined,
+          adults,
+          preference,
+          include_ignav: true,
+          include_letsfg: false,
+        });
+        cacheSet('flight', cacheKey, res);
+      }
       const newRanked = res.ranked ?? [];
       if (newRanked.length > 0) {
         usePlanStore.getState().setFlightSearchResult({
@@ -344,7 +371,10 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
           fetched_at: res.fetched_at,
           ranked: newRanked,
           purchase_url: res.purchase.url,
-          warnings: res.warnings ?? [],
+          warnings: [
+            ...(res.warnings ?? []),
+            ...(cached ? ['结果来自前端缓存，可点「刷新」重新查价'] : []),
+          ],
           is_round_trip: Boolean(ret),
           confirmed_quote_id: null,
           hide_ranked: false,
@@ -557,7 +587,18 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
                 ? '搜索往返（Ignav）'
                 : '搜索航班（Ignav）'}
           </button>
-          {latencyHint && <p className="flight-intel__hint">{latencyHint}</p>}
+          <button
+            type="button"
+            className="form-btn"
+            disabled={!canSearch || loading}
+            onClick={() => void handleSearch({ forceRefresh: true })}
+            title="忽略缓存重新查询"
+          >
+            刷新
+          </button>
+          {(latencyHint || cacheHint) && (
+            <p className="flight-intel__hint">{cacheHint ?? latencyHint}</p>
+          )}
           {error && <p className="flight-intel__error">{error}</p>}
         </div>
         <FlightManualAddPanel

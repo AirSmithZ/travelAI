@@ -10,6 +10,11 @@
   transform: translateY(-2px);
 }
 
+.overview-trip-node--primary-hotel {
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
 .overview-trip-edge {
   display: flex;
   align-items: center;

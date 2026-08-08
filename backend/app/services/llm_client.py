@@ -189,6 +189,7 @@ class LLMClient:
             for attempt in range(max_retries):
                 started = time.perf_counter()
                 parts: list[str] = []
+                reasoning_parts: list[str] = []
                 usage = None
                 try:
                     stream = await self._async_client.chat.completions.create(
@@ -204,6 +205,10 @@ class LLMClient:
                         choice = chunk.choices[0]
                         if choice.finish_reason:
                             finish_reason = choice.finish_reason
+                        # UX-CHAT-07: optional provider reasoning (e.g. deepseek-reasoner)
+                        rc = getattr(choice.delta, "reasoning_content", None) or ""
+                        if rc:
+                            reasoning_parts.append(rc)
                         delta = choice.delta.content or ""
                         if delta:
                             parts.append(delta)
@@ -213,6 +218,7 @@ class LLMClient:
                     self._active_model = m
                     prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
                     completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+                    reasoning_text = "".join(reasoning_parts).strip()
                     self._last_call_meta = {
                         "endpoint": endpoint,
                         "model": m,
@@ -220,6 +226,7 @@ class LLMClient:
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": completion_tokens,
                         "finish_reason": finish_reason,
+                        "reasoning": reasoning_text[:4000] if reasoning_text else None,
                     }
                     logger.info(
                         "llm stream ok endpoint=%s model=%s latency_ms=%s prompt_tokens=%s completion_tokens=%s",

@@ -146,3 +146,39 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.evidence-panel__poi-list {
+  margin: 0 12px 10px;
+  padding: 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.evidence-panel__poi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.evidence-panel__poi-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.evidence-panel__poi-rating {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.evidence-panel__poi-type {
+  font-size: 11px;
+  color: var(--text-dim);
+}

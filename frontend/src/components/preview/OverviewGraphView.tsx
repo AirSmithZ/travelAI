@@ -4,6 +4,11 @@ import { useOverviewScrollSync } from '../../hooks/useOverviewScrollSync';
 import { useOverviewColumnVirtualizer } from '../../hooks/useOverviewColumnVirtualizer';
 import { useOverviewColumnResize } from '../../hooks/useOverviewColumnResize';
 import { useOverviewNodeDrag } from '../../hooks/useOverviewNodeDrag';
+import { useOverviewNodeAnchors } from '../../hooks/useOverviewNodeAnchors';
+import {
+  overviewHotelAlignmentWarnings,
+  primaryHotelNodeIds,
+} from '../../utils/primaryHotelOverview';
 import { OVERVIEW_REGION_ENTER_MS } from '../../utils/graphLayoutConstants';
 import { formatWeatherBrief } from '../../utils/formatWeather';
 import {
@@ -18,9 +23,9 @@ import {
 } from '../../utils/layoutOverview';
 import { getCellLongNote, getCrossRegionEdges } from '../../utils/overviewRoute';
 import {
-  EXPORT_SHELL,
-  REGION_EXPORT_CELL_BG,
-  REGION_EXPORT_RAIL_BG,
+  EXPORT_SHELL_LIGHT,
+  REGION_EXPORT_CELL_BG_LIGHT,
+  REGION_EXPORT_RAIL_BG_LIGHT,
 } from '../../utils/overviewExportTokens';
 import { OverviewRouteChain } from './OverviewRouteChain';
 import { OverviewEdgeLayer } from './OverviewEdgeLayer';
@@ -36,6 +41,7 @@ function formatHeaderDate(date: string): string {
 
 export function OverviewGraphView() {
   const itinerary = usePlanStore(selectActiveItinerary);
+  const travelIntel = usePlanStore((s) => s.getActivePlan().travel_intel);
   const selectedNodeId = usePlanStore((s) => s.selectedNodeId);
   const activeDayIndex = usePlanStore((s) => s.activeDayIndex);
   const overviewScrollDay = usePlanStore((s) => s.overviewScrollDay);
@@ -209,6 +215,37 @@ export function OverviewGraphView() {
     return map;
   }, [matrixPlacements, dragPreview]);
 
+  const primaryHotelIds = useMemo(
+    () => primaryHotelNodeIds(itinerary, travelIntel),
+    [itinerary, travelIntel],
+  );
+  const hotelAlignWarnings = useMemo(
+    () => overviewHotelAlignmentWarnings(itinerary, travelIntel),
+    [itinerary, travelIntel],
+  );
+
+  const domAnchors = useOverviewNodeAnchors(matrixRef, [
+    liveMatrixPlacements.size,
+    itinerary?.days.length,
+    layout?.regions.length,
+  ]);
+
+  /** OV-01: prefer measured DOM centers when available */
+  const edgePlacements = useMemo(() => {
+    if (domAnchors.size === 0) return liveMatrixPlacements;
+    const map = new Map(liveMatrixPlacements);
+    for (const [id, place] of map) {
+      const a = domAnchors.get(id);
+      if (!a) continue;
+      map.set(id, {
+        ...place,
+        x: a.x - place.width / 2,
+        y: a.y - place.height / 2,
+      });
+    }
+    return map;
+  }, [liveMatrixPlacements, domAnchors]);
+
   const dragGhostNode = useMemo(() => {
     if (!dragPreview || !itinerary) return null;
     return itinerary.days[dragPreview.dayIndex]?.nodes.find(
@@ -329,7 +366,13 @@ export function OverviewGraphView() {
       className={`overview-graph${metrics.compact ? ' overview-graph--compact' : ''}`}
       style={cssVars}
     >
-      <div className="overview-shell" data-export-overview>
+      {hotelAlignWarnings.length > 0 && !isExporting && (
+        <p className="overview-hotel-warn" role="status">
+          {hotelAlignWarnings[0]}
+          {hotelAlignWarnings.length > 1 ? `（+${hotelAlignWarnings.length - 1}）` : ''}
+        </p>
+      )}
+      <div className="overview-shell" data-export-overview data-export-theme="light">
         <div className="overview-shell__corner" aria-hidden>
           <span className="overview-corner__label">区域</span>
         </div>
@@ -337,7 +380,9 @@ export function OverviewGraphView() {
         <div
           className="overview-shell__header"
           onWheel={forwardWheelToBody}
-          style={isExporting ? { background: EXPORT_SHELL.headerBg } : undefined}
+          style={
+            isExporting ? { background: EXPORT_SHELL_LIGHT.headerBg } : undefined
+          }
         >
           <div
             className="overview-shell__header-inner"
@@ -421,7 +466,9 @@ export function OverviewGraphView() {
         <div
           className="overview-shell__rail"
           onWheel={forwardWheelToBody}
-          style={isExporting ? { background: EXPORT_SHELL.railBg } : undefined}
+          style={
+            isExporting ? { background: EXPORT_SHELL_LIGHT.railBg } : undefined
+          }
         >
           <div
             className="overview-shell__rail-inner"
@@ -452,7 +499,9 @@ export function OverviewGraphView() {
                     top,
                     height: rowH,
                     background: isExporting
-                      ? REGION_EXPORT_RAIL_BG[regionIndex % REGION_EXPORT_RAIL_BG.length]
+                      ? REGION_EXPORT_RAIL_BG_LIGHT[
+                          regionIndex % REGION_EXPORT_RAIL_BG_LIGHT.length
+                        ]
                       : `color-mix(in srgb, var(${tintVar}) 100%, transparent)`,
                   }}
                   onClick={() => selectRegion(region)}
@@ -512,7 +561,9 @@ export function OverviewGraphView() {
                       width: colW,
                       height: rowH,
                       background: isExporting
-                        ? REGION_EXPORT_CELL_BG[regionIndex % REGION_EXPORT_CELL_BG.length]
+                        ? REGION_EXPORT_CELL_BG_LIGHT[
+                            regionIndex % REGION_EXPORT_CELL_BG_LIGHT.length
+                          ]
                         : `color-mix(in srgb, var(${tintVar}) 10%, var(--bg-base))`,
                     }}
                   />
@@ -526,7 +577,7 @@ export function OverviewGraphView() {
               width={matrixWidth}
               height={contentHeight}
               crossRegionEdges={crossRegionEdges}
-              placements={liveMatrixPlacements}
+              placements={edgePlacements}
             />
 
             <div className="overview-matrix__foreground">
@@ -580,6 +631,7 @@ export function OverviewGraphView() {
                           selectedNodeId={isExporting ? null : selectedNodeId}
                           dragPreview={dragPreview}
                           regionEnter={regionEnter}
+                          primaryHotelIds={primaryHotelIds}
                           onSelectNode={(nodeId) => {
                             selectNode(nodeId);
                             setActiveDay(dayIndex);

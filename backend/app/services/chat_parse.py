@@ -428,6 +428,16 @@ async def parse_chat_stream_async(req: ChatParseRequest, client: LLMClient):
         }
 
     yield {"event": "progress", "data": {"step": "llm", "status": "done"}}
+    reasoning = (client.last_call_meta or {}).get("reasoning")
+    if reasoning:
+        yield {
+            "event": "progress",
+            "data": {
+                "step": "reasoning",
+                "status": "done",
+                "text": str(reasoning)[:2000],
+            },
+        }
 
     from app.services.llm_client import strip_json_fences
 

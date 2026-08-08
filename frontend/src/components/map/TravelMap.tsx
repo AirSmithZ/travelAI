@@ -21,6 +21,8 @@ const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
 
 const NODE_SOURCE = 'itinerary-nodes';
 const NODE_CIRCLE = 'itinerary-nodes-circle';
+const NODE_CLUSTER = 'itinerary-nodes-cluster';
+const NODE_CLUSTER_COUNT = 'itinerary-nodes-cluster-count';
 const NODE_LABEL = 'itinerary-nodes-label';
 
 const ROUTE_LAYER_IDS = ['route-primary', 'route-alt', 'route-cross-day'] as const;
@@ -77,15 +79,50 @@ function buildNodesGeoJSON(
 function ensureNodeLayers(map: maplibregl.Map) {
   if (!map.isStyleLoaded() || map.getSource(NODE_SOURCE)) return;
 
+  // UX-GEN-01: cluster dense markers
   map.addSource(NODE_SOURCE, {
     type: 'geojson',
     data: { type: 'FeatureCollection', features: [] },
+    cluster: true,
+    clusterMaxZoom: 14,
+    clusterRadius: 46,
+  });
+
+  map.addLayer({
+    id: NODE_CLUSTER,
+    type: 'circle',
+    source: NODE_SOURCE,
+    filter: ['has', 'point_count'],
+    paint: {
+      'circle-color': '#5b8def',
+      'circle-radius': ['step', ['get', 'point_count'], 16, 4, 20, 8, 26],
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#ffffff',
+      'circle-opacity': 0.92,
+    },
+  });
+
+  map.addLayer({
+    id: NODE_CLUSTER_COUNT,
+    type: 'symbol',
+    source: NODE_SOURCE,
+    filter: ['has', 'point_count'],
+    layout: {
+      'text-field': ['get', 'point_count_abbreviated'],
+      'text-size': 11,
+      'text-font': [...MAP_LABEL_FONT],
+      'text-allow-overlap': true,
+    },
+    paint: {
+      'text-color': '#0c1219',
+    },
   });
 
   map.addLayer({
     id: NODE_CIRCLE,
     type: 'circle',
     source: NODE_SOURCE,
+    filter: ['!', ['has', 'point_count']],
     paint: {
       'circle-radius': [
         'case',
@@ -104,6 +141,7 @@ function ensureNodeLayers(map: maplibregl.Map) {
     id: NODE_LABEL,
     type: 'symbol',
     source: NODE_SOURCE,
+    filter: ['!', ['has', 'point_count']],
     layout: {
       'text-field': ['get', 'name'],
       'text-size': 10,
@@ -254,6 +292,21 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
         if (typeof id === 'string') selectNode(id);
       };
 
+      const onClusterClick = (e: MapLayerMouseEvent) => {
+        if (usePlanStore.getState().mapPickNodeId) return;
+        const feature = e.features?.[0];
+        const clusterId = feature?.properties?.cluster_id;
+        const source = map.getSource(NODE_SOURCE) as GeoJSONSource | undefined;
+        if (clusterId == null || !source || !feature?.geometry) return;
+        const geom = feature.geometry as { type?: string; coordinates?: number[] };
+        if (geom.type !== 'Point' || !geom.coordinates) return;
+        const coords: [number, number] = [geom.coordinates[0], geom.coordinates[1]];
+        source.getClusterExpansionZoom(Number(clusterId), (err, zoom) => {
+          if (err || zoom == null) return;
+          map.easeTo({ center: coords, zoom });
+        });
+      };
+
       const onEnter = () => {
         if (!usePlanStore.getState().mapPickNodeId) {
           map.getCanvas().style.cursor = 'pointer';
@@ -264,8 +317,11 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       };
 
       map.on('click', NODE_CIRCLE, onNodeClick);
+      map.on('click', NODE_CLUSTER, onClusterClick);
       map.on('mouseenter', NODE_CIRCLE, onEnter);
       map.on('mouseleave', NODE_CIRCLE, onLeave);
+      map.on('mouseenter', NODE_CLUSTER, onEnter);
+      map.on('mouseleave', NODE_CLUSTER, onLeave);
     },
     [selectNode],
   );
@@ -636,6 +692,14 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       className={`travel-map${isPickMode ? ' travel-map--pick-mode' : ''}${visible ? '' : ' travel-map--hidden'}`}
     >
       <div ref={containerRef} className="travel-map__container" />
+      {/* UX-GEN-02 */}
+      {visible && !mapReady && (
+        <div className="travel-map__skeleton" aria-hidden>
+          <div className="travel-map__skeleton-bar" />
+          <div className="travel-map__skeleton-bar travel-map__skeleton-bar--short" />
+          <div className="travel-map__skeleton-map" />
+        </div>
+      )}
       {visible && (
         <p className="travel-map__attrib">
           <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">

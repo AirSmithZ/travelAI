@@ -714,6 +714,15 @@ export const usePlanStore = create<PlanState>()(
             });
           },
           onProgress: (evt) => {
+            if (evt.step === 'reasoning' && evt.text) {
+              set((s) => ({
+                chatActivity:
+                  s.chatActivity?.op === 'generate'
+                    ? { ...s.chatActivity, reasoning: evt.text }
+                    : s.chatActivity,
+              }));
+              return;
+            }
             if (evt.step === 'evidence') {
               set((s) => ({
                 generationProgress: {

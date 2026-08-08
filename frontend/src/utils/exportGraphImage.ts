@@ -106,6 +106,7 @@ export async function exportOverviewShell(
   };
 
   shell.setAttribute('data-exporting', '');
+  shell.setAttribute('data-export-theme', 'light');
   shell.style.width = `${layout.width}px`;
   shell.style.maxWidth = 'none';
   shell.style.maxHeight = 'none';
@@ -175,6 +176,7 @@ export async function exportOverviewShell(
     } else {
       shell.setAttribute('data-exporting', '');
     }
+    shell.removeAttribute('data-export-theme');
     shell.style.width = prev.shellWidth;
     shell.style.height = prev.shellHeight;
     shell.style.maxWidth = prev.shellMaxWidth;

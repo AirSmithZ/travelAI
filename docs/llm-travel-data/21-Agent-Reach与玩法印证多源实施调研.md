@@ -2,7 +2,7 @@
 
 ← [19-玩法印证](./19-玩法印证与UGC数据源分析.md) · [18-机酒优先](./18-机酒优先与迭代行程产品决策.md) · [16-优先级纠偏](./16-产品能力优先级纠偏分析.md) · [TODO](./TODO.md) · **产品 UX 衔接**：[22-对话编排](./22-对话编排与玩法印证UX调研.md)
 
-> **日期**：2026-08-08 · **版本**：v1.2 · **实施**：Phase 0–1 ✅；**成本决策：保留 TikHub**；Phase 2（`WS-CACHE` / `WS-08a` / `UX-EVD-01`）✅；`WS-08b` Places 开放  
+> **日期**：2026-08-08 · **版本**：v1.3 · **实施**：Phase 0–2 ✅（含 `WS-08b` SerpAPI soft-fail）；**成本决策：保留 TikHub**；Reach 仅 bench  
 
 > **对象**：[Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach)  
 > **问题**：能否比 Tavily「盲目搜索」更贴切地拿到旅行玩法参考？若整包替代困难，是否另写一套更好？如何实施才能提高行程玩法可行性？
@@ -281,7 +281,7 @@ poi_tally
 | **WS-08a** | `extract_poi_candidates` → geocode 围栏轻量校验 → `meta.poi_candidates`；Prompt 注入高频已核验短表 | ✅ |
 | **WS-CACHE** | EvidencePack 内存 TTL 缓存（降 TikHub 调用） | ✅ |
 | **UX-EVD-01** | 面板「非官方」+ 已核验/仅网友 | ✅ |
-| **WS-08b** | 完整 Places（类型/评分） | 🔲 有 Key/预算后再做 |
+| **WS-08b** | SerpAPI Maps 类型/评分 enrich（soft-fail；无 Key 跳过） | ✅ `places_enrich.py` → `poi_extract` · EvidencePanel |
 
 此阶段对「旅行玩法可行性」的增益通常 **大于再接一个搜索 API**。
 
@@ -412,9 +412,9 @@ Hit 规则：`gold` 是否作为子串出现在任一 item 的 `title+snippet`�
 1. **采纳**：多 provider 扩展现有 EvidencePack；**不**整包引入 Agent-Reach；**不**另写印证系统。  
 2. **成本**：**保留 TikHub** 作生产 pattern 主源；TTL 缓存 + 软降级控费；Reach 仅 bench（§0.1）。  
 3. ~~**先做 Phase 0 bench**~~ ✅；Tavily authority 已 soft-merge。  
-4. **下一步可行性主杠杆**：**WS-08a** 轻量 POI+geocode → 再议 **WS-08b** Places。  
+4. ~~**WS-08a/b**~~ ✅；下一步按需：**完整网页桶 WS-01** · KB skill · Phase 3 飞轮（用户粘贴笔记）。  
 5. **Exa / Agent-Reach**：默认仅评测；无显著增益则永久不做生产依赖。  
-5. **与 16/18 优先级关系**：机酒与坐标仍优先；本方案是玩法层增强，不回退「先天气/大 Agent」。
+6. **与 16/18 优先级关系**：机酒与坐标仍优先；本方案是玩法层增强，不回退「先天气/大 Agent」。
 
 ### 10.1 实施落点（WS-09 / Phase 0–1）
 
@@ -425,6 +425,7 @@ Hit 规则：`gold` 是否作为子串出现在任一 item 的 `title+snippet`�
 | pack merge | `backend/app/services/ugc/evidence_pack.py` |
 | query 分槽 | `backend/app/services/ugc/tikhub.py` → `evidence_queries` / `build_evidence_pack` |
 | bench | `backend/scripts/bench_evidence_providers.py` + `backend/fixtures/evidence_bench_cases.yaml` |
+| Places enrich | `backend/app/services/ugc/places_enrich.py`（WS-08b） |
 
 ---
 
@@ -436,4 +437,4 @@ Hit 规则：`gold` 是否作为子串出现在任一 item 的 `title+snippet`�
 
 ---
 
-*文档版本：v1.1 · 2026-08-08 · Phase 0–1 / WS-09 落地*
+*文档版本：v1.3 · 2026-08-08 · Phase 0–2 / WS-08b 落地*

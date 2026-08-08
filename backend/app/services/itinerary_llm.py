@@ -784,6 +784,16 @@ async def generate_itinerary_stream_events(
             "completion_tokens": client.last_call_meta.get("completion_tokens"),
         },
     }
+    reasoning = client.last_call_meta.get("reasoning")
+    if reasoning:
+        yield {
+            "event": "progress",
+            "data": {
+                "step": "reasoning",
+                "status": "done",
+                "text": str(reasoning)[:2000],
+            },
+        }
 
     try:
         raw = json.loads(strip_json_fences(accumulated))

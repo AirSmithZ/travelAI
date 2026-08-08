@@ -286,3 +286,48 @@
 .travel-map a.maplibregl-ctrl-logo {
   display: none !important;
 }
+
+/* UX-GEN-02 */
+.travel-map__skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--bg-deep) 88%, transparent);
+  pointer-events: none;
+}
+
+.travel-map__skeleton-bar,
+.travel-map__skeleton-map {
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg-elevated) 80%, transparent) 0%,
+    color-mix(in srgb, var(--border) 55%, transparent) 50%,
+    color-mix(in srgb, var(--bg-elevated) 80%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: travel-skel 1.2s ease-in-out infinite;
+}
+
+.travel-map__skeleton-bar {
+  height: 12px;
+  width: 40%;
+}
+
+.travel-map__skeleton-bar--short {
+  width: 24%;
+}
+
+.travel-map__skeleton-map {
+  flex: 1;
+  min-height: 120px;
+}
+
+@keyframes travel-skel {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}

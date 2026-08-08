@@ -558,3 +558,32 @@
   color: var(--accent);
   animation: chat-blink 0.9s step-end infinite;
 }
+
+.chat-activity__reasoning {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+
+.chat-activity__reasoning-toggle {
+  padding: 0;
+  font-size: 11px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.chat-activity__reasoning-body {
+  margin: 6px 0 0;
+  max-height: 140px;
+  overflow: auto;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--bg-deep) 40%, transparent);
+  border-radius: var(--radius-sm);
+}
