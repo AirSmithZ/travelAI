@@ -252,12 +252,43 @@ class TikHubClient:
         return normalize_search_response(raw, query=keyword, max_results=limit)
 
 
-def evidence_queries(destination: str, day_count: int | None) -> list[str]:
+def evidence_queries(
+    destination: str,
+    day_count: int | None,
+    *,
+    stay_zone_label: str | None = None,
+    preference_tags: list[str] | None = None,
+) -> list[str]:
+    """WS-09 / doc 21 §4.2: slotted queries, capped to ≤4 searches."""
     dest = (destination or "").strip()
     if not dest:
         return []
     n = day_count if day_count and day_count > 0 else 3
-    return [f"{dest} 自由行 {n}天", f"{dest} itinerary"]
+    queries: list[str] = [
+        f"{dest} 自由行 {n}天 行程",
+        f"{dest} 避坑",
+    ]
+    zone = (stay_zone_label or "").strip()
+    if zone:
+        queries.append(f"{zone} 一日游")
+    else:
+        queries.append(f"{dest} {n}-day itinerary")
+
+    tags = [t.strip() for t in (preference_tags or []) if t and str(t).strip()]
+    if tags:
+        queries.append(f"{dest} {tags[0]}")
+
+    # Dedupe preserve order, max 4
+    seen: set[str] = set()
+    out: list[str] = []
+    for q in queries:
+        if q in seen:
+            continue
+        seen.add(q)
+        out.append(q)
+        if len(out) >= 4:
+            break
+    return out
 
 
 def build_evidence_pack(
@@ -267,9 +298,11 @@ def build_evidence_pack(
     settings: Settings | None = None,
     client: TikHubClient | None = None,
     max_results: int | None = None,
+    stay_zone_label: str | None = None,
+    preference_tags: list[str] | None = None,
 ) -> list[EvidenceItem]:
     """
-    Run 1–2 TikHub queries and merge/dedupe into an EvidencePack list.
+    Run slotted TikHub queries and merge/dedupe into an EvidencePack list.
     Graceful no-op when TikHub is not configured or requests fail.
     """
     cfg = settings or get_settings()
@@ -282,11 +315,17 @@ def build_evidence_pack(
 
     hub = client or TikHubClient(cfg)
     limit = max_results if max_results is not None else cfg.tikhub_max_results
-    per_query = max(3, (limit + 1) // 2)
+    queries = evidence_queries(
+        dest,
+        day_count,
+        stay_zone_label=stay_zone_label,
+        preference_tags=preference_tags,
+    )
+    per_query = max(2, (limit + len(queries) - 1) // max(1, len(queries)))
 
     merged: list[EvidenceItem] = []
     seen: set[str] = set()
-    for q in evidence_queries(dest, day_count):
+    for q in queries:
         for item in hub.search_notes_as_evidence(q, max_results=per_query):
             key = item.note_id or item.url
             if key in seen:
@@ -294,8 +333,13 @@ def build_evidence_pack(
             seen.add(key)
             merged.append(item)
             if len(merged) >= limit:
-                return merged
-    return merged
+                break
+        if len(merged) >= limit:
+            break
+
+    from app.services.ugc.filter_evidence import filter_evidence_items
+
+    return filter_evidence_items(merged, destination=dest, max_items=limit)
 
 
 def evidence_items_as_dicts(items: list[EvidenceItem]) -> list[dict[str, Any]]:

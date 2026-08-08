@@ -46,6 +46,13 @@ export function ChatStatusBar({ apiStatus, phase, generationProgress }: ChatStat
     } else {
       content = '正在 AI 生成路线图…';
     }
+  } else if (generationProgress.phase === 'evidence') {
+    tone = 'info';
+    const n = generationProgress.evidenceCount;
+    content =
+      typeof n === 'number' && n > 0
+        ? `正在整理玩法参考（已取 ${n} 条）…`
+        : '正在检索玩法参考（公开笔记，非官方）…';
   } else if (generationProgress.phase === 'geocode') {
     tone = 'info';
     const { geocodeDone = 0, geocodeTotal = 0, llmLatencyMs } = generationProgress;

@@ -11,13 +11,27 @@ import { usePlanStore, findNodeContext, findEdgeContext } from '../../stores/use
 import { useToastStore } from '../../stores/useToastStore';
 import { chatHistoryForParse } from '../../utils/chatHelpers';
 import { dedupeConflictingPatches } from '../../utils/patchDedupe';
+import { isGenerateIntent } from '../../utils/generateIntent';
+import {
+  derivePlanReadiness,
+  formatReadinessAssistantText,
+} from '../../utils/planReadiness';
+import { splitLowRiskPatches } from '../../utils/lowRiskPatches';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatComposer } from './ChatComposer';
 import { ChatStatusBar } from './ChatStatusBar';
 import { PatchConfirmPanel } from './PatchConfirmPanel';
+import { PlanSummaryCard } from './PlanSummaryCard';
+import { ReadinessChecklist } from './ReadinessChecklist';
+import { PatchUndoBar } from './PatchUndoBar';
 import { getChatModeLabel, parseDemoChat } from './chatDemo';
 import { executeChatToolCalls } from './executeChatToolCalls';
-import type { ChatMode, ChatParseSelection } from '../../types/travelPlan';
+import {
+  createParseActivity,
+  formatActivitySummary,
+  patchActivityStep,
+} from '../../types/chatActivity';
+import type { ChatMode, ChatParseSelection, FormPatch } from '../../types/travelPlan';
 import './Chat.css';
 
 function resolveChatMode(phase: string, lastMode?: ChatMode): 'global' | 'supplement' {
@@ -56,24 +70,64 @@ function buildSelection(state: ReturnType<typeof usePlanStore.getState>): ChatPa
   return selection;
 }
 
+function applyPatchesWithLowRiskAuto(patches: FormPatch[]): {
+  autoCount: number;
+  confirmCount: number;
+} {
+  const store = usePlanStore.getState();
+  const { auto, confirm } = splitLowRiskPatches(patches);
+  if (auto.length > 0) {
+    const plan = store.getActivePlan();
+    store.setPatchUndoSnapshot({
+      trip_request: structuredClone(plan.trip_request),
+      itinerary: plan.itinerary ? structuredClone(plan.itinerary) : null,
+      appliedIds: auto.map((p) => p.id),
+      count: auto.length,
+      expiresAt: Date.now() + 8_000,
+    });
+    store.confirmPatches(auto);
+  }
+  if (confirm.length > 0) {
+    store.addPendingPatches(confirm);
+  }
+  return { autoCount: auto.length, confirmCount: confirm.length };
+}
+
 export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
   const plan = usePlanStore((s) => s.getActivePlan());
   const addChatMessage = usePlanStore((s) => s.addChatMessage);
-  const addPendingPatches = usePlanStore((s) => s.addPendingPatches);
   const setLastChatMode = usePlanStore((s) => s.setLastChatMode);
   const isGeneratingItinerary = usePlanStore((s) => s.isGeneratingItinerary);
   const generationProgress = usePlanStore((s) => s.generationProgress);
+  const chatActivity = usePlanStore((s) => s.chatActivity);
+  const setChatActivity = usePlanStore((s) => s.setChatActivity);
+  const updateChatActivity = usePlanStore((s) => s.updateChatActivity);
+  const pendingReadinessPrompt = usePlanStore((s) => s.pendingReadinessPrompt);
+  const consumeReadinessPrompt = usePlanStore((s) => s.consumeReadinessPrompt);
   const showToast = useToastStore((s) => s.show);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingHint, setStreamingHint] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
+  const [showReadiness, setShowReadiness] = useState(false);
 
   const modeLabel = getChatModeLabel(plan.phase);
   const emptyHint =
     plan.phase === 'detailed'
       ? '补充行程细节，例如调整某景点时间。换目的地请说「改去曼谷」。'
       : '用自然语言描述行程，例如「新加坡 4 天，美食 + 亲子」。解析后需确认，确认后将自动生成路线图。';
+
+  const openReadiness = useCallback(() => {
+    const readiness = derivePlanReadiness(usePlanStore.getState().getActivePlan());
+    addChatMessage('assistant', formatReadinessAssistantText(readiness));
+    setShowReadiness(true);
+  }, [addChatMessage]);
+
+  useEffect(() => {
+    if (!pendingReadinessPrompt) return;
+    consumeReadinessPrompt();
+    openReadiness();
+  }, [pendingReadinessPrompt, consumeReadinessPrompt, openReadiness]);
 
   const checkHealth = useCallback(async () => {
     const data = await fetchHealth();
@@ -111,10 +165,44 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
 
     addChatMessage('user', text, { chat_mode: chatModeNow });
     setInput('');
+
+    // UX-CHAT-02: generate intent → checklist, skip parse
+    if (isGenerateIntent(text)) {
+      openReadiness();
+      return;
+    }
+
     setIsLoading(true);
     setStreamingHint('');
+    const parseStartedAt = Date.now();
+    setChatActivity(createParseActivity());
 
     const afterUser = usePlanStore.getState().getActivePlan();
+
+    const settleParseActivity = (error?: string) => {
+      const session = usePlanStore.getState().chatActivity;
+      if (!session || session.op !== 'parse') {
+        setChatActivity(null);
+        return;
+      }
+      let next = error ? { ...session, error } : session;
+      next = {
+        ...next,
+        steps: next.steps.map((step) => {
+          if (step.status === 'pending' || step.status === 'running') {
+            return {
+              ...step,
+              status: error ? ('error' as const) : ('done' as const),
+            };
+          }
+          return step;
+        }),
+      };
+      addChatMessage('assistant', formatActivitySummary(next, Date.now() - parseStartedAt), {
+        chat_mode: chatModeNow,
+      });
+      setChatActivity(null);
+    };
 
     try {
       const useStream = apiStatus === 'online' || apiStatus === 'llm_unconfigured';
@@ -131,9 +219,22 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
               selection: buildSelection(usePlanStore.getState()),
             },
             {
-              onDelta: (preview) => setStreamingHint(preview),
-              onValidating: () =>
-                setStreamingHint((prev) => prev || '正在校验解析结果…'),
+              onDelta: (preview) => {
+                setStreamingHint(preview);
+                updateChatActivity((prev) =>
+                  patchActivityStep(prev, 'parse_llm', { status: 'running' }),
+                );
+              },
+              onValidating: () => {
+                setStreamingHint((prev) => prev || '正在校验解析结果…');
+                updateChatActivity((prev) =>
+                  patchActivityStep(
+                    patchActivityStep(prev, 'parse_llm', { status: 'done' }),
+                    'parse_validate',
+                    { status: 'running' },
+                  ),
+                );
+              },
             },
           )
         : await parseChatMessage({
@@ -148,6 +249,14 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
           });
       setApiStatus('online');
       setStreamingHint(null);
+      updateChatActivity((prev) =>
+        patchActivityStep(
+          patchActivityStep(prev, 'parse_llm', { status: 'done' }),
+          'parse_validate',
+          { status: 'done' },
+        ),
+      );
+      settleParseActivity();
 
       if (result.chat_mode_used) {
         setLastChatMode(result.chat_mode_used);
@@ -167,7 +276,7 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
       const toolResult = await executeChatToolCalls(result.tool_calls);
 
       if (patches.length > 0) {
-        addPendingPatches(patches);
+        const { autoCount, confirmCount } = applyPatchesWithLowRiskAuto(patches);
         const conflictNote =
           conflictFields.length > 0
             ? `（同字段 ${conflictFields.join('、')} 已保留最新解析）`
@@ -178,9 +287,17 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
             : droppedNote
               ? ` ${droppedNote}`
               : '';
-        showToast(
-          `已解析 ${patches.length} 项修改，请在消息中查看摘要并展开确认${conflictNote}${warnNote}`,
-        );
+        if (autoCount > 0 && confirmCount === 0) {
+          showToast(`已自动写入 ${autoCount} 项低风险修改${conflictNote}${warnNote}`, 'info');
+        } else if (autoCount > 0) {
+          showToast(
+            `已自动写入 ${autoCount} 项；另有 ${confirmCount} 项待确认${conflictNote}${warnNote}`,
+          );
+        } else {
+          showToast(
+            `已解析 ${confirmCount} 项修改，请在下方确认${conflictNote}${warnNote}`,
+          );
+        }
       } else if (toolResult.searched) {
         if (toolResult.found > 0) {
           showToast(`已搜索到 ${toolResult.found} 条航班报价，请在左侧机票面板确认`);
@@ -209,8 +326,11 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
         const fresh = usePlanStore.getState().getActivePlan();
         const fallback = parseDemoChat(text, fresh.phase);
         setApiStatus('fallback');
+        settleParseActivity();
         addChatMessage('assistant', fallback.reply, { chat_mode: chatModeNow });
-        if (fallback.patches.length > 0) addPendingPatches(fallback.patches);
+        if (fallback.patches.length > 0) {
+          applyPatchesWithLowRiskAuto(fallback.patches);
+        }
         showToast(
           `后端未连接，已使用本地演示解析（${err instanceof ChatApiError ? err.message : '网络异常'}）`,
           'warning',
@@ -223,6 +343,7 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
       if (status === 503) setApiStatus('llm_unconfigured');
       else if (status >= 400) setApiStatus('online');
 
+      settleParseActivity(reason);
       addChatMessage('assistant', `解析失败：${reason}`, { chat_mode: chatModeNow });
       showToast(
         status === 503
@@ -233,6 +354,9 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
     } finally {
       setIsLoading(false);
       setStreamingHint(null);
+      if (usePlanStore.getState().chatActivity?.op === 'parse') {
+        setChatActivity(null);
+      }
     }
   };
 
@@ -245,13 +369,17 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
   const busy = isLoading || isGeneratingItinerary;
   const composerDisabled = apiStatus === 'offline' || apiStatus === 'checking';
 
-  const generateStreaming =
-    isGeneratingItinerary &&
-    generationProgress.phase === 'llm' &&
-    generationProgress.llmLatencyMs == null
-      ? (generationProgress.llmPreview ?? '')
-      : null;
-  const activeStreaming = isLoading ? streamingHint : generateStreaming;
+  /** Activity 进行中时以步骤气泡为主，避免与流式气泡叠两层 */
+  const activeStreaming =
+    chatActivity != null
+      ? null
+      : isLoading
+        ? streamingHint
+        : isGeneratingItinerary &&
+            generationProgress.phase === 'llm' &&
+            generationProgress.llmLatencyMs == null
+          ? (generationProgress.llmPreview ?? '')
+          : null;
 
   return (
     <section className="chat-panel">
@@ -293,15 +421,30 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
         generationProgress={generationProgress}
       />
 
+      <PlanSummaryCard
+        onPrefill={setInput}
+        onRequestGenerate={openReadiness}
+      />
+
       <div className="chat-panel__main">
         <ChatMessageList
           messages={plan.chat_messages}
           streamingContent={activeStreaming}
+          activity={chatActivity}
           emptyHint={emptyHint}
+          footer={
+            showReadiness ? (
+              <ReadinessChecklist
+                onClose={() => setShowReadiness(false)}
+                onPrefill={setInput}
+              />
+            ) : null
+          }
         />
       </div>
 
       <div className="chat-panel__dock">
+        <PatchUndoBar />
         <PatchConfirmPanel />
         <ChatComposer
           value={input}

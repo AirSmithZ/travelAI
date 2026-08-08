@@ -63,6 +63,12 @@ import {
   popItineraryUndo,
   pushItineraryHistory,
 } from '../utils/itineraryHistory';
+import type { ChatActivitySession } from '../types/chatActivity';
+import {
+  createGenerateActivity,
+  formatActivitySummary,
+  patchActivityStep,
+} from '../types/chatActivity';
 import type { RecommendedStayZone, StayZonePreferences } from '../types/stayZone';
 import { addHotelNodeForZone } from '../utils/hotelNodeMutations';
 import { findCrossDayPoiDuplicates } from '../utils/crossDayPoiDedup';
@@ -74,7 +80,7 @@ import {
   syncIntelHotelFromNode,
 } from '../utils/hotelIntelSync';
 
-export type GenerationPhase = 'idle' | 'llm' | 'geocode';
+export type GenerationPhase = 'idle' | 'llm' | 'geocode' | 'evidence';
 
 export interface GenerationProgress {
   phase: GenerationPhase;
@@ -83,9 +89,19 @@ export interface GenerationProgress {
   llmPreview?: string;
   geocodeDone?: number;
   geocodeTotal?: number;
+  evidenceCount?: number;
 }
 
 const idleProgress: GenerationProgress = { phase: 'idle' };
+
+/** UX-CHAT-03: ephemeral undo after low-risk auto-apply (not persisted) */
+export interface PatchUndoSnapshot {
+  trip_request: TripRequest;
+  itinerary: Itinerary | null;
+  appliedIds: string[];
+  count: number;
+  expiresAt: number;
+}
 
 export type EditorTarget =
   | { kind: 'form'; focus: 'day'; dayIndex: number }
@@ -128,6 +144,12 @@ interface PlanState {
   isGeneratingItinerary: boolean;
   isGeocodingItinerary: boolean;
   generationProgress: GenerationProgress;
+  /** UX-CHAT-05: ephemeral activity; not persisted */
+  chatActivity: ChatActivitySession | null;
+  /** UX-CHAT-03: undo window after auto-applied low-risk patches */
+  patchUndoSnapshot: PatchUndoSnapshot | null;
+  /** UX-CHAT-02/09: ChatPanel opens readiness checklist when true */
+  pendingReadinessPrompt: boolean;
 
   /** 按 planId 隔离的行程撤销栈（不持久化） */
   itineraryHistories: Record<string, ItineraryHistoryStacks>;
@@ -190,6 +212,13 @@ interface PlanState {
 
   setLeftPanelMode: (mode: LeftPanelMode) => void;
   setPreviewExpandedWithoutItinerary: (expanded: boolean) => void;
+  setChatActivity: (activity: ChatActivitySession | null) => void;
+  updateChatActivity: (updater: (prev: ChatActivitySession) => ChatActivitySession) => void;
+  setPatchUndoSnapshot: (snapshot: PatchUndoSnapshot | null) => void;
+  clearPatchUndoSnapshot: () => void;
+  undoLastAutoPatches: () => boolean;
+  requestReadinessPrompt: () => void;
+  consumeReadinessPrompt: () => void;
 
   addChatMessage: (
     role: 'user' | 'assistant',
@@ -240,10 +269,12 @@ export function selectOverviewColumnWidths(state: PlanState): number[] {
   return state.overviewColumnWidths[state.activePlanId] ?? EMPTY_OVERVIEW_COLUMN_WIDTHS;
 }
 
-/** 总览 / 地图浏览时折叠左栏；编辑表头/区域或地图选点时展开 */
+/** 总览 / 地图浏览时折叠左栏；编辑/选点/机酒/Activity 时展开（UX-CHAT-08） */
 export function selectLeftPanelCollapsed(state: PlanState): boolean {
   if (state.editorTarget) return false;
   if (state.mapPickNodeId) return false;
+  if (state.chatActivity) return false;
+  if (state.leftPanelMode === 'flight' || state.leftPanelMode === 'stay') return false;
   if (state.graphViewMode === 'overview') return true;
   if (state.activeView === 'map') return true;
   return false;
@@ -258,15 +289,41 @@ export function selectPreviewCollapsed(state: PlanState): boolean {
   return true;
 }
 
+function settleChatActivity(
+  get: () => PlanState,
+  set: (partial: Partial<PlanState> | ((s: PlanState) => Partial<PlanState>)) => void,
+  error?: string,
+) {
+  const session = get().chatActivity;
+  if (!session) return;
+  let next: ChatActivitySession = error ? { ...session, error } : session;
+  next = {
+    ...next,
+    steps: next.steps.map((step) => {
+      if (step.status === 'pending' || step.status === 'running') {
+        return { ...step, status: error ? ('error' as const) : ('skipped' as const) };
+      }
+      return step;
+    }),
+  };
+  const content = formatActivitySummary(next, Date.now() - next.startedAt);
+  get().addChatMessage('assistant', content);
+  set({ chatActivity: null });
+}
+
 function runBackgroundGeocode(
   set: (partial: Partial<PlanState> | ((s: PlanState) => Partial<PlanState>)) => void,
+  get: () => PlanState,
   itinerary: Itinerary,
   destination: string,
   llmLatencyMs?: number | null,
 ) {
   const dest = destination.trim();
-  if (!dest) return;
-  set({
+  if (!dest) {
+    settleChatActivity(get, set);
+    return;
+  }
+  set((s) => ({
     isGeocodingItinerary: true,
     generationProgress: {
       phase: 'geocode',
@@ -274,7 +331,11 @@ function runBackgroundGeocode(
       geocodeDone: 0,
       geocodeTotal: 0,
     },
-  });
+    chatActivity:
+      s.chatActivity?.op === 'generate'
+        ? patchActivityStep(s.chatActivity, 'geocode', { status: 'running' })
+        : s.chatActivity,
+  }));
   void geocodeItineraryNodesStream(itinerary, dest, {
     onProgress: ({ done, total }) => {
       set((s) => ({
@@ -284,6 +345,13 @@ function runBackgroundGeocode(
           geocodeDone: done,
           geocodeTotal: total,
         },
+        chatActivity:
+          s.chatActivity?.op === 'generate'
+            ? patchActivityStep(s.chatActivity, 'geocode', {
+                status: 'running',
+                detail: total > 0 ? `${done}/${total}` : undefined,
+              })
+            : s.chatActivity,
       }));
     },
   })
@@ -313,12 +381,29 @@ function runBackgroundGeocode(
       if (n > 0) {
         useToastStore.getState().show(`发现 ${n} 处跨天重复 POI，已写入行程警告`, 'warning');
       }
+      set((s) => ({
+        chatActivity:
+          s.chatActivity?.op === 'generate'
+            ? patchActivityStep(s.chatActivity, 'geocode', { status: 'done' })
+            : s.chatActivity,
+      }));
+      settleChatActivity(get, set);
     })
     .catch(() => {
       useToastStore.getState().show(
         '坐标补全失败，可在节点编辑器中手动搜索',
         'warning',
       );
+      set((s) => ({
+        chatActivity:
+          s.chatActivity?.op === 'generate'
+            ? patchActivityStep(s.chatActivity, 'geocode', {
+                status: 'error',
+                detail: '失败',
+              })
+            : s.chatActivity,
+      }));
+      settleChatActivity(get, set, '坐标补全失败');
     })
     .finally(() =>
       set({ isGeocodingItinerary: false, generationProgress: idleProgress }),
@@ -357,6 +442,9 @@ export const usePlanStore = create<PlanState>()(
     isGeneratingItinerary: false,
     isGeocodingItinerary: false,
     generationProgress: idleProgress,
+    chatActivity: null,
+    patchUndoSnapshot: null,
+    pendingReadinessPrompt: false,
     itineraryHistories: {},
 
     getActivePlan: () => {
@@ -527,7 +615,7 @@ export const usePlanStore = create<PlanState>()(
       if (hasAddNode && destination) {
         const itinerary = get().getItinerary();
         if (itinerary) {
-          runBackgroundGeocode(set, itinerary, destination);
+          runBackgroundGeocode(set, get, itinerary, destination);
           useToastStore.getState().show('新节点坐标补全中…', 'info');
         }
       }
@@ -590,7 +678,13 @@ export const usePlanStore = create<PlanState>()(
           .show('尚未确认酒店或住宿片区；行程住宿区域将为估算', 'warning');
       }
 
-      set({ isGeneratingItinerary: true, generationProgress: { phase: 'llm', llmPreview: '' } });
+      const hasFlights = p.travel_intel.flights.length > 0;
+      set({
+        isGeneratingItinerary: true,
+        generationProgress: { phase: 'evidence', llmPreview: '' },
+        chatActivity: createGenerateActivity(hasFlights),
+        leftPanelMode: 'chat',
+      });
       try {
         const { itinerary, llmLatencyMs } = await generateItineraryStream(p.trip_request, {
           geocode: false,
@@ -599,23 +693,74 @@ export const usePlanStore = create<PlanState>()(
           current_itinerary:
             mode === 'optimize' || mode === 'regenerate' ? p.itinerary : null,
           onDelta: (preview) => {
-            set((s) => ({
-              generationProgress: {
-                phase: 'llm',
-                llmPreview: preview,
-                llmLatencyMs: s.generationProgress.llmLatencyMs,
-              },
-            }));
+            set((s) => {
+              let activity = s.chatActivity;
+              if (activity?.op === 'generate') {
+                const ev = activity.steps.find((x) => x.id === 'evidence');
+                if (ev?.status === 'pending') {
+                  activity = patchActivityStep(activity, 'evidence', { status: 'skipped' });
+                }
+                activity = patchActivityStep(activity, 'generate_llm', { status: 'running' });
+              }
+              return {
+                generationProgress: {
+                  phase: 'llm' as const,
+                  llmPreview: preview,
+                  llmLatencyMs: s.generationProgress.llmLatencyMs,
+                  evidenceCount: s.generationProgress.evidenceCount,
+                },
+                chatActivity: activity,
+              };
+            });
           },
           onProgress: (evt) => {
-            if (evt.step === 'llm' && evt.status === 'done') {
+            if (evt.step === 'evidence') {
               set((s) => ({
                 generationProgress: {
-                  phase: 'llm',
-                  llmPreview: s.generationProgress.llmPreview,
-                  llmLatencyMs: evt.latencyMs,
+                  ...s.generationProgress,
+                  phase: 'evidence',
+                  evidenceCount: evt.count ?? s.generationProgress.evidenceCount,
                 },
+                chatActivity:
+                  s.chatActivity?.op === 'generate'
+                    ? patchActivityStep(s.chatActivity, 'evidence', {
+                        status: evt.status === 'done' ? 'done' : 'running',
+                        detail:
+                          evt.status === 'done' && evt.count != null
+                            ? `${evt.count} 条`
+                            : undefined,
+                      })
+                    : s.chatActivity,
               }));
+              return;
+            }
+            if (evt.step === 'llm') {
+              set((s) => {
+                let activity = s.chatActivity;
+                if (activity?.op === 'generate') {
+                  const ev = activity.steps.find((x) => x.id === 'evidence');
+                  if (ev && ev.status === 'pending') {
+                    activity = patchActivityStep(activity, 'evidence', { status: 'skipped' });
+                  } else if (ev && ev.status === 'running') {
+                    activity = patchActivityStep(activity, 'evidence', { status: 'done' });
+                  }
+                  activity = patchActivityStep(activity, 'generate_llm', {
+                    status: evt.status === 'done' ? 'done' : 'running',
+                  });
+                }
+                return {
+                  generationProgress: {
+                    phase: 'llm' as const,
+                    llmPreview: s.generationProgress.llmPreview,
+                    llmLatencyMs:
+                      evt.status === 'done'
+                        ? evt.latencyMs
+                        : s.generationProgress.llmLatencyMs,
+                    evidenceCount: s.generationProgress.evidenceCount,
+                  },
+                  chatActivity: activity,
+                };
+              });
             }
           },
         });
@@ -625,25 +770,43 @@ export const usePlanStore = create<PlanState>()(
             itinerary: syncItineraryMeta(itinerary, plan.trip_request),
           })),
         );
-        set({ isGeneratingItinerary: false });
-        const evidenceCount = itinerary.meta?.evidence?.length ?? 0;
+        set((s) => ({
+          isGeneratingItinerary: false,
+          chatActivity:
+            s.chatActivity?.op === 'generate'
+              ? patchActivityStep(s.chatActivity, 'generate_llm', { status: 'done' })
+              : s.chatActivity,
+        }));
+        const evidenceItems = itinerary.meta?.evidence ?? [];
+        const evidenceCount = evidenceItems.length;
         if (evidenceCount > 0) {
-          useToastStore
-            .getState()
-            .show(`已参考 ${evidenceCount} 条公开笔记印证（非票价）`, 'info');
+          const verified = evidenceItems.filter((e) => e.verified).length;
+          const suffix =
+            verified > 0
+              ? `（非官方 · ${verified} 条含围栏内已定位地点）`
+              : '（非官方 · 网友提及未核验）';
+          useToastStore.getState().show(`已参考 ${evidenceCount} 条印证${suffix}`, 'info');
         }
         const modeLabel =
           mode === 'optimize' ? '已优化适配机酒' : mode === 'regenerate' ? '已按新机酒重构' : null;
         if (modeLabel) useToastStore.getState().show(modeLabel, 'info');
         const dest = p.trip_request.destination?.trim();
         if (dest) {
-          runBackgroundGeocode(set, itinerary, dest, llmLatencyMs);
+          runBackgroundGeocode(set, get, itinerary, dest, llmLatencyMs);
         } else {
-          set({ generationProgress: idleProgress });
+          set((s) => ({
+            generationProgress: idleProgress,
+            chatActivity:
+              s.chatActivity?.op === 'generate'
+                ? patchActivityStep(s.chatActivity, 'geocode', { status: 'skipped' })
+                : s.chatActivity,
+          }));
+          settleChatActivity(get, set);
         }
         return 'api';
       } catch {
         if (mode !== 'generate') {
+          settleChatActivity(get, set, '行程更新失败');
           set({ isGeneratingItinerary: false, generationProgress: idleProgress });
           useToastStore.getState().show('行程更新失败，请稍后重试', 'error');
           return 'blocked';
@@ -654,10 +817,15 @@ export const usePlanStore = create<PlanState>()(
             return { ...plan, itinerary: syncItineraryMeta(itinerary, plan.trip_request) };
           }),
         );
-        set({ isGeneratingItinerary: false, generationProgress: idleProgress });
+        set({ isGeneratingItinerary: false });
         const dest = p.trip_request.destination?.trim();
         const mockItinerary = get().getItinerary();
-        if (dest && mockItinerary) runBackgroundGeocode(set, mockItinerary, dest);
+        if (dest && mockItinerary) {
+          runBackgroundGeocode(set, get, mockItinerary, dest);
+        } else {
+          set({ generationProgress: idleProgress });
+          settleChatActivity(get, set, '已回退 Mock 行程');
+        }
         return 'mock';
       }
     },
@@ -742,6 +910,12 @@ export const usePlanStore = create<PlanState>()(
           : '已确认航段，可继续添加下一段或前往住宿',
         'info',
       );
+      // UX-CHAT-09：确认后对话给出下一跳，不自动 regenerate
+      get().addChatMessage(
+        'assistant',
+        '航班已确认。可继续确认住宿片区，或使用下方检查清单生成玩法。',
+      );
+      get().requestReadinessPrompt();
     },
 
     addManualFlightLeg: (input) => {
@@ -843,6 +1017,12 @@ export const usePlanStore = create<PlanState>()(
           ),
         })),
       );
+      // UX-CHAT-09
+      get().addChatMessage(
+        'assistant',
+        '住宿片区已确认。可使用下方检查清单生成玩法（不会因改机酒自动重生成）。',
+      );
+      get().requestReadinessPrompt();
     },
 
     rejectStayZone: (zoneId) => {
@@ -1346,6 +1526,33 @@ export const usePlanStore = create<PlanState>()(
     setLeftPanelMode: (mode) => set({ leftPanelMode: mode }),
     setPreviewExpandedWithoutItinerary: (expanded) =>
       set({ previewExpandedWithoutItinerary: expanded }),
+    setChatActivity: (activity) => set({ chatActivity: activity }),
+    updateChatActivity: (updater) =>
+      set((s) => {
+        if (!s.chatActivity) return s;
+        return { chatActivity: updater(s.chatActivity) };
+      }),
+    setPatchUndoSnapshot: (snapshot) => set({ patchUndoSnapshot: snapshot }),
+    clearPatchUndoSnapshot: () => set({ patchUndoSnapshot: null }),
+    undoLastAutoPatches: () => {
+      const snap = get().patchUndoSnapshot;
+      if (!snap || Date.now() > snap.expiresAt) {
+        set({ patchUndoSnapshot: null });
+        return false;
+      }
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          trip_request: structuredClone(snap.trip_request),
+          itinerary: snap.itinerary ? structuredClone(snap.itinerary) : null,
+        })),
+      );
+      set({ patchUndoSnapshot: null });
+      useToastStore.getState().show('已撤销自动写入', 'info');
+      return true;
+    },
+    requestReadinessPrompt: () => set({ pendingReadinessPrompt: true }),
+    consumeReadinessPrompt: () => set({ pendingReadinessPrompt: false }),
 
     setActiveDay: (index) =>
       set({

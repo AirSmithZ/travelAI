@@ -15,15 +15,26 @@ function sourceLabel(source?: string): string {
   return source?.trim() || '参考来源';
 }
 
+/** UX-EVD-01: 非官方免责 + 已核验 / 仅网友 */
 export function EvidencePanel({ items, onClose }: EvidencePanelProps) {
+  const verifiedCount = items.filter((i) => i.verified).length;
+
   return (
     <section className="evidence-panel" aria-label="参考依据">
       <header className="evidence-panel__head">
         <div>
           <h2 className="evidence-panel__title">参考依据</h2>
           <p className="evidence-panel__sub">
-            生成时参考的公开笔记摘要，非票价；链接自行打开核对
+            非官方来源 · 生成时参考的公开笔记/网页摘要，非票价与营业资质；链接请自行打开核对
           </p>
+          {items.length > 0 && (
+            <p className="evidence-panel__tally">
+              共 {items.length} 条
+              {verifiedCount > 0
+                ? ` · ${verifiedCount} 条含围栏内已定位地点`
+                : ' · 均为网友提及·未核验坐标'}
+            </p>
+          )}
         </div>
         {onClose && (
           <button type="button" className="evidence-panel__close" onClick={onClose}>
@@ -39,10 +50,20 @@ export function EvidencePanel({ items, onClose }: EvidencePanelProps) {
           {items.map((item, i) => {
             const key = item.note_id || item.url || `${item.title}-${i}`;
             const hasUrl = Boolean(item.url?.trim());
+            const verified = Boolean(item.verified);
             return (
               <li key={key} className="evidence-panel__item">
                 <div className="evidence-panel__item-meta">
                   <span className="evidence-panel__badge">{sourceLabel(item.source)}</span>
+                  <span
+                    className={
+                      verified
+                        ? 'evidence-panel__verify evidence-panel__verify--ok'
+                        : 'evidence-panel__verify'
+                    }
+                  >
+                    {verified ? '含已定位地点' : '仅网友提及'}
+                  </span>
                   {typeof item.likes === 'number' && item.likes > 0 && (
                     <span className="evidence-panel__likes">{item.likes} 赞</span>
                   )}

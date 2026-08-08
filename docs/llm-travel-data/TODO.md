@@ -95,10 +95,12 @@
 |----|------|------|
 | **WX-01/02** | ⏸ | 产品暂缓（预报；Geo 已用于 GEO-09） |
 | **WX-03/04** | 🔲 | Chat weather / rain_plan（等 WX-01） |
-| **WS-01/02/03/05** | 🔲 | Tavily（暂缓主线；重启依据见 [21](./21-Agent-Reach与玩法印证多源实施调研.md) Phase 0 bench） |
-| **WS-04/06/07** | ✅ | EvidencePack + 侧栏 + TikHub |
-| **WS-08** | 🔲 | Places 校验 UGC（玩法可行性关键，见 [21](./21-Agent-Reach与玩法印证多源实施调研.md) §4.5） |
-| **WS-09**（新） | 🔲 | Evidence 多源 bench + query/过滤（[21](./21-Agent-Reach与玩法印证多源实施调研.md) Phase 0–1） |
+| **WS-01/02/03/05** | 🔲 | Tavily 完整网页桶（authority soft-merge 已随 WS-09） |
+| **WS-04/06/07** | ✅ | EvidencePack + 侧栏 + TikHub（**成本决策：保留 TikHub 主源**，见 [21 §0.1](./21-Agent-Reach与玩法印证多源实施调研.md)） |
+| **WS-CACHE** | ✅ | EvidencePack TTL 缓存降本（`EVIDENCE_CACHE_TTL_SEC`） |
+| **WS-08a** | ✅ | 轻量 POI 抽取 + geocode 围栏校验 → `meta.poi_candidates` |
+| **WS-08b** | 🔲 | 完整 Places 类型/评分（有预算再做） |
+| **WS-09** | ✅ | Evidence 多源 bench + query/过滤 + Tavily authority soft-merge |
 | **AG-01** | ✅ | 规则管道注入 generate |
 | **AG-02/03/04** | 🔲 | 矩阵配置 / 意图路由 / 完整 Agent+KB |
 
@@ -113,15 +115,16 @@
 
 ---
 
-**建议实施顺序（代码收尾波完成后）**：
+**建议实施顺序**：
 
-1. **对话编排 UX（[22](./22-对话编排与玩法印证UX调研.md)）**：`UX-CHAT-05`（运行可见）→ `01/02/06` → 再 `03/04` · `UX-EVD-01` · `UX-FLT-CACHE`  
-2. **玩法印证**：`WS-09` bench → query/过滤 → **`WS-08`** → 再定 `WS-01/05`（Agent-Reach CLI 仅对照）  
-3. **`SEC-01b` / `HOT-01`** 运维与商务；**`B-P6-02`** · **`B-FLT-06`**  
-4. （⏸ 移动端 · WX · 未证明增益前的 Exa/Agent-Reach 生产依赖 · P5b）· **`SEC-02`** 仅部署前  
+1. ~~对话编排 Wave A/B~~ ✅ · ~~WS-09 Phase 0–1~~ ✅  
+2. **对话编排 Wave C（[22](./22-对话编排与玩法印证UX调研.md)）**：`04/07` · `UX-FLT-CACHE`（`UX-EVD-01` ✅）  
+3. **玩法印证**：~~`WS-CACHE` / `WS-08a` / `UX-EVD-01`~~ ✅ → 再 `WS-08b` / 完整 `WS-01`（**保持 TikHub**；Reach 仅对照）  
+4. **`SEC-01b` / `HOT-01`** 运维与商务；**`B-P6-02`** · **`B-FLT-06`**  
+5. （⏸ 移动端 · WX · 未证明增益前的 Exa/Agent-Reach 生产依赖 · P5b）· **`SEC-02`** 仅部署前  
 
 > 对话为主 / 只读摘要见 [22](./22-对话编排与玩法印证UX调研.md)。印证多源见 [21](./21-Agent-Reach与玩法印证多源实施调研.md)。偏离复核见 [20 §6](./20-L1L2运行验证记录.md)。
 
 ---
 
-*清单版本：v1.11 · 2026-08-08 · 变更请同步 [总索引](../TODO.md)*
+*清单版本：v1.13 · 2026-08-08 · 变更请同步 [总索引](../TODO.md)*

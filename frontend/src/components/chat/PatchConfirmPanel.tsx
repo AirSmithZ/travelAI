@@ -422,17 +422,48 @@ export function PatchConfirmPanel() {
 
   if (pendingPatches.length === 0 || steps.length === 0) return null;
 
+  const batchIds = [
+    ...new Set(pendingPatches.map((p) => p.batch_id).filter((id): id is string => Boolean(id))),
+  ];
+  const singleBatchId = batchIds.length === 1 ? batchIds[0] : null;
+  const batchPatches = singleBatchId
+    ? pendingPatches.filter((p) => p.batch_id === singleBatchId)
+    : pendingPatches;
+  const batchDrafts = batchPatches.map((p) => drafts.find((d) => d.id === p.id) ?? p);
+
+  const applyBatch = () => {
+    confirmPatches(batchDrafts);
+  };
+
+  const dismissAll = () => {
+    dismissPatches(pendingPatches.map((p) => p.id));
+  };
+
   if (!expanded) {
     return (
-      <button
-        type="button"
-        className="patch-confirm-panel__collapsed-bar"
-        onClick={() => setExpanded(true)}
-        aria-expanded={false}
-      >
-        <span className="patch-confirm-panel__collapsed-count">{pendingPatches.length} 项待确认</span>
-        <span className="patch-confirm-panel__collapsed-action">展开编辑</span>
-      </button>
+      <div className="patch-confirm-panel patch-confirm-panel--collapsed">
+        <div className="patch-confirm-panel__collapsed-row">
+          <button
+            type="button"
+            className="patch-confirm-panel__collapsed-bar"
+            onClick={() => setExpanded(true)}
+            aria-expanded={false}
+          >
+            <span className="patch-confirm-panel__collapsed-count">
+              {pendingPatches.length} 项待确认
+            </span>
+            <span className="patch-confirm-panel__collapsed-action">展开编辑</span>
+          </button>
+          {/* UX-CHAT-03: same batch → one-click confirm */}
+          <button
+            type="button"
+            className="patch-confirm-panel__primary patch-confirm-panel__primary--compact"
+            onClick={applyBatch}
+          >
+            确认本批
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -447,15 +478,6 @@ export function PatchConfirmPanel() {
 
   const skipStep = () => {
     dismissPatches(currentStep.patches.map((p) => p.id));
-  };
-
-  const applyAll = () => {
-    const all = pendingPatches.map((p) => drafts.find((d) => d.id === p.id) ?? p);
-    confirmPatches(all);
-  };
-
-  const dismissAll = () => {
-    dismissPatches(pendingPatches.map((p) => p.id));
   };
 
   return (
@@ -486,21 +508,17 @@ export function PatchConfirmPanel() {
       <StepEditor step={currentStep} drafts={drafts} onDraftChange={updateDraft} />
 
       <div className="patch-confirm-panel__actions">
-        <button type="button" className="patch-confirm-panel__primary" onClick={applyStep}>
-          {currentStep.kind === 'fork_plan' ? '创建并切换' : '确认本步'}
+        <button type="button" className="patch-confirm-panel__primary" onClick={applyBatch}>
+          确认本批（{batchDrafts.length}）
         </button>
         <div className="patch-confirm-panel__secondary-row">
+          <button type="button" className="patch-confirm-panel__link" onClick={applyStep}>
+            {currentStep.kind === 'fork_plan' ? '创建并切换' : '仅确认本步'}
+          </button>
+          <span className="patch-confirm-panel__sep" aria-hidden>·</span>
           <button type="button" className="patch-confirm-panel__link" onClick={skipStep}>
             忽略本步
           </button>
-          {steps.length > 1 && (
-            <>
-              <span className="patch-confirm-panel__sep" aria-hidden>·</span>
-              <button type="button" className="patch-confirm-panel__link" onClick={applyAll}>
-                确认全部
-              </button>
-            </>
-          )}
           <span className="patch-confirm-panel__sep" aria-hidden>·</span>
           <button type="button" className="patch-confirm-panel__link" onClick={dismissAll}>
             稍后处理

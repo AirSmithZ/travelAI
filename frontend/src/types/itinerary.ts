@@ -49,6 +49,18 @@ export interface ItineraryEvidenceItem {
   source?: string;
   query?: string;
   note_id?: string;
+  /** WS-08a: note mentions a geocode-fenced POI */
+  verified?: boolean;
+  poi_hits?: string[];
+}
+
+export interface ItineraryPoiCandidate {
+  name: string;
+  mentions?: number;
+  verified?: boolean;
+  lat?: number;
+  lng?: number;
+  display_name?: string;
 }
 
 export interface ItineraryMeta {
@@ -57,6 +69,8 @@ export interface ItineraryMeta {
   locale: 'zh-CN';
   warnings: string[];
   evidence?: ItineraryEvidenceItem[];
+  /** WS-08a light POI tally after fence validate */
+  poi_candidates?: ItineraryPoiCandidate[];
   /** B-P4-04 / FLOW-02 */
   flight_quote_ids?: string[];
   intel_fingerprint?: string;

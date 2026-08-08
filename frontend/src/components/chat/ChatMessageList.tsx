@@ -1,18 +1,24 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { ChatMessage } from '../../types/travelPlan';
+import type { ChatActivitySession } from '../../types/chatActivity';
 import { ChatMessageBubble } from './ChatMessageBubble';
+import { ChatActivityBubble } from './ChatActivityBubble';
 import './Chat.css';
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
   streamingContent?: string | null;
+  activity?: ChatActivitySession | null;
   emptyHint?: string;
+  footer?: ReactNode;
 }
 
 export function ChatMessageList({
   messages,
   streamingContent,
+  activity,
   emptyHint,
+  footer,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showNewHint, setShowNewHint] = useState(false);
@@ -37,9 +43,9 @@ export function ChatMessageList({
   useEffect(() => {
     if (atBottomRef.current) scrollToBottom();
     else setShowNewHint(true);
-  }, [messages, streamingContent, scrollToBottom]);
+  }, [messages, streamingContent, activity, footer, scrollToBottom]);
 
-  const isEmpty = messages.length === 0 && !streamingContent;
+  const isEmpty = messages.length === 0 && !streamingContent && !activity && !footer;
 
   return (
     <div className="chat-list-wrap">
@@ -54,7 +60,8 @@ export function ChatMessageList({
         {messages.map((msg) => (
           <ChatMessageBubble key={msg.id} message={msg} />
         ))}
-        {streamingContent != null && (
+        {activity && <ChatActivityBubble activity={activity} />}
+        {streamingContent != null && !activity && (
           <ChatMessageBubble
             message={{
               id: '__streaming__',
@@ -65,6 +72,7 @@ export function ChatMessageList({
             streaming
           />
         )}
+        {footer}
       </div>
       {showNewHint && (
         <button type="button" className="chat-list__new-hint" onClick={() => scrollToBottom(true)}>

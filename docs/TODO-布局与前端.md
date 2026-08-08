@@ -2,23 +2,25 @@
 
 ← [总索引](./TODO.md) · [开发进度](./开发进度.md)
 
-> **更新**：2026-08-08（新增 UX-CHAT-* / UX-EVD-01 调研项，**未实施**；见 [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md)）  
+> **更新**：2026-08-08（Wave A/B：`UX-CHAT-01～03/05/06/08/09` ✅；Wave C 仍开放；见 [22 §6](./llm-travel-data/22-对话编排与玩法印证UX调研.md)）  
 > **ID 前缀**：`UX-` · 状态：🔲 开放 · ⏸ 暂停 · ✅ 完成
 
 ---
 
-## 0. 对话编排（doc 22 · 调研拍板 · 未实施）
+## 0. 对话编排（doc 22）
 
 | ID | 状态 | 优先级 | 待办 | 关联文档 |
 |----|------|--------|------|----------|
-| **UX-CHAT-05** | 🔲 | **P0** | 对话内 Activity 进行中气泡（即时 ack、步骤、已用时、完成可回看） | [22 §3b](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
-| **UX-CHAT-01** | 🔲 | P1 | 对话区 **只读计划摘要卡**（已填/未填；卡片内不可编辑；改字段走对话） | [22 §2](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
-| **UX-CHAT-02** | 🔲 | P1 | 生成意图 → 对话内 ReadinessChecklist + 显式生成 CTA | [22 §2.4](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
-| **UX-CHAT-06** | 🔲 | P1 | SSE/活动行补齐 evidence、航班搜等 progress | [22 §3b.4](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
-| **UX-CHAT-03** | 🔲 | P2 | Patch 单批确认；低风险可选自动写入 + Undo | [22 §5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-05** | ✅ | **P0** | 对话内 Activity 进行中气泡（即时 ack、步骤、已用时、完成可回看） | [22 §3b](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-08** | ✅ | P1 | 机酒/Activity 进行中抑制 map 折叠左栏（对话不消失） | [22 §6.2](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-06** | ✅ | P1 | SSE/活动行补齐 evidence、航班搜等 progress | [22 §3b.4](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-09** | ✅ | P1 | 确认航班/片区后对话「可生成玩法」CTA | [22 §6.2](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-01** | ✅ | P1 | 对话区 **只读计划摘要卡**（已填/未填；卡片内不可编辑；改字段走对话） | [22 §2](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-02** | ✅ | P1 | 生成意图 → 对话内 ReadinessChecklist + 显式生成 CTA | [22 §2.4](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-03** | ✅ | P2 | Patch 单批确认；低风险可选自动写入 + Undo | [22 §5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-CHAT-04** | 🔲 | P2 | 左栏模式收敛：需求阶段弱化「行程编辑」与摘要分离 | [22 §5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-CHAT-07** | 🔲 | P3 | 可选 reasoning 折叠（有则显示） | [22 §3b.5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
-| **UX-EVD-01** | 🔲 | P2 | 印证短卡 ↔ Evidence 大面板；摘要展示印证条数 | [22 §3](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
+| **UX-EVD-01** | ✅ | P2 | 非官方文案 · 已定位/仅网友 · 摘要条数 · StatusBar evidence | [22 §3](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 
 ---
 
@@ -27,7 +29,7 @@
 | ID | 状态 | 优先级 | 待办 | 关联文档 |
 |----|------|--------|------|----------|
 | **UX-14-01** | ✅ | P1 | `selectPreviewCollapsed`：无 `itinerary.days` 时折叠右栏 | [14 §4.1](./14-无路线图时预览区折叠方案.md) |
-| **UX-14-02** | ✅ | P1 | `AppShell` 右栏 `app-shell__preview--collapsed` + 左栏 flex 占满 | [14 §4.3](./14-无路线图时预览区折叠方案.md) |
+| **UX-14-02** | ✅ | P1 | `AppShell` 右栏 `app-shell__preview--truncated` + 左栏 flex 占满 | [14 §4.3](./14-无路线图时预览区折叠方案.md) |
 | **UX-14-03** | ✅ | P1 | InputPanel 底栏「路线预览」strip（手动展开 EmptyPreview） | [14 §4.4](./14-无路线图时预览区折叠方案.md) |
 | **UX-14-04** | ✅ | P1 | `previewExpandedWithoutItinerary` store 字段 + action | [14 §4.1](./14-无路线图时预览区折叠方案.md) |
 | **UX-14-05** | ✅ | P1 | 住宿 recommend 有 geometry 时强制展开预览并切 map | [14 §5.1](./14-无路线图时预览区折叠方案.md) · [13 §5.1](./llm-travel-data/13-阶段B住宿区域实施计划.md) |
@@ -55,8 +57,8 @@
 |----|------|--------|------|----------|
 | **UX-GEN-01** | 🔲 | P3 | 地图 Marker 聚类（性能） | [项目分析 §Phase3](./项目分析与设计文档.md) |
 | **UX-GEN-02** | 🔲 | P3 | 加载骨架屏 / 空态统一 | [项目分析 §Phase3](./项目分析与设计文档.md) |
-| **UX-GEN-03** | ⏸ | — | 自动 generate vs 手动（产品决策忽略 P60） | [问题日志 P60](./问题日志.md) |
+| **UX-GEN-03** | ⏸ | — | 自动 generate vs 手动（产品决策忽略 P60） | [问题日志](./问题日志.md) |
 
 ---
 
-*清单版本：v1.3 · 2026-08-08*
+*清单版本：v1.5 · 2026-08-08*

@@ -8,11 +8,23 @@
   border-radius: var(--radius-md);
 }
 
+.patch-confirm-panel--collapsed {
+  padding: 8px;
+  max-height: none;
+}
+
+.patch-confirm-panel__collapsed-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
 .patch-confirm-panel__collapsed-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 8px 12px;
   font-size: 12px;
   color: var(--text-muted);
@@ -20,6 +32,13 @@
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
   border-radius: var(--radius-md);
   cursor: pointer;
+}
+
+.patch-confirm-panel__primary--compact {
+  flex-shrink: 0;
+  padding: 0 12px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .patch-confirm-panel__collapsed-bar:hover {

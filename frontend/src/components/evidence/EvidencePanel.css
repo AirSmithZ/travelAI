@@ -31,6 +31,14 @@
   color: var(--text-muted);
 }
 
+.evidence-panel__tally {
+  margin: 6px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
 .evidence-panel__close {
   flex-shrink: 0;
   padding: 4px 10px;
@@ -88,6 +96,16 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--accent);
+}
+
+.evidence-panel__verify {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.evidence-panel__verify--ok {
+  color: color-mix(in srgb, var(--accent) 75%, #2a6b4a);
 }
 
 .evidence-panel__likes {

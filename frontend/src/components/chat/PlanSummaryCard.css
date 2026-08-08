@@ -1,0 +1,122 @@
+.plan-summary {
+  flex-shrink: 0;
+  margin: 0 12px 8px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.plan-summary__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.plan-summary__toggle:hover {
+  color: var(--text);
+}
+
+.plan-summary__title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.plan-summary__meta {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.plan-summary__chev {
+  color: var(--text-dim);
+}
+
+.plan-summary__list {
+  margin: 0;
+  padding: 0 8px 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-summary__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.plan-summary__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.plan-summary__row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.plan-summary__item--done .plan-summary__mark {
+  color: var(--accent);
+}
+
+.plan-summary__item--hard:not(.plan-summary__item--done) .plan-summary__mark,
+.plan-summary__item--hard:not(.plan-summary__item--done) .plan-summary__label {
+  color: #c45c5c;
+}
+
+.plan-summary__mark {
+  flex-shrink: 0;
+  width: 1em;
+  text-align: center;
+}
+
+.plan-summary__label {
+  flex-shrink: 0;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.plan-summary__detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.plan-summary__chip {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.plan-summary__chip:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}

@@ -1,0 +1,33 @@
+# WS-09 Evidence bench cases (doc 21 §6.3)
+cases:
+  - id: osaka_5d
+    destination: 大阪
+    day_count: 5
+    gold_pois:
+      - 心斋桥
+      - 道顿堀
+      - 大阪城
+      - 环球影城
+      - 梅田
+      - 黑门市场
+      - 奈良
+  - id: singapore_4d
+    destination: 新加坡
+    day_count: 4
+    gold_pois:
+      - 滨海湾
+      - 鱼尾狮
+      - 圣淘沙
+      - 牛车水
+      - 小印度
+      - 花园
+  - id: bangkok_5d
+    destination: 曼谷
+    day_count: 5
+    gold_pois:
+      - 大皇宫
+      - 卧佛寺
+      - 考山路
+      - 暹罗
+      - 恰图恰
+      - 郑王庙

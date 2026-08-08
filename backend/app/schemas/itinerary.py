@@ -20,6 +20,7 @@ class ItineraryMetaOut(BaseModel):
     locale: str = "zh-CN"
     warnings: list[str] = Field(default_factory=list)
     evidence: Optional[list[dict[str, Any]]] = None
+    poi_candidates: Optional[list[dict[str, Any]]] = None
     flight_quote_ids: Optional[list[str]] = None
     intel_fingerprint: Optional[str] = None
 

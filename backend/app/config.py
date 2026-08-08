@@ -182,6 +182,20 @@ class Settings(BaseSettings):
         validation_alias="TIKHUB_MAX_RESULTS",
     )
 
+    # EvidencePack 控费 / WS-08a 轻量 POI（见 docs/llm-travel-data/21 §0.1）
+    evidence_cache_ttl_sec: int = Field(
+        default=604800,  # 7 days; 0 = disable
+        validation_alias="EVIDENCE_CACHE_TTL_SEC",
+    )
+    evidence_poi_validate: bool = Field(
+        default=True,
+        validation_alias="EVIDENCE_POI_VALIDATE",
+    )
+    evidence_poi_validate_max: int = Field(
+        default=5,
+        validation_alias="EVIDENCE_POI_VALIDATE_MAX",
+    )
+
     @field_validator(
         "deepseek_api_base",
         "serpapi_base_url",

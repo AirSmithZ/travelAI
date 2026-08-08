@@ -1,8 +1,9 @@
 # Agent Reach 调研与玩法印证多源实施分析
 
-← [19-玩法印证](./19-玩法印证与UGC数据源分析.md) · [18-机酒优先](./18-机酒优先与迭代行程产品决策.md) · [16-优先级纠偏](./16-产品能力优先级纠偏分析.md) · [TODO](./TODO.md)
+← [19-玩法印证](./19-玩法印证与UGC数据源分析.md) · [18-机酒优先](./18-机酒优先与迭代行程产品决策.md) · [16-优先级纠偏](./16-产品能力优先级纠偏分析.md) · [TODO](./TODO.md) · **产品 UX 衔接**：[22-对话编排](./22-对话编排与玩法印证UX调研.md)
 
-> **日期**：2026-08-07 · **版本**：v1.0  
+> **日期**：2026-08-08 · **版本**：v1.2 · **实施**：Phase 0–1 ✅；**成本决策：保留 TikHub**；Phase 2（`WS-CACHE` / `WS-08a` / `UX-EVD-01`）✅；`WS-08b` Places 开放  
+
 > **对象**：[Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach)  
 > **问题**：能否比 Tavily「盲目搜索」更贴切地拿到旅行玩法参考？若整包替代困难，是否另写一套更好？如何实施才能提高行程玩法可行性？
 
@@ -17,7 +18,23 @@
 | 是否另写一套 Evidence 系统？ | **否**。应扩展现有 `EvidenceItem` / `EvidencePack`，加多 provider |
 | 怎样更贴切提高玩法可行性？ | **分层取证 + 结构化抽取 + Places 校验 + 机酒硬约束**；检索只是第一步 |
 
-当前仓库已具备：TikHub → `EvidencePack` → generate 注入 → `meta.evidence` / 侧栏（WS-04/06/07）。缺口不在「再造管道」，而在 **query 匹配度、多源互补、从笔记抽 POI、与地理/机酒闭环**。
+当前仓库已具备：TikHub → `EvidencePack`（含分槽 query + `filter_evidence`）→ generate 注入 → `meta.evidence` → **基础 EvidencePanel**（左栏 `evidence` 模式，可点 URL；WS-04/06/07 主体）。  
+缺口不在「再造管道 / 有没有面板」，而在 **多源 fact、POI 抽取、Places 核验分层（WS-08）、面板「已核验 vs 仅网友」与「非官方」文案（见 [22](./22-对话编排与玩法印证UX调研.md) · `UX-EVD-01`）**。  
+> 注：早期组合评估曾误判「仅有 toast、无面板」——那是针对更旧快照；以本节与 [组合评估 §四](../doc21-22-玩法印证组合评估.md) 为准。
+
+### 0.1 成本决策（2026-08-08 拍板）
+
+| 判断 | 结论 |
+|------|------|
+| Agent-Reach「免费」能否替代 TikHub 生产主源？ | **否（当前无法用数据证明更优，且工程形态不适合多租户）** |
+| 是否因 TikHub 收费而改接 Reach CLI？ | **否**。Reach 现金成本低，但会话/封号/运维成本高；bench 中 `agent_reach_xhs` 仍为对照 stub |
+| **生产 pattern 主源** | **保持 TikHub** |
+| 控费手段 | **Evidence TTL 缓存**、无 Key/失败软降级、可选关 POI 校验以少打 geocode |
+| 低成本辅源 | **Tavily authority**（fact 软合并，有 Key 才调） |
+| 可落地主杠杆 | **先轻量：抽 POI + 现有 geocode 围栏**；完整 Google Places（WS-08 重型）单独立项 |
+| Reach 角色 | 本机调研 / 未来补全 bench 对照；**禁止**嵌进 `generate` |
+
+未跑出 hit@k 对照表前，不以「感觉 Reach 更便宜」换主源。若日后 CLI 对照证明质量持平且产品改为单机，再单独立项自建 XHS 通道——仍非整包嵌 Reach。
 
 ---
 
@@ -46,7 +63,7 @@ Agent Reach 是给 AI Agent（Cursor / Claude Code / OpenClaw 等）用的 **能
 2. **「免费零 Key」≠ 生产零成本**：平台风控换代、代理、会话失效是持续运维。
 3. **学理念，不嵌整包**：理念是「平台直连 UGC > 盲目网页搜」；实现应落在你们已有的 REST EvidencePack，而不是把 CLI 嵌进 `generate`。
 
-仓库现状对照见 [19 §8.1.1](./19-玩法印证与UGC数据源分析.md)：TikHub 已作 UGC 主 API；Tavily Key 预留未接线（WS-01/05 暂缓）。
+仓库现状对照见 [19 §8.1.1](./19-玩法印证与UGC数据源分析.md)：TikHub 已作 UGC 主 API；**Tavily authority 已软合并进 `fetch_evidence_pack`**（有 Key 才调用；非强制主链）。完整 WS-01/05 网页桶与缓存 TTL 仍可按 bench 结果再开。
 
 ---
 
@@ -213,15 +230,15 @@ poi_tally
 
 > 原则：每阶段有可测产物；不一次上 Agent-Reach 全家桶。
 
-### Phase 0 — 对比脚本（1～2 天，先于接线）
+### Phase 0 — 对比脚本（1～2 天，先于接线）✅
 
 **目的**：用数据决定「要不要接 Tavily / Exa」，避免感觉驱动。
 
-| 交付 | 说明 |
-|------|------|
-| `backend/scripts/bench_evidence_providers.py` | 多 provider → 同构 `EvidenceItem[]` |
-| `fixtures/evidence_bench_cases.yaml` | 大阪/新加坡等 3～5 case |
-| `.tmp/evidence_bench/*.json` + 简表 | 延迟、条数、域名分布、URL Jaccard、人工样例 |
+| 交付 | 说明 | 状态 |
+|------|------|------|
+| `backend/scripts/bench_evidence_providers.py` | 多 provider → 同构 `EvidenceItem[]` | ✅ |
+| `fixtures/evidence_bench_cases.yaml` | 大阪/新加坡等 case | ✅ |
+| `.tmp/evidence_bench/*.json` + 简表 | 延迟、条数、域名分布、URL Jaccard、人工样例 | 本地跑脚本产出 |
 
 **Providers（脚本内）**：
 
@@ -245,25 +262,26 @@ poi_tally
 | Agent-Reach XHS ≈ TikHub | **不接 CLI**；改进 TikHub query 即可 |
 | TikHub 广告噪音高 | Phase 1 先做过滤 + query，再谈新源 |
 
-### Phase 1 — Query + 过滤 + Tavily fact（与现主链兼容）
+### Phase 1 — Query + 过滤 + Tavily fact（与现主链兼容）✅（缓存除外）
 
-| ID | 工作 | 依赖 |
-|----|------|------|
-| WS-05′ | 扩展 `evidence_queries`（日序/避坑/片区/偏好） | Phase 0 样例 |
-| — | `filter_evidence_items` 降噪 | 无 |
-| WS-01/02 | `tavily_provider` → merge 进 `fetch_evidence_pack` | Key 已有 |
-| — | Prompt：分 `pattern` / `fact` 说明；仍 UNTRUSTED | 现 `_format_evidence_block` |
-| — | 缓存 `(dest, days, lang, query_hash)` TTL 7～30 天 | 控成本 |
+| ID | 工作 | 依赖 | 状态 |
+|----|------|------|------|
+| WS-05′ | 扩展 `evidence_queries`（日序/避坑/片区/偏好） | Phase 0 样例 | ✅ `tikhub.evidence_queries` |
+| — | `filter_evidence_items` 降噪 | 无 | ✅ `filter_evidence.py` |
+| WS-01/02′ | `tavily` authority → soft-merge 进 `fetch_evidence_pack` | Key 已有 | ✅ 可选；无 Key 跳过 |
+| — | Prompt：分 `pattern` / `fact` 说明；仍 UNTRUSTED | 现 `_format_evidence_block` | ✅（authority source 标签） |
+| **WS-CACHE** | 缓存 `(dest, days, zone, tags)` TTL（默认 7 天内存） | 控成本 | ✅ |
 
 **不做**：Agent-Reach 生产依赖；换掉 TikHub。
 
-### Phase 2 — POI 抽取 + Places 校验（可行性跃迁）
+### Phase 2 — POI 抽取 + 校验（可行性跃迁）
 
-| ID | 工作 |
-|----|------|
-| — | `extract_poi_candidates` → `poi_tally` |
-| **WS-08** | Places/geocode 校验 UGC 候选；生成只优先校验通过集 |
-| — | 侧栏可展示「已核验 / 仅网友提及」 |
+| ID | 工作 | 状态 |
+|----|------|------|
+| **WS-08a** | `extract_poi_candidates` → geocode 围栏轻量校验 → `meta.poi_candidates`；Prompt 注入高频已核验短表 | ✅ |
+| **WS-CACHE** | EvidencePack 内存 TTL 缓存（降 TikHub 调用） | ✅ |
+| **UX-EVD-01** | 面板「非官方」+ 已核验/仅网友 | ✅ |
+| **WS-08b** | 完整 Places（类型/评分） | 🔲 有 Key/预算后再做 |
 
 此阶段对「旅行玩法可行性」的增益通常 **大于再接一个搜索 API**。
 
@@ -392,19 +410,30 @@ Hit 规则：`gold` 是否作为子串出现在任一 item 的 `title+snippet`�
 ## 10. 决策清单（给产品/排期）
 
 1. **采纳**：多 provider 扩展现有 EvidencePack；**不**整包引入 Agent-Reach；**不**另写印证系统。  
-2. **先做 Phase 0 bench**，再决定 Tavily fact 是否进主链（重启 WS-01/05 的依据）。  
-3. **可行性主杠杆**排在「再接搜索源」之前或并行：**Query 工程 → 过滤 → POI 抽取 → WS-08 Places**。  
-4. **Exa / Agent-Reach**：默认仅评测；无显著增益则永久不做生产依赖。  
+2. **成本**：**保留 TikHub** 作生产 pattern 主源；TTL 缓存 + 软降级控费；Reach 仅 bench（§0.1）。  
+3. ~~**先做 Phase 0 bench**~~ ✅；Tavily authority 已 soft-merge。  
+4. **下一步可行性主杠杆**：**WS-08a** 轻量 POI+geocode → 再议 **WS-08b** Places。  
+5. **Exa / Agent-Reach**：默认仅评测；无显著增益则永久不做生产依赖。  
 5. **与 16/18 优先级关系**：机酒与坐标仍优先；本方案是玩法层增强，不回退「先天气/大 Agent」。
+
+### 10.1 实施落点（WS-09 / Phase 0–1）
+
+| 产物 | 路径 |
+|------|------|
+| filter | `backend/app/services/ugc/filter_evidence.py` |
+| Tavily provider | `backend/app/services/ugc/providers/tavily.py` |
+| pack merge | `backend/app/services/ugc/evidence_pack.py` |
+| query 分槽 | `backend/app/services/ugc/tikhub.py` → `evidence_queries` / `build_evidence_pack` |
+| bench | `backend/scripts/bench_evidence_providers.py` + `backend/fixtures/evidence_bench_cases.yaml` |
 
 ---
 
 ## 11. 参考
 
 - 上游：[Agent-Reach](https://github.com/Panniantong/Agent-Reach) · Exa MCP · Jina Reader  
-- 本仓：[19](./19-玩法印证与UGC数据源分析.md) · `backend/app/services/ugc/*` · `frontend/src/components/evidence/EvidencePanel.tsx`  
+- 本仓：[19](./19-玩法印证与UGC数据源分析.md) · [22 对话编排 / 印证显式步](./22-对话编排与玩法印证UX调研.md) · `backend/app/services/ugc/*` · `frontend/src/components/evidence/EvidencePanel.tsx`  
 - 业界对照：Exa vs Tavily（语义发现 vs RAG 一次返回）；旅行 UGC 实践见 19 §8.2 TripPick / skills-travel-planner  
 
 ---
 
-*文档版本：v1.0 · 2026-08-07*
+*文档版本：v1.1 · 2026-08-08 · Phase 0–1 / WS-09 落地*

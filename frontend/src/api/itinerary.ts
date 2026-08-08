@@ -67,6 +67,7 @@ function mapGenerateProgress(data: Record<string, unknown>): GenerateProgressEve
     completionTokens: (data.completion_tokens as number | null | undefined) ?? null,
     done: data.done as number | undefined,
     total: data.total as number | undefined,
+    count: typeof data.count === 'number' ? data.count : undefined,
   };
 }
 
