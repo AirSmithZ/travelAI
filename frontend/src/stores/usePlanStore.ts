@@ -65,6 +65,7 @@ import {
 } from '../utils/itineraryHistory';
 import type { RecommendedStayZone, StayZonePreferences } from '../types/stayZone';
 import { addHotelNodeForZone } from '../utils/hotelNodeMutations';
+import { findCrossDayPoiDuplicates } from '../utils/crossDayPoiDedup';
 import {
   hotelFromZoneAndNode,
   patchStayZones,
@@ -288,11 +289,30 @@ function runBackgroundGeocode(
   })
     .then((geocoded) => {
       set((s) =>
-        updateActivePlan(s, (p) => ({
-          ...p,
-          itinerary: syncItineraryMeta(geocoded, p.trip_request),
-        })),
+        updateActivePlan(s, (p) => {
+          const synced = syncItineraryMeta(geocoded, p.trip_request);
+          const dupes = findCrossDayPoiDuplicates(synced);
+          if (!dupes.length) {
+            return { ...p, itinerary: synced };
+          }
+          const prev = synced.meta?.warnings ?? [];
+          const merged = [...prev];
+          for (const w of dupes) {
+            if (!merged.includes(w)) merged.push(w);
+          }
+          return {
+            ...p,
+            itinerary: {
+              ...synced,
+              meta: { ...synced.meta, warnings: merged },
+            },
+          };
+        }),
       );
+      const n = findCrossDayPoiDuplicates(geocoded).length;
+      if (n > 0) {
+        useToastStore.getState().show(`发现 ${n} 处跨天重复 POI，已写入行程警告`, 'warning');
+      }
     })
     .catch(() => {
       useToastStore.getState().show(

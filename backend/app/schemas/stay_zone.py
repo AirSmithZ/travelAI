@@ -56,3 +56,30 @@ class StayZoneRecommendResponse(BaseModel):
     fetched_at: str
     source: Literal["llm", "heuristic"] = "heuristic"
     warnings: list[str] = Field(default_factory=list)
+
+
+class StayZoneLodgingRequest(BaseModel):
+    zone_id: str
+    city: str
+    label: str = ""
+    lat: float
+    lng: float
+    radius_m: float = Field(default=1200, ge=200, le=5000)
+    limit: int = Field(default=8, ge=1, le=20)
+
+
+class StayZoneLodgingCandidate(BaseModel):
+    name: str
+    lat: float
+    lng: float
+    address: Optional[str] = None
+    place_id: Optional[str] = None
+    rating: Optional[float] = None
+    distance_m: int = 0
+    coord_source: str = "serpapi_lodging"
+
+
+class StayZoneLodgingResponse(BaseModel):
+    zone_id: str
+    candidates: list[StayZoneLodgingCandidate] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

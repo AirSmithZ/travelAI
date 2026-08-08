@@ -128,6 +128,7 @@ export function NodeCoordEditor({ node, destination, onApply }: NodeCoordEditorP
       buildNodeCoordsPatch(preview.lat, preview.lng, {
         address: preview.address || undefined,
         source: preview.coord_source,
+        place_id: preview.place_id || undefined,
       }),
     );
     setPreview(null);

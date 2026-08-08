@@ -74,7 +74,20 @@
   border-radius: var(--radius-sm);
 }
 
+.flight-manual__warn {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-base));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius-sm);
+}
+
 .flight-manual__actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }

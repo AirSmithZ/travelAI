@@ -87,6 +87,8 @@ export interface ItineraryNode {
   scene_group?: string;
   coord_confidence?: CoordConfidence;
   coord_source?: string;
+  /** DATA-10: stable place id from geocoder when available */
+  place_id?: string;
   region?: string;
   position?: { x: number; y: number };
   /** 总览模式拖拽偏移（相对 layoutOverview 基准位置） */

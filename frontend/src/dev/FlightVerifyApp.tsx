@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { verifyFlightFromText } from '../api/flights';
 import type { FlightIntentMessage, FlightQuote, FlightVerifyTurn } from '../types/flight';
-import { formatDuration, formatPreference, formatPrice } from '../types/flight';
+import { formatDuration, formatLegRoute, formatPreference, formatPrice } from '../types/flight';
 import './FlightVerifyApp.css';
 
 const EXAMPLES = [
@@ -33,6 +33,7 @@ function OfferRow({ offer }: { offer: FlightQuote }) {
     <tr>
       <td>{offer.rank ?? '—'}</td>
       <td>{offer.airline}</td>
+      <td className="flight-verify__route">{formatLegRoute(offer)}</td>
       <td>{offer.depart_time} → {offer.arrive_time}</td>
       <td>{formatDuration(offer.duration_minutes)}</td>
       <td>{offer.stops === 0 ? '直飞' : `${offer.stops} 停`}</td>
@@ -165,6 +166,7 @@ export function FlightVerifyApp() {
                           <tr>
                             <th>#</th>
                             <th>航司</th>
+                            <th>航线</th>
                             <th>时刻</th>
                             <th>时长</th>
                             <th>经停</th>

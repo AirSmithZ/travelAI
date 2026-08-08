@@ -43,3 +43,37 @@ export async function recommendStayZones(
     clearTimeout(timer);
   }
 }
+
+export interface StayZoneLodgingCandidate {
+  name: string;
+  lat: number;
+  lng: number;
+  address?: string | null;
+  place_id?: string | null;
+  rating?: number | null;
+  distance_m: number;
+  coord_source?: string;
+}
+
+export async function searchStayZoneLodging(body: {
+  zone_id: string;
+  city: string;
+  label?: string;
+  lat: number;
+  lng: number;
+  radius_m?: number;
+  limit?: number;
+}): Promise<{ candidates: StayZoneLodgingCandidate[]; warnings: string[] }> {
+  const res = await fetch(`${apiBase()}/api/v1/stay-zones/lodging`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout?.(40_000),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as {
+    candidates: StayZoneLodgingCandidate[];
+    warnings?: string[];
+  };
+  return { candidates: data.candidates ?? [], warnings: data.warnings ?? [] };
+}

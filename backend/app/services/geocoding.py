@@ -9,6 +9,7 @@ import httpx
 
 from app.config import Settings, get_settings
 from app.data.city_aliases import country_code_for_destination, normalize_city
+from app.services.qweather_geo import lookup_city_center
 from app.services.geocode_providers import (
     AutocompleteResult,
     GeocodeBias,
@@ -47,7 +48,7 @@ def clear_geocode_caches() -> None:
 
 
 def build_query_variants(name: str, destination: str = "") -> list[str]:
-    """生成 geocoder 检索串列表：别名 city + 裸关键词（P64）。"""
+    """生成 geocoder 检索串列表：别名 city + 裸关键词（P64）+ 英译变体（GEO-09）。"""
     name = name.strip()
     if not name:
         return []
@@ -56,6 +57,10 @@ def build_query_variants(name: str, destination: str = "") -> list[str]:
     variants: list[str] = []
     if city_norm:
         variants.append(f"{name}, {city_norm}")
+        # 英译城市常用短名（逗号前）
+        en_short = city_norm.split(",")[0].strip()
+        if en_short and en_short.lower() != city_norm.lower():
+            variants.append(f"{name}, {en_short}")
     if destination.strip() and destination.strip() != city_norm:
         variants.append(f"{name}, {destination.strip()}")
     variants.append(name)
@@ -75,7 +80,7 @@ def resolve_destination_center(
     *,
     settings: Settings | None = None,
 ) -> DestinationCenter | None:
-    """解析目的地中心 lat/lng（geocode 城市一次，进程内缓存）。"""
+    """解析目的地中心 lat/lng（优先和风 GeoAPI，再 geocode；进程内缓存）。"""
     raw = destination.strip()
     if not raw:
         return None
@@ -87,31 +92,42 @@ def resolve_destination_center(
     cfg = settings or get_settings()
     city_q = normalize_city(raw)
     alias_cc = country_code_for_destination(raw)
-    # 城市中心解析：仅 countrycodes（Nominatim），不传 lat/lon 以免 Photon 偏到 0,0
-    bias = GeocodeBias(country_code=alias_cc) if alias_cc else None
 
     center: DestinationCenter | None = None
-    try:
-        # 不套围栏；查询仅为城市本身
-        result = run_autocomplete(
-            [city_q] if city_q else [raw],
-            limit=1,
-            settings=cfg,
-            bias=bias,
-            fence_km=None,
-            bare_query=None,
-            allow_bare_without_fence=True,
+
+    # GEO-09：和风城市中心（有 Key 时优先）
+    qw = lookup_city_center(city_q or raw, cfg)
+    if qw is None and city_q and city_q != raw:
+        qw = lookup_city_center(raw, cfg)
+    if qw is not None:
+        center = DestinationCenter(
+            lat=float(qw["lat"]),
+            lng=float(qw["lng"]),
+            country_code=qw.get("country_code") or alias_cc,
+            query=city_q or raw,
         )
-        if result.results:
-            hit = result.results[0]
-            center = DestinationCenter(
-                lat=hit.lat,
-                lng=hit.lng,
-                country_code=hit.country_code or alias_cc,
-                query=city_q or raw,
+    else:
+        bias = GeocodeBias(country_code=alias_cc) if alias_cc else None
+        try:
+            result = run_autocomplete(
+                [city_q] if city_q else [raw],
+                limit=1,
+                settings=cfg,
+                bias=bias,
+                fence_km=None,
+                bare_query=None,
+                allow_bare_without_fence=True,
             )
-    except GeocodeProviderError as e:
-        logger.warning("resolve_destination_center failed for %s: %s", raw, e)
+            if result.results:
+                hit = result.results[0]
+                center = DestinationCenter(
+                    lat=hit.lat,
+                    lng=hit.lng,
+                    country_code=hit.country_code or alias_cc,
+                    query=city_q or raw,
+                )
+        except GeocodeProviderError as e:
+            logger.warning("resolve_destination_center failed for %s: %s", raw, e)
 
     if len(_DEST_CENTER_CACHE) >= _DEST_CENTER_CACHE_MAX:
         _DEST_CENTER_CACHE.pop(next(iter(_DEST_CENTER_CACHE)))
@@ -263,6 +279,8 @@ def _hit_payload(
         "address": hit.address,
         "coord_confidence": conf,
         "coord_source": hit.coord_source,
+        "place_id": hit.place_id or "",
+        "name": hit.name,
     }
 
 

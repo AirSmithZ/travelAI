@@ -1,4 +1,8 @@
+import type { StayZoneStatus } from '../types/stayZone';
 import type { TravelIntel } from '../types/travelIntel';
+
+/** Must match backend `FINGERPRINT_ZONE_STATUSES` (StayZoneStatus, not hotel booking_status). */
+const FINGERPRINT_ZONE_STATUSES: ReadonlySet<StayZoneStatus> = new Set(['confirmed']);
 
 /** Canonical payload — must match backend `intel_snapshot_payload`. */
 export function intelSnapshotPayload(intel: TravelIntel | null | undefined): {
@@ -25,7 +29,7 @@ export function intelSnapshotPayload(intel: TravelIntel | null | undefined): {
     check_out: h.check_out,
   }));
   const zones = (intel.recommended_stay_zones ?? [])
-    .filter((z) => z.status === 'confirmed')
+    .filter((z) => FINGERPRINT_ZONE_STATUSES.has(z.status))
     .map((z) => ({ id: z.id, status: z.status, label: z.label }));
   return { flights, hotels, zones };
 }

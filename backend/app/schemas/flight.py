@@ -115,3 +115,22 @@ class FlightVerifyFromTextResponse(BaseModel):
     search: FlightSearchResponse | None = None
     recommendation: str | None = None
     warnings: list[str] = Field(default_factory=list)
+
+
+class FlightManualValidateRequest(BaseModel):
+    origin: str = Field(..., min_length=1, max_length=64)
+    destination: str = Field(..., min_length=1, max_length=64)
+    depart_at: str = Field(..., min_length=8, max_length=40)
+    arrive_at: str = Field(..., min_length=8, max_length=40)
+    trip_destination: str | None = None
+    trip_date_start: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    trip_date_end: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class FlightManualValidateResponse(BaseModel):
+    ok: bool
+    origin_iata: str | None = None
+    dest_iata: str | None = None
+    duration_minutes: int | None = None
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

@@ -49,6 +49,38 @@ export async function searchFlights(
   return (await res.json()) as FlightSearchResponse;
 }
 
+export interface FlightManualValidateRequest {
+  origin: string;
+  destination: string;
+  depart_at: string;
+  arrive_at: string;
+  trip_destination?: string | null;
+  trip_date_start?: string | null;
+  trip_date_end?: string | null;
+}
+
+export interface FlightManualValidateResponse {
+  ok: boolean;
+  origin_iata?: string | null;
+  dest_iata?: string | null;
+  duration_minutes?: number | null;
+  errors: string[];
+  warnings: string[];
+}
+
+export async function validateManualFlight(
+  body: FlightManualValidateRequest,
+): Promise<FlightManualValidateResponse> {
+  const res = await fetch(`${apiBase()}/api/v1/flights/manual-validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: timeoutSignal(15_000),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as FlightManualValidateResponse;
+}
+
 export async function verifyFlightFromText(
   body: FlightVerifyFromTextRequest,
 ): Promise<FlightVerifyFromTextResponse> {

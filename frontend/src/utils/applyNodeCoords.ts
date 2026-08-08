@@ -6,12 +6,18 @@ export interface NodeCoordsPatch {
   address?: string;
   coord_confidence?: CoordConfidence;
   coord_source?: string;
+  place_id?: string;
 }
 
 export function buildNodeCoordsPatch(
   lat: number,
   lng: number,
-  options?: { address?: string; source?: string; confidence?: CoordConfidence },
+  options?: {
+    address?: string;
+    source?: string;
+    confidence?: CoordConfidence;
+    place_id?: string;
+  },
 ): Partial<ItineraryNode> {
   return {
     lat,
@@ -19,6 +25,7 @@ export function buildNodeCoordsPatch(
     coord_confidence: options?.confidence ?? 'manual',
     coord_source: options?.source ?? 'manual',
     ...(options?.address ? { address: options.address } : {}),
+    ...(options?.place_id ? { place_id: options.place_id } : {}),
   };
 }
 

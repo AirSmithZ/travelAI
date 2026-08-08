@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { validateManualFlight } from '../../api/flights';
 import { usePlanStore } from '../../stores/usePlanStore';
 import type { FlightLegRole } from '../../types/travelIntel';
+import { parseTripcomSearchUrl } from '../../utils/parseTripcomSearchUrl';
 import {
   FormDateInput,
   FormField,
@@ -32,6 +34,7 @@ function combineDateTime(date: string, time: string): string {
 
 export function FlightManualAddPanel({ defaults }: { defaults: FlightManualAddDefaults }) {
   const addManualFlightLeg = usePlanStore((s) => s.addManualFlightLeg);
+  const trip = usePlanStore((s) => s.getActivePlan().trip_request);
 
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState<FlightLegRole>('outbound');
@@ -47,35 +50,100 @@ export function FlightManualAddPanel({ defaults }: { defaults: FlightManualAddDe
   const [purchaseUrl, setPurchaseUrl] = useState(defaults.purchaseUrl ?? '');
   const [bookedExternal, setBookedExternal] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [warn, setWarn] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
 
   const canSubmit = origin.trim() && destination.trim() && departDate && arriveDate;
 
-  function handleSubmit() {
-    if (!canSubmit) return;
+  function handleParseTripUrl() {
+    const parsed = parseTripcomSearchUrl(purchaseUrl);
+    if (!parsed) {
+      setError('无法从链接解析（需含 dcity/acity/ddate 的 Trip.com 搜索 URL）');
+      return;
+    }
+    setOrigin(parsed.origin);
+    setDestination(parsed.destination);
+    setDepartDate(parsed.departDate);
+    setArriveDate(parsed.departDate);
+    setError(null);
+    setWarn(
+      parsed.returnDate
+        ? `已预填往返搜索（返程 ${parsed.returnDate}）；航班号仍需手填`
+        : '已从 Trip 链接预填起终点与日期；航班号仍需手填',
+    );
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit || validating) return;
     const depart_at = combineDateTime(departDate, departTime);
     const arrive_at = combineDateTime(arriveDate, arriveTime);
     if (new Date(arrive_at).getTime() <= new Date(depart_at).getTime()) {
       setError('到达时间须晚于出发时间');
       return;
     }
-    setError(null);
-    const flight_numbers = flightNumbersRaw
-      .split(/[,，/\\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
 
-    addManualFlightLeg({
-      role,
-      origin: origin.trim(),
-      destination: destination.trim(),
-      depart_at,
-      arrive_at,
-      airline: airline.trim() || undefined,
-      flight_numbers: flight_numbers.length ? flight_numbers : undefined,
-      stops,
-      purchase_url: purchaseUrl.trim() || undefined,
-      booked_external: bookedExternal,
-    });
+    setValidating(true);
+    setError(null);
+    setWarn(null);
+    try {
+      const v = await validateManualFlight({
+        origin: origin.trim(),
+        destination: destination.trim(),
+        depart_at,
+        arrive_at,
+        trip_destination: trip.destination,
+        trip_date_start: trip.date_start,
+        trip_date_end: trip.date_end,
+      });
+      if (!v.ok) {
+        setError(v.errors[0] ?? '校验未通过');
+        return;
+      }
+      if (v.warnings.length) setWarn(v.warnings[0] ?? null);
+
+      const flight_numbers = flightNumbersRaw
+        .split(/[,，/\\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      addManualFlightLeg({
+        role,
+        origin: v.origin_iata || origin.trim(),
+        destination: v.dest_iata || destination.trim(),
+        depart_at,
+        arrive_at,
+        airline: airline.trim() || undefined,
+        flight_numbers: flight_numbers.length ? flight_numbers : undefined,
+        stops,
+        purchase_url: purchaseUrl.trim() || undefined,
+        booked_external: bookedExternal,
+      });
+    } catch (e) {
+      // Offline: allow local add with client-side time check only
+      const flight_numbers = flightNumbersRaw
+        .split(/[,，/\\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      addManualFlightLeg({
+        role,
+        origin: origin.trim(),
+        destination: destination.trim(),
+        depart_at,
+        arrive_at,
+        airline: airline.trim() || undefined,
+        flight_numbers: flight_numbers.length ? flight_numbers : undefined,
+        stops,
+        purchase_url: purchaseUrl.trim() || undefined,
+        booked_external: bookedExternal,
+      });
+      setWarn(
+        e instanceof Error
+          ? `服务端校验不可用，已本地添加（${e.message}）`
+          : '服务端校验不可用，已本地添加',
+      );
+    } finally {
+      setValidating(false);
+    }
   }
 
   return (
@@ -95,7 +163,7 @@ export function FlightManualAddPanel({ defaults }: { defaults: FlightManualAddDe
       {open && (
         <div className="flight-manual__body">
           <p className="flight-manual__desc">
-            填写实际起降时刻与航班号，作为行程锚点；与 Ignav 搜价互不影响。
+            填写实际起降时刻与航班号，作为行程锚点；可粘贴 Trip 搜索链接预填 OD/日期。
           </p>
           <FormRow>
             <FormField label="航段">
@@ -187,21 +255,30 @@ export function FlightManualAddPanel({ defaults }: { defaults: FlightManualAddDe
               <FormInput
                 value={purchaseUrl}
                 onChange={(e) => setPurchaseUrl(e.target.value)}
-                placeholder="Trip.com 或航司确认页（可选）"
+                placeholder="Trip.com showfarefirst 链接（可选）"
               />
             </FormField>
           </FormRow>
-          {error && <p className="flight-manual__error">{error}</p>}
           <div className="flight-manual__actions">
             <button
               type="button"
-              className="form-btn form-btn--primary form-btn--sm"
-              disabled={!canSubmit}
-              onClick={handleSubmit}
+              className="form-btn form-btn--sm"
+              disabled={!purchaseUrl.trim()}
+              onClick={handleParseTripUrl}
             >
-              添加航段
+              从 Trip 链接预填
+            </button>
+            <button
+              type="button"
+              className="form-btn form-btn--primary form-btn--sm"
+              disabled={!canSubmit || validating}
+              onClick={() => void handleSubmit()}
+            >
+              {validating ? '校验中…' : '添加航段'}
             </button>
           </div>
+          {error && <p className="flight-manual__error">{error}</p>}
+          {warn && <p className="flight-manual__warn">{warn}</p>}
         </div>
       )}
     </div>

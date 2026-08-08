@@ -1,6 +1,6 @@
 # 项目待办总索引
 
-> **更新**：2026-08-07（B-P3-01/02 · 移动端⏸）  
+> **更新**：2026-08-08（+ [22 对话编排 UX 调研](./llm-travel-data/22-对话编排与玩法印证UX调研.md)，未实施）  
 > **用途**：从各分析/方案文档汇总的 **开放待办**；实施完成后在本索引与子清单中勾选，并在源文档同步状态。  
 > **原则**：每条待办必须有 **TODO ID** 与 **关联文档** 链接，便于后续 PR / 实施计划引用。
 
@@ -23,10 +23,12 @@
 
 | 优先级 | ID 前缀 | 项 | 关联 |
 |--------|---------|-----|------|
-| **P0** | **`SEC-01b`** | 历史 blob / 账号轮换（运维） | [复检报告](./复检报告-travelAI-drag_dev2.md) |
-| **P1** | `HOT-01` | 酒店源探路（商务，非代码） | [llm TODO](./llm-travel-data/TODO.md) |
-| **P2** | `SEC-02` · `HOT-02` · `GEO-09` · `DATA-10` · `B-FLT-03/04` | 公网鉴权；Places；和风；POI；手动航班 | [llm TODO](./llm-travel-data/TODO.md) |
-| **P2** / **⏸** | `UX-14-07` / `UX-M4-*` · `WX-*` | **移动端暂缓** · 天气/Tavily 暂缓 | [TODO-布局](./TODO-布局与前端.md) · [16](./llm-travel-data/16-产品能力优先级纠偏分析.md) |
+| **P0** | **`SEC-01b`** | 历史 blob / 账号轮换（**运维**） | [复检报告](./复检报告-travelAI-drag_dev2.md) |
+| **P1** | `HOT-01` | 酒店源探路（**商务**） | [llm TODO](./llm-travel-data/TODO.md) |
+| **P2** | `SEC-02` · `B-P6-02` · `B-FLT-06` | 部署鉴权；总览换店；机场标签同步 | [llm TODO](./llm-travel-data/TODO.md) |
+| **P0/P1 UX（未实施）** | `UX-CHAT-05` · `01/02/06` | **对话内运行过程** · 只读摘要 · 生成 checklist | [22 §3b](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [TODO-布局](./TODO-布局与前端.md) |
+| **扩张 / ⏸** | `WS-09` · `WS-08` · `WS-01/05` · `UX-EVD-01` · `UX-FLT-CACHE` · `AG-*` · 移动端 · P5b | 印证见 [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) · UX 见 [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) | [TODO-布局](./TODO-布局与前端.md) · [16](./llm-travel-data/16-产品能力优先级纠偏分析.md) |
+| **P3 UI 债** | `UX-GEN-*` · `OV-*` | Marker 聚类 / 骨架 / 总览抛光 | [TODO-布局](./TODO-布局与前端.md) · [TODO-路线图](./TODO-路线图与总览.md) |
 
 ---
 
@@ -34,12 +36,12 @@
 
 | 域 | 里程碑 | 关联文档 |
 |----|--------|----------|
-| **范围 2** | DATA-03～09 · FLOW-02 · HOT-03 · B-P4-04 · SEC-04 · FLT-LETSFG | [20 §6](./llm-travel-data/20-L1L2运行验证记录.md) · [llm TODO](./llm-travel-data/TODO.md) |
-| **UX-14 / B-FLT** | 无行程预览折叠 · Chat `search_flights` → Ignav | [TODO-布局](./TODO-布局与前端.md) · [llm TODO](./llm-travel-data/TODO.md) |
-| **B-P3** | 多航段 UI（往返/多城/城际模板 + sequence） | [06](./llm-travel-data/06-机酒确认与行程生成流程方案.md) |
+| **调研 22** | 对话编排 · 只读摘要 · 玩法印证 UX（文档，未实施） | [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **复查 P2** | SEC-03 CURRENT_ITINERARY · 指纹状态枚举 · SEC-04 单测 · 进度表矛盾 | [复查报告](./实施偏离与问题复查报告-travelAI-drag_dev2-2026-08-07.md) |
+| **收尾波** | B-FLT-03/04/05/07 · GEO-09 · DATA-10 · HOT-02 · B-P6-01 | [llm TODO](./llm-travel-data/TODO.md) |
+| **范围 2** | DATA-03～09 · FLOW-02 · HOT-03 · B-P4-04 · SEC-04 · FLT-LETSFG | [20 §6](./llm-travel-data/20-L1L2运行验证记录.md) |
+| **UX-14 / B-FLT / B-P3** | 预览折叠 · Chat 搜航班 · 多航段 | [TODO-布局](./TODO-布局与前端.md) · [06](./llm-travel-data/06-机酒确认与行程生成流程方案.md) |
 | **GEO-01～08 + SerpApi** | 围栏 + L1 主源 | [20](./llm-travel-data/20-L1L2运行验证记录.md) |
-| **SEC-03 / B-P4 / FLT-RANK / WS-04/06** | 注入隔离 · 机酒锚点 · 参考价 · Evidence 侧栏 | [残留报告](./残留漏洞分析报告-travelAI-drag_dev2-2026-08-07.md) |
-| 住宿 P5z · Phase 3s–3u | 片区倒推 · 导出/虚拟化 | [13](./llm-travel-data/13-阶段B住宿区域实施计划.md) |
 
 ---
 
@@ -52,4 +54,4 @@
 
 ---
 
-*索引版本：v1.6 · 2026-08-07*
+*索引版本：v1.9 · 2026-08-08*

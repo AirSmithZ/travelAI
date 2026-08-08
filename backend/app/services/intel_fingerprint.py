@@ -6,6 +6,10 @@ import hashlib
 import json
 from typing import Any
 
+# 与 StayZoneStatus / schemas.stay_zone 对齐：仅「已确认」片区进入指纹。
+# proposed/rejected 不参与脏检测；勿用 selected/locked 等酒店 booking 语义。
+FINGERPRINT_ZONE_STATUSES = frozenset({"confirmed"})
+
 
 def _flight_key(f: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -46,7 +50,7 @@ def intel_fingerprint(travel_intel: dict[str, Any] | None) -> str:
     zones = [
         {"id": z.get("id"), "status": z.get("status"), "label": z.get("label")}
         for z in (travel_intel.get("recommended_stay_zones") or [])
-        if isinstance(z, dict) and z.get("status") == "confirmed"
+        if isinstance(z, dict) and z.get("status") in FINGERPRINT_ZONE_STATUSES
     ]
     payload = {"flights": flights, "hotels": hotels, "zones": zones}
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -85,7 +89,7 @@ def intel_snapshot_payload(travel_intel: dict[str, Any] | None) -> dict[str, Any
     zones = [
         {"id": z.get("id"), "status": z.get("status"), "label": z.get("label")}
         for z in (travel_intel.get("recommended_stay_zones") or [])
-        if isinstance(z, dict) and z.get("status") == "confirmed"
+        if isinstance(z, dict) and z.get("status") in FINGERPRINT_ZONE_STATUSES
     ]
     return {"flights": flights, "hotels": hotels, "zones": zones}
 

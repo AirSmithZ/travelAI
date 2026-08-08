@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { recommendStayZones } from '../../api/stayZones';
+import { recommendStayZones, searchStayZoneLodging, type StayZoneLodgingCandidate } from '../../api/stayZones';
 import { geocodeAutocomplete } from '../../api/geocode';
 import { usePlanStore } from '../../stores/usePlanStore';
 import type { StayZonePreferences } from '../../types/stayZone';
@@ -8,6 +8,7 @@ import {
   getStayZonePanelPhase,
   stayZonePanelBadgeLabel,
 } from '../../types/stayZone';
+import { validateHotelStays } from '../../utils/hotelStayValidate';
 import {
   FormField,
   FormInput,
@@ -42,6 +43,13 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   const [expandedAddId, setExpandedAddId] = useState<string | null>(null);
   const [hotelNames, setHotelNames] = useState<Record<string, string>>({});
   const [addLoading, setAddLoading] = useState<string | null>(null);
+  const [lodgingByZone, setLodgingByZone] = useState<Record<string, StayZoneLodgingCandidate[]>>({});
+  const [lodgingLoading, setLodgingLoading] = useState<string | null>(null);
+
+  const hotelStayWarnings = useMemo(
+    () => validateHotelStays(intel.hotels, plan.trip_request).warnings,
+    [intel.hotels, plan.trip_request],
+  );
 
   const canRecommend = Boolean(plan.trip_request.destination?.trim());
 
@@ -111,6 +119,43 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
     }
   }
 
+  async function handleSearchLodging(zoneId: string) {
+    const zone = zones.find((z) => z.id === zoneId);
+    if (!zone?.geometry || zone.geometry.type !== 'circle') {
+      setError('该片区无圆心坐标，无法检索 lodging');
+      return;
+    }
+    setLodgingLoading(zoneId);
+    setError(null);
+    try {
+      const res = await searchStayZoneLodging({
+        zone_id: zone.id,
+        city: zone.city,
+        label: zone.label,
+        lat: zone.geometry.center.lat,
+        lng: zone.geometry.center.lng,
+        radius_m: zone.geometry.radius_m ?? 1200,
+      });
+      setLodgingByZone((m) => ({ ...m, [zoneId]: res.candidates }));
+      if (res.warnings[0]) setWarnings((w) => [...w, res.warnings[0]!]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'lodging 检索失败');
+    } finally {
+      setLodgingLoading(null);
+    }
+  }
+
+  function handlePickLodging(zoneId: string, c: StayZoneLodgingCandidate) {
+    addHotelFromZone(zoneId, {
+      name: c.name,
+      lat: c.lat,
+      lng: c.lng,
+      address: c.address ?? undefined,
+      coord_source: c.coord_source ?? 'serpapi_lodging',
+    });
+    setExpandedAddId(null);
+  }
+
   const confirmedZones = useMemo(
     () => zones.filter((z) => z.status === 'confirmed'),
     [zones],
@@ -163,6 +208,11 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
       {intel.hotels.length > 0 && (
         <div className="stay-zone__section">
           <p className="stay-zone__label">已添加酒店</p>
+          {hotelStayWarnings.map((w) => (
+            <p key={w} className="stay-zone__warning">
+              {w}
+            </p>
+          ))}
           <ul className="stay-zone__hotel-list">
             {intel.hotels.map((h) => (
               <li key={h.id} className="stay-zone__hotel">
@@ -251,16 +301,55 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                         />
                       </FormField>
                       <p className="stay-zone__add-hint">
-                        先搜索地址；搜不到将打开地图点选确认位置。
+                        可检索片区内 lodging（无 OTA 价，价走 Trip 深链）；或手动输入名称。
                       </p>
-                      <button
-                        type="button"
-                        className="form-btn form-btn--sm form-btn--primary"
-                        disabled={addLoading === zone.id}
-                        onClick={() => void handleAddHotel(zone.id)}
-                      >
-                        {addLoading === zone.id ? '添加中…' : '确认添加'}
-                      </button>
+                      <div className="stay-zone__add-actions">
+                        <button
+                          type="button"
+                          className="form-btn form-btn--sm"
+                          disabled={lodgingLoading === zone.id}
+                          onClick={() => void handleSearchLodging(zone.id)}
+                        >
+                          {lodgingLoading === zone.id ? '检索中…' : '片区内找酒店'}
+                        </button>
+                        <button
+                          type="button"
+                          className="form-btn form-btn--sm form-btn--primary"
+                          disabled={addLoading === zone.id}
+                          onClick={() => void handleAddHotel(zone.id)}
+                        >
+                          {addLoading === zone.id ? '添加中…' : '确认添加'}
+                        </button>
+                      </div>
+                      {(lodgingByZone[zone.id] ?? []).length > 0 && (
+                        <ul className="stay-zone__lodging-list">
+                          {(lodgingByZone[zone.id] ?? []).map((c) => (
+                            <li key={c.place_id || `${c.lat}-${c.lng}-${c.name}`}>
+                              <button
+                                type="button"
+                                className="stay-zone__lodging-item"
+                                onClick={() => handlePickLodging(zone.id, c)}
+                              >
+                                <span>{c.name}</span>
+                                <span className="stay-zone__lodging-meta">
+                                  {c.distance_m}m
+                                  {c.rating != null ? ` · ★${c.rating}` : ''}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {zone.purchase_url && (
+                        <a
+                          href={zone.purchase_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="stay-zone__link"
+                        >
+                          Trip.com 深链查价 →
+                        </a>
+                      )}
                     </div>
                   )}
                 </article>

@@ -3,12 +3,15 @@ from openai import APIConnectionError, APIStatusError, RateLimitError
 
 from app.config import get_settings
 from app.schemas.flight import (
+    FlightManualValidateRequest,
+    FlightManualValidateResponse,
     FlightSearchRequest,
     FlightSearchResponse,
     FlightVerifyFromTextRequest,
     FlightVerifyFromTextResponse,
 )
 from app.services.flight.intent_parse import verify_flight_from_text
+from app.services.flight.manual_validate import validate_manual_flight
 from app.services.flight.search import search_flights
 
 router = APIRouter(prefix="/flights", tags=["flights"])
@@ -21,6 +24,12 @@ def flight_search(body: FlightSearchRequest) -> FlightSearchResponse:
         return search_flights(body, settings)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@router.post("/manual-validate", response_model=FlightManualValidateResponse)
+def flight_manual_validate(body: FlightManualValidateRequest) -> FlightManualValidateResponse:
+    """B-FLT-04: normalize IATA + duration; soft trip_request warnings."""
+    return validate_manual_flight(body)
 
 
 @router.post("/verify-from-text", response_model=FlightVerifyFromTextResponse)
