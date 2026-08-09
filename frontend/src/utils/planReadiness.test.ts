@@ -1,5 +1,5 @@
 import { createEmptyPlan } from './planHelpers';
-import { derivePlanReadiness } from './planReadiness';
+import { derivePlanReadiness, getPlanningNextStep } from './planReadiness';
 import { isGenerateIntent } from './generateIntent';
 import { isLowRiskAutoPatch, splitLowRiskPatches } from './lowRiskPatches';
 import type { FormPatch } from '../types/travelPlan';
@@ -33,7 +33,49 @@ plan.travel_intel.flights = [
     is_anchor: true,
   },
 ];
-assert(derivePlanReadiness(plan).canGenerate, 'dest+flight can generate');
+assert(!derivePlanReadiness(plan).canGenerate, 'dest+flight still needs hotel');
+
+plan.travel_intel.hotels = [
+  {
+    id: 'h1',
+    sequence: 1,
+    city: '新加坡',
+    name: 'Hotel Supreme',
+    check_in: '2026-09-01',
+    check_out: '2026-09-05',
+    is_primary: true,
+    is_anchor: true,
+    booking_status: 'selected',
+    lat: 1.3,
+    lng: 103.8,
+  },
+];
+assert(derivePlanReadiness(plan).canGenerate, 'dest+flight+hotel can generate');
+assert(getPlanningNextStep(plan)?.kind === 'generate', 'next step generate');
+const itineraryItem = derivePlanReadiness(plan).items.find((i) => i.id === 'itinerary');
+assert(itineraryItem?.action === 'none', 'no preview until geometry or days');
+
+plan.travel_intel.recommended_stay_zones = [
+  {
+    id: 'z1',
+    sequence: 1,
+    city: '新加坡',
+    label: '市区',
+    check_in: '2026-09-01',
+    check_out: '2026-09-05',
+    rationale: 'test',
+    status: 'confirmed',
+    geometry: { type: 'circle', center: { lat: 1.3, lng: 103.8 }, radius_m: 800 },
+  },
+];
+assert(
+  derivePlanReadiness(plan).items.find((i) => i.id === 'itinerary')?.action === 'open_preview',
+  'zone geometry opens preview',
+);
+
+const bare = createEmptyPlan();
+bare.trip_request.destination = '新加坡';
+assert(getPlanningNextStep(bare)?.action === 'open_flight', 'next step flight');
 
 assert(isGenerateIntent('帮我生成玩法'), 'generate intent');
 assert(isGenerateIntent('排行程'), 'schedule intent');

@@ -30,7 +30,15 @@ export function ReadinessChecklist({ onClose, onPrefill }: ReadinessChecklistPro
     onClose();
     const result = await generateItinerary('generate');
     if (result === 'blocked') {
-      addChatMessage('assistant', '仍无法生成：请先确认航班与目的地。');
+      addChatMessage(
+        'assistant',
+        '仍无法生成：请确认目的地、航班，并锁定具体酒店后再试。上方「下一步」可跳转对应面板。',
+      );
+    } else if (result === 'error') {
+      addChatMessage(
+        'assistant',
+        '行程生成失败（未写入示例行程）。请查看错误提示或后端日志后重试。',
+      );
     }
   };
 
@@ -77,7 +85,15 @@ export function ReadinessChecklist({ onClose, onPrefill }: ReadinessChecklistPro
             className="readiness-check__primary"
             onClick={() => setLeftPanelMode('flight')}
           >
-            去确认航班
+            去确认机票
+          </button>
+        ) : primaryMissing?.action === 'open_stay' ? (
+          <button
+            type="button"
+            className="readiness-check__primary"
+            onClick={() => setLeftPanelMode('stay')}
+          >
+            去锁定酒店
           </button>
         ) : (
           <button
@@ -90,13 +106,15 @@ export function ReadinessChecklist({ onClose, onPrefill }: ReadinessChecklistPro
             用对话补全
           </button>
         )}
-        {!readiness.canGenerate && !hasStayDone(readiness) && (
+        {!readiness.canGenerate &&
+          primaryMissing?.action !== 'open_stay' &&
+          !hasStayDone(readiness) && (
           <button
             type="button"
             className="readiness-check__secondary"
             onClick={() => setLeftPanelMode('stay')}
           >
-            住宿片区
+            住宿面板
           </button>
         )}
       </div>

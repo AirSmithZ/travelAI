@@ -2,7 +2,7 @@
 
 ← [总索引](../TODO.md) · [README](./README.md) · [06-机酒流程](./06-机酒确认与行程生成流程方案.md)
 
-> **更新**：2026-08-08（+ UX 调研 [22](./22-对话编排与玩法印证UX调研.md)；`UX-FLT-CACHE`；运维/移动端/暂停项不动）  
+> **更新**：2026-08-09（+ **GEN-TOKEN / P90** generate token 与空 JSON 防护）  
 > **ID 前缀**：`SEC-` / `DATA-` / `B-` / `GEO-` / `WX-` / `WS-` / `AG-` · 状态：🔲 开放 · ⏸ 暂停 · ✅ 完成 · 🔧 进行中
 
 ---
@@ -41,6 +41,9 @@
 | **HOT-03** | ✅ | P1 | 每晚预算字段/UI；Trip 深链 `highPrice`；prompt 软约束 | [18](./18-机酒优先与迭代行程产品决策.md) · StayZonePanel |
 | **FLT-RANK-01/02** | ✅ | — | 5:2:2:1 + 参考价文案 | `rank.py` · FlightIntelPanel |
 | **FLOW-01/01b** | ✅ | — | 无航班阻断前后端 | [18](./18-机酒优先与迭代行程产品决策.md) |
+| **FLOW-01c** | ✅ | P0 | 无锁定酒店阻断 generate；生成前锁店进 intel；日闭环+三餐锚定 | [18 §4.3](./18-机酒优先与迭代行程产品决策.md) · [问题日志 P88](../问题日志.md) |
+| **FLOW-01d** | ✅ | P0 | 明确返程日禁止晚间入住酒店（对称抵达日无早出） | [问题日志 P92](../问题日志.md) · `intel_anchor_enforce.py` |
+| **GEN-THINK** | ✅ | P0 | generate/fix `thinking:disabled`；截断 flash 修；前端 validate 态 | [问题日志 P93](../问题日志.md) |
 | **FLOW-02** | ✅ | P1 | `optimize` / `regenerate` + dirty banner（不自动重跑） | [18 §4](./18-机酒优先与迭代行程产品决策.md) · [20 §6](./20-L1L2运行验证记录.md) |
 | **UX-FLT-CACHE** | ✅ | P2 | 航班 / lodging 同条件前端缓存 + TTL + 刷新（**P70：空结果不入缓存**） | [22 §2.4](./22-对话编排与玩法印证UX调研.md) · `searchResultCache.ts` · [问题日志 P70](../问题日志.md) |
 
@@ -52,6 +55,7 @@
 |----|------|--------|------|----------|
 | **DATA-01～09** | ✅ | — | 见历史清单 | — |
 | **DATA-10** | ✅ | P3 | 可选 `place_id` 持久化 + 跨天 POI 软警告 | `crossDayPoiDedup.ts` · geocode hit |
+| **GEN-TOKEN** | ✅ | P0 | generate `max_tokens` 默认 8000；禁空 content→`{}`；日节点 4–6；单次修复轮 + 可读错误 | [问题日志 P90](../问题日志.md) · `llm_client.py` · `itinerary_llm.py` |
 
 > **DATA-08 注**：`localStorage` **键**仍为历史名 `travel_plans_v1`；payload 内 `version` 为 `STORAGE_VERSION=3`。
 
@@ -63,6 +67,7 @@
 |----|------|--------|------|----------|
 | **B-P3-01/02** | ✅ | P1 | 多航段 UI + 城际快捷 | FlightIntelPanel |
 | **B-P4-01/02/03/04** | ✅ | P0 | intel 硬约束 / 门禁 / snapshot | [18](./18-机酒优先与迭代行程产品决策.md) |
+| **B-P4-05** | ✅ | P0 | 确认航班硬钉机场时刻 + 同日接龙（P94） | [问题日志 P94](../问题日志.md) · `intel_anchor_enforce.py` |
 | **B-P6-01** | ✅ | P2 | 多酒店覆盖/缺口/重叠软警告 | `hotelStayValidate.ts` · StayZonePanel |
 | **B-P6-02** | ✅ | P2 | 总览图主酒店高亮 + 跨天/绑定软警告 | [06 §7 P6](./06-机酒确认与行程生成流程方案.md) · `primaryHotelOverview.ts` |
 
@@ -129,4 +134,4 @@
 
 ---
 
-*清单版本：v1.17 · 2026-08-08 · WX-01 + OPS-01 · 变更请同步 [总索引](../TODO.md)*
+*清单版本：v1.19 · 2026-08-09 · FLOW-01d/P92 · GEN-THINK/P93 · 变更请同步 [总索引](../TODO.md)*

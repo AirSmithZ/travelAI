@@ -67,21 +67,29 @@ export type StayZonePanelPhase = 'idle' | 'pending' | 'done';
 
 export function getStayZonePanelPhase(intel: {
   recommended_stay_zones?: RecommendedStayZone[];
-  hotels: { lat?: number; lng?: number; booking_status?: string }[];
+  hotels: { lat?: number; lng?: number; booking_status?: string; name?: string }[];
 }): StayZonePanelPhase {
   const zones = intel.recommended_stay_zones ?? [];
-  if (zones.some((z) => z.status === 'confirmed')) return 'done';
-  if (intel.hotels.some((h) => h.lat != null && h.lng != null)) return 'done';
-  if (zones.some((z) => z.status === 'proposed')) return 'pending';
+  const hotelLocked = intel.hotels.some(
+    (h) =>
+      Boolean(h.name?.trim()) &&
+      h.lat != null &&
+      h.lng != null &&
+      (Math.abs(h.lat) > 1e-6 || Math.abs(h.lng) > 1e-6) &&
+      h.booking_status !== 'zone_only',
+  );
+  // P88: badge「已完成」= 已锁定具体酒店；仅片区仍为待确认
+  if (hotelLocked) return 'done';
+  if (zones.some((z) => z.status === 'confirmed' || z.status === 'proposed')) return 'pending';
   return 'idle';
 }
 
 export function stayZonePanelBadgeLabel(phase: StayZonePanelPhase): string {
   switch (phase) {
     case 'done':
-      return '已完成';
+      return '已锁酒店';
     case 'pending':
-      return '待确认';
+      return '待锁酒店';
     default:
       return '阶段 B';
   }

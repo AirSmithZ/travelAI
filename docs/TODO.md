@@ -1,6 +1,6 @@
 # 项目待办总索引
 
-> **更新**：2026-08-09（P67–P77 UX 十一项 ✅ · [问题日志](./问题日志.md)）  
+> **更新**：2026-08-09（P92 返程日无入住 · P93 thinking/UX ✅ · [问题日志](./问题日志.md)）  
 > **用途**：从各分析/方案文档汇总的 **开放待办**；实施完成后在本索引与子清单中勾选，并在源文档同步状态。  
 > **原则**：每条待办必须有 **TODO ID** 与 **关联文档** 链接，便于后续 PR / 实施计划引用。
 
@@ -37,6 +37,11 @@
 |----|--------|----------|
 | **OPS-01** | 独立 `/ops.html` API 用量看板（主壳零入口） | [llm TODO](./llm-travel-data/TODO.md) · [backend README](../backend/README.md) |
 | **UX P67–P77** | 对话提示 · 地图门禁 · 航班缓存/空态 · Patch 审批策略 · 酒店两步选 · 印证可见 · 开销抽屉 | [问题日志](./问题日志.md) · [TODO-布局](./TODO-布局与前端.md) |
+| **P88 / FLOW-01c** | 生成前锁定具体酒店 · 日闭环 hotel→POI→hotel · 默认三餐 · 换店重锚 | [问题日志 P88](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
+| **P90 / GEN-TOKEN** | generate `max_tokens` 8000 · 禁空 content→`{}` · 节点预算 4–6 · 单次修复 | [问题日志 P90](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
+| **P91** | generate 失败禁止 Mock 回退，露出真实错误 | [问题日志 P91](./问题日志.md) |
+| **P92** | 明确返程日禁止当晚入住/过夜酒店 | [问题日志 P92](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
+| **P93** | generate 关 thinking · validate UI 非假完成 | [问题日志 P93](./问题日志.md) |
 | **玩法可信度** | `WX-01` 预报注入 · POI hours · 雨日/通勤 warnings | [15](./llm-travel-data/15-天气联网与决策Agent缺口分析.md) |
 | **Wave C + 可选增强** | `04/07` · FLT-CACHE · WS-08b · P6-02 · FLT-06 · GEN-01/02 · OV-01/02 | [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 | **印证 P1** | `WS-CACHE` · `WS-08a/b` · `UX-EVD-01`（**保留 TikHub**；Reach 仅 bench） | [21 §0.1](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
@@ -60,4 +65,4 @@
 
 ---
 
-*索引版本：v1.14 · 2026-08-09（P67–P77）*
+*索引版本：v1.18 · 2026-08-09（P92/P93）*

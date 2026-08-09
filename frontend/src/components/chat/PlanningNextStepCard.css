@@ -1,0 +1,82 @@
+.planning-next {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent) 12%);
+}
+
+/* Hub slot: chrome comes from PlanSummaryCard */
+.planning-next--embedded {
+  margin: 0;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, var(--accent) 18%);
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  justify-content: space-between;
+}
+
+.planning-next__eyebrow {
+  margin: 0 0 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.planning-next__title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.planning-next__body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.planning-next--embedded .planning-next__body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.planning-next__cta {
+  align-self: flex-start;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bg-deep);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: filter 200ms ease;
+}
+
+.planning-next__cta:hover {
+  filter: brightness(1.06);
+}
+
+.planning-next__cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planning-next__cta {
+    transition: none;
+  }
+}

@@ -2,7 +2,7 @@
 
 ← [总索引](./TODO.md) · [开发进度](./开发进度.md)
 
-> **更新**：2026-08-09（P67–P77 十一项 UX 债 ✅；见 [问题日志](./问题日志.md)）  
+> **更新**：2026-08-09（P93 validate UX ✅；见 [问题日志](./问题日志.md)）  
 > **ID 前缀**：`UX-` · 状态：🔲 开放 · ⏸ 暂停 · ✅ 完成
 
 ---
@@ -24,6 +24,11 @@
 | **UX-P77** | ✅ | P2 | 顶栏左侧「开销」抽屉（预算 + 节点开销） | 同上 P77 · `ExpensePanel` |
 | **UX-P78** | ✅ | P0 | 地图片区图层下沉；连线用 display 坐标；空 day 清线 | [问题日志 P78](./问题日志.md) |
 | **UX-P79** | ✅ | P0 | Ignav 用机场 IATA（非 Trip metro BJS/TYO） | [问题日志 P79](./问题日志.md) · `resolve_ignav_iata` |
+| **UX-P88** | ✅ | P0 | 生成前锁定酒店；checklist 硬门槛；换店重铺日闭环 | [问题日志 P88](./问题日志.md) · `hotelDayLoop.ts` |
+| **UX-P91** | ✅ | P0 | generate 失败禁止 Mock 回退；toast/对话露出真实错误 | [问题日志 P91](./问题日志.md) · `usePlanStore.ts` |
+| **UX-P93** | ✅ | P0 | generate validate/fixing 状态文案（非假「生成完成正在写入」） | [问题日志 P93](./问题日志.md) · `ChatStatusBar.tsx` |
+| **UX-CHAT-10** | ✅ | P1 | 生成前「下一步」指引卡：提示 + 跳转机票/酒店面板 | `PlanningNextStepCard` · [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-11** | ✅ | P1 | 底栏机酒/印证/预览入口收拢到计划摘要枢纽；对话态底栏仅保留节点编辑 | `PlanSummaryCard` · `InputPanel` · [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 
 ---
 
@@ -39,6 +44,7 @@
 | **UX-CHAT-02** | ✅ | P1 | 生成意图 → 对话内 ReadinessChecklist + 显式生成 CTA | [22 §2.4](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-CHAT-03** | ✅ | P2 | Patch 单批确认；低风险可选自动写入 + Undo | [22 §5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-CHAT-04** | ✅ | P2 | 左栏模式收敛：需求阶段弱化「行程编辑」与摘要分离 | [22 §5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **UX-CHAT-11** | ✅ | P1 | 底栏机酒/印证/预览收拢到计划摘要；对话态底栏仅节点编辑 | [22 §5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-CHAT-07** | ✅ | P3 | 可选 reasoning 折叠（有则显示） | [22 §3b.5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-EVD-01** | ✅ | P2 | 非官方文案 · 已定位/仅网友 · 摘要条数 · StatusBar evidence | [22 §3](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 | **UX-EVD-02** | ✅ | P2 | 空印证可发现性：`evidence_status` + 入口不消失 | [Round8 §五](./现存问题复查报告-travelAI-drag_dev2-round8-2026-08-06.md) |
@@ -51,7 +57,7 @@
 |----|------|--------|------|----------|
 | **UX-14-01** | ✅ | P1 | `selectPreviewCollapsed`：无 `itinerary.days` 时折叠右栏 | [14 §4.1](./14-无路线图时预览区折叠方案.md) |
 | **UX-14-02** | ✅ | P1 | `AppShell` 右栏 `app-shell__preview--truncated` + 左栏 flex 占满 | [14 §4.3](./14-无路线图时预览区折叠方案.md) |
-| **UX-14-03** | ✅ | P1 | InputPanel 底栏「路线预览」strip（手动展开 EmptyPreview） | [14 §4.4](./14-无路线图时预览区折叠方案.md) |
+| **UX-14-03** | ✅ | P1 | 「路线预览」入口：原底栏 strip → 已迁到计划摘要「行程图」行（`open_preview`） | [14 §4.4](./14-无路线图时预览区折叠方案.md) · UX-CHAT-11 |
 | **UX-14-04** | ✅ | P1 | `previewExpandedWithoutItinerary` store 字段 + action | [14 §4.1](./14-无路线图时预览区折叠方案.md) |
 | **UX-14-05** | ✅ | P1 | 住宿 recommend 有 geometry 时强制展开预览并切 map | [14 §5.1](./14-无路线图时预览区折叠方案.md) · [13 §5.1](./llm-travel-data/13-阶段B住宿区域实施计划.md) |
 | **UX-14-06** | ✅ | P2 | 缩短 `EmptyPreview` 与 Chat 重复文案 | [14 §4.5](./14-无路线图时预览区折叠方案.md) |

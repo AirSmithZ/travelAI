@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { usePlanStore } from '../../stores/usePlanStore';
 import {
   derivePlanReadiness,
+  getPlanningNextStep,
   type ReadinessAction,
   type ReadinessItem,
 } from '../../utils/planReadiness';
+import { PlanningNextStepCard } from './PlanningNextStepCard';
 import './PlanSummaryCard.css';
 
 interface PlanSummaryCardProps {
@@ -18,6 +20,7 @@ function handleItemAction(
     onPrefill: (text: string) => void;
     onRequestGenerate?: () => void;
     setLeftPanelMode: (mode: 'flight' | 'stay' | 'evidence' | 'chat' | 'form') => void;
+    openPreview: () => void;
     /** true = chip「用对话修改」→ 始终预填，不跳面板 */
     modify: boolean;
   },
@@ -45,6 +48,10 @@ function handleItemAction(
     opts.setLeftPanelMode('evidence');
     return;
   }
+  if (action === 'open_preview') {
+    opts.openPreview();
+    return;
+  }
   if (action === 'generate') {
     opts.onRequestGenerate?.();
     return;
@@ -55,15 +62,32 @@ function handleItemAction(
   }
 }
 
-/** UX-CHAT-01: readonly plan progress; edits only via chat prefill or panels. */
+/** UX-CHAT-01 + UX-CHAT-10: readonly progress (left) + next-step CTA (right). */
 export function PlanSummaryCard({ onPrefill, onRequestGenerate }: PlanSummaryCardProps) {
   const plan = usePlanStore((s) => s.getActivePlan());
   const setLeftPanelMode = usePlanStore((s) => s.setLeftPanelMode);
+  const setActiveView = usePlanStore((s) => s.setActiveView);
+  const setPreviewExpandedWithoutItinerary = usePlanStore(
+    (s) => s.setPreviewExpandedWithoutItinerary,
+  );
   const [expanded, setExpanded] = useState(true);
   const readiness = derivePlanReadiness(plan);
+  const nextStep = getPlanningNextStep(plan);
+  const showNext = Boolean(nextStep) && typeof onRequestGenerate === 'function';
+
+  const openPreview = () => {
+    const dayCount = plan.itinerary?.days?.length ?? 0;
+    if (dayCount === 0) {
+      setPreviewExpandedWithoutItinerary(true);
+    }
+    setActiveView('map');
+  };
 
   return (
-    <section className="plan-summary" aria-label="计划摘要">
+    <section
+      className={`plan-summary${showNext ? ' plan-summary--with-next' : ''}`}
+      aria-label="计划摘要"
+    >
       <button
         type="button"
         className="plan-summary__toggle"
@@ -81,54 +105,71 @@ export function PlanSummaryCard({ onPrefill, onRequestGenerate }: PlanSummaryCar
       </button>
 
       {expanded && (
-        <ul className="plan-summary__list">
-          {readiness.items.map((item) => (
-            <li
-              key={item.id}
-              className={`plan-summary__item${item.done ? ' plan-summary__item--done' : ''}${
-                !item.done && item.hard ? ' plan-summary__item--hard' : ''
-              }`}
-            >
-              <button
-                type="button"
-                className="plan-summary__row"
-                onClick={() =>
-                  handleItemAction(item, {
-                    onPrefill,
-                    onRequestGenerate,
-                    setLeftPanelMode,
-                    modify: false,
-                  })
-                }
-                title={item.done ? item.detail : item.hint}
-              >
-                <span className="plan-summary__mark" aria-hidden>
-                  {item.done ? '✓' : item.hard ? '!' : '○'}
-                </span>
-                <span className="plan-summary__label">{item.label}</span>
-                <span className="plan-summary__detail">{item.detail}</span>
-              </button>
-              {item.done && item.action !== 'none' && (
-                <button
-                  type="button"
-                  className="plan-summary__chip"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleItemAction(item, {
-                      onPrefill,
-                      onRequestGenerate,
-                      setLeftPanelMode,
-                      modify: true,
-                    });
-                  }}
+        <div
+          className={`plan-summary__body${showNext ? ' plan-summary__body--split' : ''}`}
+        >
+          <ul className="plan-summary__list">
+            {readiness.items.map((item) => {
+              const inert = item.action === 'none' && !item.done;
+              return (
+                <li
+                  key={item.id}
+                  className={`plan-summary__item${item.done ? ' plan-summary__item--done' : ''}${
+                    !item.done && item.hard ? ' plan-summary__item--hard' : ''
+                  }${inert ? ' plan-summary__item--inert' : ''}`}
                 >
-                  用对话修改
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+                  <button
+                    type="button"
+                    className="plan-summary__row"
+                    disabled={inert}
+                    onClick={() =>
+                      handleItemAction(item, {
+                        onPrefill,
+                        onRequestGenerate,
+                        setLeftPanelMode,
+                        openPreview,
+                        modify: false,
+                      })
+                    }
+                    title={item.done ? item.detail : item.hint}
+                  >
+                    <span className="plan-summary__mark" aria-hidden>
+                      {item.done ? '✓' : item.hard ? '!' : '○'}
+                    </span>
+                    <span className="plan-summary__label">{item.label}</span>
+                    <span className="plan-summary__detail">{item.detail}</span>
+                  </button>
+                  {item.done && item.action !== 'none' && (
+                    <button
+                      type="button"
+                      className="plan-summary__chip"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleItemAction(item, {
+                          onPrefill,
+                          onRequestGenerate,
+                          setLeftPanelMode,
+                          openPreview,
+                          modify: true,
+                        });
+                      }}
+                    >
+                      用对话修改
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {showNext && onRequestGenerate ? (
+            <PlanningNextStepCard
+              variant="embedded"
+              onPrefill={onPrefill}
+              onRequestGenerate={onRequestGenerate}
+            />
+          ) : null}
+        </div>
       )}
     </section>
   );

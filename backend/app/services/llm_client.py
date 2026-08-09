@@ -71,6 +71,28 @@ class LLMClient:
                 chain.append(n)
         return chain
 
+    @staticmethod
+    def _apply_thinking(create_kwargs: dict[str, Any], thinking: bool | None) -> None:
+        """DeepSeek V4: thinking shares max_tokens with content; JSON generate should disable."""
+        if thinking is None:
+            return
+        create_kwargs["extra_body"] = {
+            **(create_kwargs.get("extra_body") or {}),
+            "thinking": {"type": "enabled" if thinking else "disabled"},
+        }
+
+    @staticmethod
+    def _require_message_content(content: str | None, *, finish_reason: str | None) -> str:
+        """llm-api-engineering：禁止把空 content 当成 "{}" 糊弄下游。"""
+        text = (content or "").strip()
+        if text:
+            return text
+        raise ValueError(
+            "LLM 返回空 content"
+            f"（finish_reason={finish_reason or 'unknown'}）；"
+            "可能被 max_tokens 截断或仅输出了 reasoning，请增大 LLM_MAX_TOKENS_GENERATE 后重试"
+        )
+
     def _log_and_parse(
         self,
         content: str,
@@ -78,6 +100,8 @@ class LLMClient:
         latency_ms: int,
         usage: Any,
         endpoint: str,
+        *,
+        finish_reason: str | None = None,
     ) -> dict[str, Any]:
         self._active_model = model
         prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
@@ -88,6 +112,7 @@ class LLMClient:
             "latency_ms": latency_ms,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "finish_reason": finish_reason,
         }
         try:
             from app.services.api_usage import record_usage
@@ -99,17 +124,19 @@ class LLMClient:
                 latency_ms=latency_ms,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
-                meta={"model": model},
+                meta={"model": model, "finish_reason": finish_reason},
             )
         except Exception:
             pass
         logger.info(
-            "llm ok endpoint=%s model=%s latency_ms=%s prompt_tokens=%s completion_tokens=%s",
+            "llm ok endpoint=%s model=%s latency_ms=%s prompt_tokens=%s "
+            "completion_tokens=%s finish_reason=%s",
             endpoint or "-",
             model,
             latency_ms,
             prompt_tokens,
             completion_tokens,
+            finish_reason,
         )
         return json.loads(strip_json_fences(content))
 
@@ -123,6 +150,7 @@ class LLMClient:
         model: str | None = None,
         max_tokens: int | None = None,
         endpoint: str = "",
+        thinking: bool | None = None,
     ) -> dict[str, Any]:
         last_err: Exception | None = None
         models = self._model_chain(model)
@@ -136,6 +164,7 @@ class LLMClient:
         }
         if max_tokens is not None:
             create_kwargs["max_tokens"] = max_tokens
+        self._apply_thinking(create_kwargs, thinking)
 
         for m in models:
             for attempt in range(max_retries):
@@ -146,8 +175,19 @@ class LLMClient:
                         **create_kwargs,
                     )
                     latency_ms = int((time.perf_counter() - started) * 1000)
-                    content = resp.choices[0].message.content or "{}"
-                    return self._log_and_parse(content, m, latency_ms, resp.usage, endpoint)
+                    choice = resp.choices[0]
+                    finish_reason = getattr(choice, "finish_reason", None)
+                    content = self._require_message_content(
+                        choice.message.content, finish_reason=finish_reason
+                    )
+                    return self._log_and_parse(
+                        content,
+                        m,
+                        latency_ms,
+                        resp.usage,
+                        endpoint,
+                        finish_reason=finish_reason,
+                    )
                 except APIStatusError as e:
                     last_err = e
                     if e.status_code == 404:
@@ -168,6 +208,11 @@ class LLMClient:
                     if attempt < max_retries - 1:
                         continue
                     raise ValueError(f"LLM 返回非 JSON: {e}") from e
+                except ValueError as e:
+                    last_err = e
+                    if "空 content" in str(e) and attempt < max_retries - 1:
+                        continue
+                    raise
 
         raise last_err or RuntimeError(
             f"所有模型均不可用，已尝试: {', '.join(models)}"
@@ -183,6 +228,7 @@ class LLMClient:
         model: str | None = None,
         max_tokens: int | None = None,
         endpoint: str = "",
+        thinking: bool | None = None,
     ) -> AsyncIterator[str]:
         """流式返回 completion 文本 delta，结束后写入 last_call_meta。"""
         last_err: Exception | None = None
@@ -198,6 +244,7 @@ class LLMClient:
         }
         if max_tokens is not None:
             create_kwargs["max_tokens"] = max_tokens
+        self._apply_thinking(create_kwargs, thinking)
 
         for m in models:
             for attempt in range(max_retries):
@@ -233,6 +280,7 @@ class LLMClient:
                     prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
                     completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
                     reasoning_text = "".join(reasoning_parts).strip()
+                    content_len = sum(len(p) for p in parts)
                     self._last_call_meta = {
                         "endpoint": endpoint,
                         "model": m,
@@ -241,7 +289,17 @@ class LLMClient:
                         "completion_tokens": completion_tokens,
                         "finish_reason": finish_reason,
                         "reasoning": reasoning_text[:4000] if reasoning_text else None,
+                        "content_chars": content_len,
                     }
+                    if content_len == 0:
+                        logger.warning(
+                            "llm stream empty content endpoint=%s model=%s "
+                            "finish_reason=%s completion_tokens=%s",
+                            endpoint or "-",
+                            m,
+                            finish_reason,
+                            completion_tokens,
+                        )
                     try:
                         from app.services.api_usage import record_usage
 
@@ -252,17 +310,24 @@ class LLMClient:
                             latency_ms=latency_ms,
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
-                            meta={"model": m},
+                            meta={
+                                "model": m,
+                                "finish_reason": finish_reason,
+                                "content_chars": content_len,
+                            },
                         )
                     except Exception:
                         pass
                     logger.info(
-                        "llm stream ok endpoint=%s model=%s latency_ms=%s prompt_tokens=%s completion_tokens=%s",
+                        "llm stream ok endpoint=%s model=%s latency_ms=%s prompt_tokens=%s "
+                        "completion_tokens=%s finish_reason=%s content_chars=%s",
                         endpoint or "-",
                         m,
                         latency_ms,
                         prompt_tokens,
                         completion_tokens,
+                        finish_reason,
+                        content_len,
                     )
                     return
                 except APIStatusError as e:
@@ -295,6 +360,7 @@ class LLMClient:
         model: str | None = None,
         max_tokens: int | None = None,
         endpoint: str = "",
+        thinking: bool | None = None,
     ) -> dict[str, Any]:
         last_err: Exception | None = None
         models = self._model_chain(model)
@@ -308,6 +374,7 @@ class LLMClient:
         }
         if max_tokens is not None:
             create_kwargs["max_tokens"] = max_tokens
+        self._apply_thinking(create_kwargs, thinking)
 
         for m in models:
             for attempt in range(max_retries):
@@ -315,8 +382,19 @@ class LLMClient:
                     started = time.perf_counter()
                     resp = self._client.chat.completions.create(model=m, **create_kwargs)
                     latency_ms = int((time.perf_counter() - started) * 1000)
-                    content = resp.choices[0].message.content or "{}"
-                    return self._log_and_parse(content, m, latency_ms, resp.usage, endpoint)
+                    choice = resp.choices[0]
+                    finish_reason = getattr(choice, "finish_reason", None)
+                    content = self._require_message_content(
+                        choice.message.content, finish_reason=finish_reason
+                    )
+                    return self._log_and_parse(
+                        content,
+                        m,
+                        latency_ms,
+                        resp.usage,
+                        endpoint,
+                        finish_reason=finish_reason,
+                    )
                 except APIStatusError as e:
                     last_err = e
                     if e.status_code == 404:
@@ -337,6 +415,11 @@ class LLMClient:
                     if attempt < max_retries - 1:
                         continue
                     raise ValueError(f"LLM 返回非 JSON: {e}") from e
+                except ValueError as e:
+                    last_err = e
+                    if "空 content" in str(e) and attempt < max_retries - 1:
+                        continue
+                    raise
 
         raise last_err or RuntimeError(
             f"所有模型均不可用，已尝试: {', '.join(models)}"

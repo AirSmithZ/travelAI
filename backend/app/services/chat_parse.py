@@ -1,16 +1,24 @@
 import json
 import logging
 import re
+import uuid
 from typing import Any
 
 from pydantic import ValidationError
 
 from app.schemas.chat import (
+    FIELD_LABELS,
     ChatParseRequest,
     ChatParseResponse,
     ChatParseSelectionIn,
     ChatToolCallOut,
+    FormPatchOut,
     expected_chat_mode,
+)
+from app.services.flight.city_codes import (
+    UnknownCityCodeError,
+    city_label,
+    resolve_tripcom_city_code,
 )
 from app.services.form_patch_tool import (
     LLMParseToolResult,
@@ -33,6 +41,17 @@ def _norm_place(value: str) -> str:
     if _IATA_RE.match(s):
         return s.upper()
     return s
+
+
+def _display_place_for_trip(value: str) -> str:
+    """Prefer Chinese city label for trip_request; keep raw if unknown."""
+    s = (value or "").strip()
+    if not s:
+        return s
+    try:
+        return city_label(resolve_tripcom_city_code(s))
+    except UnknownCityCodeError:
+        return s
 
 
 def _sanitize_tool_calls(
@@ -86,6 +105,70 @@ def _sanitize_tool_calls(
     return out, warnings
 
 
+def _patches_from_search_flights(
+    patches: list[FormPatchOut],
+    tool_calls: list[ChatToolCallOut],
+    trip_request: Any,
+) -> list[FormPatchOut]:
+    """
+    P89: search_flights args must also sync trip_request (plan summary / flight panel).
+    LLM often emits tool_calls without matching patches — synthesize missing set patches.
+    """
+    flight = next((c for c in tool_calls if c.name == "search_flights"), None)
+    if not flight:
+        return patches
+
+    tr = trip_request.model_dump() if hasattr(trip_request, "model_dump") else (trip_request or {})
+    covered = {p.field_path for p in patches if p.target == "trip_request"}
+    args = flight.args or {}
+    extras: list[FormPatchOut] = []
+
+    def add_set(field: str, value: Any, summary: str) -> None:
+        if field in covered or value is None or value == "":
+            return
+        old = tr.get(field)
+        if old == value:
+            return
+        extras.append(
+            FormPatchOut(
+                id=str(uuid.uuid4()),
+                target="trip_request",
+                action="set",
+                field_path=field,
+                label=FIELD_LABELS.get(field, field),
+                old_value=old,
+                new_value=value,
+                summary=summary,
+                confidence="high",
+            )
+        )
+        covered.add(field)
+
+    origin = _display_place_for_trip(str(args.get("origin") or ""))
+    dest = _display_place_for_trip(str(args.get("destination") or ""))
+    date = str(args.get("date") or "").strip()[:10]
+    return_date = args.get("return_date")
+    return_date_s = str(return_date).strip()[:10] if return_date else None
+    adults = args.get("adults")
+
+    if origin:
+        add_set("departure", origin, f"出发地：{origin}")
+    if dest:
+        add_set("destination", dest, f"目的地：{dest}")
+    if date and _DATE_RE.match(date):
+        add_set("date_start", date, f"出发日期：{date}")
+    if return_date_s and _DATE_RE.match(return_date_s):
+        add_set("date_end", return_date_s, f"返程日期：{return_date_s}")
+    try:
+        adults_n = int(adults) if adults is not None else None
+    except (TypeError, ValueError):
+        adults_n = None
+    if adults_n is not None and 1 <= adults_n <= 9:
+        add_set("travelers", adults_n, f"人数：{adults_n}")
+
+    return [*patches, *extras]
+
+
 GLOBAL_SYSTEM = f"""你是旅行规划助手。用户用中文描述行程需求（global 模式，尚未生成详细行程）。
 
 {_TOOL_DOC}
@@ -111,6 +194,8 @@ GLOBAL_SYSTEM = f"""你是旅行规划助手。用户用中文描述行程需求
 8. 禁止 add_node、add_day、update_edge、禁止输出完整 Itinerary
 9. patches 可为空；reply 用中文
 10. 搜机票/查价：可填 tool_calls search_flights（见工具说明）；**严禁编造票价或航班时刻**
+11. 用户明确提到出发地/目的地/往返日期/人数时，**必须**输出对应 patches（departure/destination/date_start/date_end/travelers）；即使同时发 search_flights，也不可省略 patches（tool_calls 不能替代表单同步）
+12. 日期年份：用户未写年份时，选用今天之后最近的合理出行年；**禁止**填已经过去的日期
 """
 
 SUPPLEMENT_SYSTEM = f"""你是旅行规划助手。用户已有详细行程（supplement 模式）。
@@ -150,6 +235,7 @@ SUPPLEMENT_SYSTEM = f"""你是旅行规划助手。用户已有详细行程（su
 6. 若提供了 selection，优先围绕该节点理解指代
 7. patches 可为空；reply 用中文
 8. 若用户要搜机票，可输出 tool_calls search_flights；**严禁编造票价**
+9. 若用户同时改出发地/日期/人数等 TripRequest 字段，须另输出对应 patches（search_flights 不能替代）
 """
 
 
@@ -363,6 +449,7 @@ def _build_parse_response(
         [c.model_dump() if hasattr(c, "model_dump") else c for c in (parsed.tool_calls or [])],
         req.trip_request,
     )
+    patches = _patches_from_search_flights(patches, tool_calls, req.trip_request)
     return ChatParseResponse(
         reply=parsed.reply,
         patches=patches,

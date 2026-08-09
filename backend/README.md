@@ -170,6 +170,8 @@ Ignav 单次请求可能 **5～30 秒**；前端超时已设为 130s。需配置
 | `DEEPSEEK_API_BASE` | 否 | 默认 `https://api.deepseek.com/v1` |
 | `LLM_MODEL` | 否 | 生成用模型，默认 `deepseek-v4-pro` |
 | `LLM_MODEL_REWRITE` | 否 | parse 用 flash，默认 `deepseek-v4-flash` |
+| `LLM_MAX_TOKENS_GENERATE` | 否 | 行程生成 completion 上限，默认 **8000**（P90；reasoning 模型勿过低） |
+| `LLM_MAX_TOKENS_PARSE` | 否 | chat/parse 上限，默认 2500 |
 | `CORS_ORIGINS` | 否 | 逗号分隔，默认 localhost:5173 |
 | `IGNAV_API_KEY` | 航班查价 | [ignav.com](https://ignav.com/) API Key |
 | `FLIGHT_INCLUDE_IGNAV` | 否 | 默认 `true` |
@@ -189,6 +191,9 @@ python scripts/test_flight_ignav_parse.py
 
 # 航班意图解析单元测试
 python scripts/test_flight_intent_parse.py
+
+# 行程 generate token / 空 JSON 防护（P90，无网络）
+python scripts/test_itinerary_llm_tokens.py
 ```
 
 ---
@@ -213,6 +218,10 @@ uvicorn app.main:app --reload --port 8000
 ### 对话 / 生成返回 503
 
 `.env` 中 `DEEPSEEK_API_KEY` 未设置或为空 → 填 Key 后重启后端。
+
+### 行程生成报 `title` Field required / `input_value={}`
+
+多为 completion 被截断（P90）。确认 `LLM_MAX_TOKENS_GENERATE≥8000` 后**重启后端**再试；勿把空 LLM content 当成功。
 
 ### 航班搜索无报价 / Ignav 报错
 

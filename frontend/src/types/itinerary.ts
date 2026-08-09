@@ -88,7 +88,7 @@ export interface ItineraryMeta {
     hotels: unknown[];
     zones: unknown[];
   };
-  /** Backend intel_anchor_enforce: confirmed hotel → overnight node */
+  /** intel_anchor_enforce / hotelDayLoop: confirmed hotel → day-loop nodes */
   hotel_bindings?: Array<{
     hotel_id?: string;
     hotel_name?: string;

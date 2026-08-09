@@ -1,0 +1,86 @@
+{
+    "zone_id": "4882003d-149a-41f4-a790-bdd1df13740d",
+    "candidates": [
+        {
+            "name": "City Hall",
+            "lat": 1.2931158999999999,
+            "lng": 103.8520125,
+            "address": "150 N Bridge Rd, Singapore 179100",
+            "place_id": "ChIJz9dNmKYZ2jER1fKcZf6c9Fg",
+            "rating": 4.4,
+            "distance_m": 0,
+            "coord_source": "serpapi_lodging"
+        },
+        {
+            "name": "Swissôtel The Stamford Singapore",
+            "lat": 1.2936866,
+            "lng": 103.85339119999999,
+            "address": "2 Stamford Rd, Singapore 178882",
+            "place_id": "ChIJfyNkh6YZ2jERjHsd_P-iL_M",
+            "rating": 4.5,
+            "distance_m": 166,
+            "coord_source": "serpapi_lodging"
+        },
+        {
+            "name": "Pullman Singapore Hill Street",
+            "lat": 1.2937435,
+            "lng": 103.8506264,
+            "address": "1 Hill St, Singapore 179949",
+            "place_id": "ChIJFfXuEX4Z2jERLBcdcLu4qpI",
+            "rating": 4.5,
+            "distance_m": 169,
+            "coord_source": "serpapi_lodging"
+        },
+        {
+            "name": "Fairmont Singapore",
+            "lat": 1.2942639,
+            "lng": 103.8537619,
+            "address": "80 Bras Basah Rd, Singapore 189560",
+            "place_id": "ChIJ-Uph06UZ2jERjKQsyQgfltg",
+            "rating": 4.5,
+            "distance_m": 233,
+            "coord_source": "serpapi_lodging"
+        },
+        {
+            "name": "WYNDHAM SINGAPORE HOTEL",
+            "lat": 1.291988,
+            "lng": 103.8500998,
+            "address": "3 - 5 Coleman St, Singapore 179804",
+            "place_id": "ChIJDQn9K6EZ2jERWXHmI8u9_OA",
+            "rating": 4.0,
+            "distance_m": 247,
+            "coord_source": "serpapi_lodging"
+        },
+        {
+            "name": "Former City Hall",
+            "lat": 1.29068,
+            "lng": 103.851743,
+            "address": "3 St Andrew's Rd, Singapore 178958",
+            "place_id": "ChIJb4eFPKcZ2jERsXWHATc-6no",
+            "rating": 4.6,
+            "distance_m": 273,
+            "coord_source": "serpapi_lodging"
+        },
+        {
+            "name": "lyf Funan Singapore",
+            "lat": 1.2917357,
+            "lng": 103.84946819999999,
+            "address": "67 Hill St, Level 4, Funan, Singapore 179370",
+            "place_id": "ChIJT2GP0LEZ2jER4VmH4dpvFE8",
+            "rating": 4.2,
+            "distance_m": 322,
+            "coord_source": "serpapi_lodging"
+        },
+        {
+            "name": "Raffles Singapore",
+            "lat": 1.294889,
+            "lng": 103.854483,
+            "address": "1 Beach Rd, Singapore 189673",
+            "place_id": "ChIJwUTKu6UZ2jERwt5ctkU4f2Q",
+            "rating": 4.6,
+            "distance_m": 338,
+            "coord_source": "serpapi_lodging"
+        }
+    ],
+    "warnings": []
+}

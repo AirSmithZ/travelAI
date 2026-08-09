@@ -61,8 +61,9 @@ class Settings(BaseSettings):
         validation_alias="LLM_MODEL_FALLBACKS",
     )
     llm_max_tokens_parse: int = Field(default=2500, validation_alias="LLM_MAX_TOKENS_PARSE")
+    # 4 日 × 日闭环/三餐/name_en；reasoning 模型另占 completion，3500 易 length 截断（P90）
     llm_max_tokens_generate: int = Field(
-        default=3500,
+        default=8000,
         validation_alias="LLM_MAX_TOKENS_GENERATE",
     )
     geocode_max_workers: int = Field(default=4, validation_alias="GEOCODE_MAX_WORKERS")

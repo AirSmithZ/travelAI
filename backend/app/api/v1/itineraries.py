@@ -47,6 +47,30 @@ def _require_confirmed_flights(body: GenerateItineraryRequest) -> None:
         )
 
 
+def _require_locked_hotel(body: GenerateItineraryRequest) -> None:
+    """Hotel must be locked before first generate (name + coords). optimize may reuse."""
+    if body.mode == "optimize":
+        return
+    hotels = (body.travel_intel.hotels if body.travel_intel else None) or []
+    locked = False
+    for h in hotels:
+        if not isinstance(h, dict):
+            continue
+        name = (h.get("name") or "").strip()
+        try:
+            lat, lng = float(h.get("lat") or 0), float(h.get("lng") or 0)
+        except (TypeError, ValueError):
+            continue
+        if name and (abs(lat) > 1e-6 or abs(lng) > 1e-6):
+            locked = True
+            break
+    if not locked:
+        raise HTTPException(
+            status_code=400,
+            detail="请先锁定具体酒店后再生成玩法行程（travel_intel.hotels 需含名称与坐标）",
+        )
+
+
 def _require_generate_mode(body: GenerateItineraryRequest) -> None:
     """FLOW-02: optimize needs current_itinerary; regenerate may omit but prefers it."""
     if body.mode == "optimize" and not body.current_itinerary:
@@ -70,6 +94,7 @@ async def generate_itinerary_endpoint(
     client: LLMClient | None = Depends(get_llm_client),
 ) -> GenerateItineraryResponse:
     _require_confirmed_flights(body)
+    _require_locked_hotel(body)
     _require_generate_mode(body)
     settings = get_settings()
     travel_intel = body.travel_intel.model_dump() if body.travel_intel else None
@@ -96,6 +121,7 @@ async def generate_itinerary_stream_endpoint(
 ) -> StreamingResponse:
     """SSE：llm delta（preview）→ llm done → result。"""
     _require_confirmed_flights(body)
+    _require_locked_hotel(body)
     _require_generate_mode(body)
 
     async def event_generator():

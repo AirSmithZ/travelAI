@@ -35,12 +35,19 @@ export function ChatStatusBar({ apiStatus, phase, generationProgress }: ChatStat
         后端已连接但 LLM 未配置。请在 <code>.env</code> 设置 <code>DEEPSEEK_API_KEY</code>
       </>
     );
+  } else if (generationProgress.phase === 'validate') {
+    tone = 'warn';
+    const llmSec = formatLlmSeconds(generationProgress.llmLatencyMs);
+    content = llmSec
+      ? `AI 初稿耗时 ${llmSec}，输出不完整，正在修复校验…`
+      : '输出不完整，正在修复校验…';
   } else if (generationProgress.phase === 'llm') {
     tone = 'info';
     const llmSec = formatLlmSeconds(generationProgress.llmLatencyMs);
     const preview = generationProgress.llmPreview?.trim();
-    if (llmSec) {
-      content = `AI 生成完成（${llmSec}），正在写入…`;
+    if (llmSec && !preview) {
+      // llm done 但尚未进入 validate/result：可能在等修复或写结果
+      content = `AI 生成中（已用 ${llmSec}）…`;
     } else if (preview) {
       content = `正在生成路线图：${preview}`;
     } else {

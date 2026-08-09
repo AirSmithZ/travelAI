@@ -117,6 +117,7 @@ def form_patch_tool_schema_doc() -> str:
         " origin/destination 优先 IATA 三字码；date 为 YYYY-MM-DD。"
         " **禁止在 reply 或 patches 中编造票价、航班号或时刻**；真实报价由后端 Ignav 返回。"
         " 缺 OD 或日期时不要发 tool_calls，只在 reply 追问。"
+        " 发 search_flights 时仍须同步输出 departure/destination/date_start/(date_end)/travelers 的 patches。"
     )
 
 

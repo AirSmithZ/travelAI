@@ -63,7 +63,8 @@ class FormPatch(BaseModel):
 | 参数 | 建议 |
 |------|------|
 | `temperature` | 解析/抽取 `0–0.3`；创意文案 `0.5–0.8` |
-| `max_tokens` | 按输出 Schema 估算，留 20% 余量 |
+| `max_tokens` | 按输出 Schema 估算，留 20% 余量；**行程 generate 默认 ≥8000**（`LLM_MAX_TOKENS_GENERATE`）；reasoning 模型勿把空 content 当成 `{}` |
+| `thinking` | DeepSeek V4 默认开启且与 content **共用** max_tokens；**结构化 JSON（generate/fix）须 `thinking: disabled`**，否则易 length + 空 content |
 | `timeout` | 连接 10s，读 60–120s（长生成） |
 | `response_format` | 支持时用 `{"type": "json_object"}` |
 
@@ -119,7 +120,7 @@ data: {"itinerary": {...}}
 ## 反模式
 
 - ❌ 直接 `json.loads` 不做校验
-- ❌ 解析失败返回空对象糊弄前端
+- ❌ 解析失败返回空对象糊弄前端（含 `content or "{}"`）
 - ❌ 在 prompt 里塞 web_search 猜坐标（本项目走 Geocoding API）
 - ❌ 同步阻塞 Event Loop（用 `async` + `httpx`/`openai` async client）
 - ❌ system prompt 把用户可控字符串当作指令开关（会覆盖结构化约束）

@@ -1,7 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { usePlanStore, findNodeContext, findEdgeContext, selectActiveItinerary } from '../../stores/usePlanStore';
-import { getFlightIntelPanelPhase } from '../../types/travelIntel';
-import { getStayZonePanelPhase, stayZonePanelBadgeLabel } from '../../types/stayZone';
 import type { EditorTarget } from '../../stores/usePlanStore';
 import { ChatPanel } from '../chat/ChatPanel';
 import { EvidencePanel } from '../evidence/EvidencePanel';
@@ -77,27 +75,9 @@ export function InputPanel() {
   const showPhaseBEntry = plan.phase !== 'detailed';
 
   const purchaseUrl = plan.travel_intel.last_flight_search?.purchase_url;
-  const flightPanelPhase = getFlightIntelPanelPhase(plan.travel_intel);
-  const stayPanelPhase = getStayZonePanelPhase(plan.travel_intel);
-  const stayBadge = stayZonePanelBadgeLabel(stayPanelPhase);
 
   const formHeading = formEditorHeading(editorTarget, itinerary);
   const hasItineraryDays = Boolean(itinerary?.days?.length);
-  const hasStayGeometry = (plan.travel_intel.recommended_stay_zones ?? []).some((z) =>
-    Boolean(z.geometry),
-  );
-  /** P76: 生成前也可打开印证说明；生成后展示条数 */
-  const showEvidenceEntry = showChat;
-  const evidenceStripHint =
-    evidenceCount > 0
-      ? `${evidenceCount} 条公开笔记 · 自行打开`
-      : evidenceStatus === 'unconfigured'
-        ? '未配置数据源 · 点击查看说明'
-        : evidenceStatus === 'empty'
-          ? '本次无印证链接 · 点击查看说明'
-          : hasItineraryDays
-            ? '查看印证说明'
-            : '生成时检索 · 点此了解用法';
   /** UX-CHAT-04: 需求阶段以对话+摘要为主；有行程后才强调节点编辑 */
   const showNodeEditorStrip = showChat && hasItineraryDays;
   const nodeEditorHint = nodeName
@@ -134,43 +114,7 @@ export function InputPanel() {
         />
       )}
 
-      {showChat && showPhaseBEntry && (
-        <button
-          type="button"
-          className="input-panel__form-strip input-panel__form-strip--flight"
-          onClick={() => setLeftPanelMode('flight')}
-        >
-          <span>航班确认</span>
-          <span className="input-panel__form-strip-hint">
-            {flightPanelPhase === 'done' ? '已完成 · 点击查看' : '查价与确认航段'}
-          </span>
-        </button>
-      )}
-
-      {showChat && showPhaseBEntry && (
-        <button
-          type="button"
-          className="input-panel__form-strip input-panel__form-strip--stay"
-          onClick={() => setLeftPanelMode('stay')}
-        >
-          <span>住宿片区</span>
-          <span className="input-panel__form-strip-hint">
-            {stayPanelPhase === 'done' ? '已完成 · 点击查看' : stayBadge === '待确认' ? '待确认片区' : '推荐适合居住的区域'}
-          </span>
-        </button>
-      )}
-
-      {showEvidenceEntry && (
-        <button
-          type="button"
-          className="input-panel__form-strip input-panel__form-strip--evidence"
-          onClick={() => setLeftPanelMode('evidence')}
-        >
-          <span>玩法印证</span>
-          <span className="input-panel__form-strip-hint">{evidenceStripHint}</span>
-        </button>
-      )}
-
+      {/* 机酒/印证/预览入口已收拢到对话区「计划摘要」枢纽；底栏仅保留生成后的节点编辑 */}
       {showNodeEditorStrip && (
         <button
           type="button"
@@ -179,30 +123,6 @@ export function InputPanel() {
         >
           <span>节点编辑</span>
           <span className="input-panel__form-strip-hint">{nodeEditorHint}</span>
-        </button>
-      )}
-
-      {/* P68: 无行程时禁止空壳展开；有片区 geometry 时可展开地图看片区 */}
-      {showChat && !hasItineraryDays && (
-        <button
-          type="button"
-          className="input-panel__form-strip input-panel__form-strip--preview"
-          disabled={!hasStayGeometry}
-          title={
-            hasStayGeometry
-              ? '打开地图查看住宿片区'
-              : '生成玩法行程后可预览路线图'
-          }
-          onClick={() => {
-            if (!hasStayGeometry) return;
-            usePlanStore.getState().setPreviewExpandedWithoutItinerary(true);
-            usePlanStore.getState().setActiveView('map');
-          }}
-        >
-          <span>{hasStayGeometry ? '片区地图' : '路线预览'}</span>
-          <span className="input-panel__form-strip-hint">
-            {hasStayGeometry ? '查看已推荐片区' : '生成行程后可用'}
-          </span>
         </button>
       )}
 

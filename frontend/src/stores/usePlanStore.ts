@@ -70,10 +70,10 @@ import {
   patchActivityStep,
 } from '../types/chatActivity';
 import type { RecommendedStayZone, StayZonePreferences } from '../types/stayZone';
-import { addHotelNodeForZone } from '../utils/hotelNodeMutations';
+import { applyHotelDayLoop, hasLockedHotel } from '../utils/hotelDayLoop';
 import { findCrossDayPoiDuplicates } from '../utils/crossDayPoiDedup';
 import {
-  hotelFromZoneAndNode,
+  hotelFromZoneInput,
   patchStayZones,
   rebindHotelsAfterGenerate,
   removeHotelByNodeId,
@@ -81,7 +81,13 @@ import {
   syncIntelHotelFromNode,
 } from '../utils/hotelIntelSync';
 
-export type GenerationPhase = 'idle' | 'llm' | 'geocode' | 'evidence' | 'weather';
+export type GenerationPhase =
+  | 'idle'
+  | 'llm'
+  | 'geocode'
+  | 'evidence'
+  | 'weather'
+  | 'validate';
 
 export interface GenerationProgress {
   phase: GenerationPhase;
@@ -171,8 +177,8 @@ interface PlanState {
   setItinerary: (itinerary: Itinerary | null) => void;
   generateItinerary: (
     mode?: import('../api/itinerary').GenerateMode,
-  ) => Promise<'api' | 'mock' | 'blocked'>;
-  maybeAutoGenerateItinerary: () => Promise<'api' | 'mock' | 'skipped' | 'blocked'>;
+  ) => Promise<'api' | 'error' | 'blocked'>;
+  maybeAutoGenerateItinerary: () => Promise<'api' | 'error' | 'skipped' | 'blocked'>;
   setFlightSearchResult: (session: FlightSearchSession) => void;
   mergeFlightSearchResult: (patch: Partial<FlightSearchSession>) => void;
   confirmFlightQuote: (quoteId: string, role?: FlightLegRole) => void;
@@ -182,6 +188,7 @@ interface PlanState {
   setStayZonePreferences: (prefs: StayZonePreferences) => void;
   confirmStayZone: (zoneId: string) => void;
   rejectStayZone: (zoneId: string) => void;
+  /** Returns hotel id on success (intel lock and/or itinerary day-loop). */
   addHotelFromZone: (zoneId: string, input: AddHotelFromZoneInput) => string | null;
   removeHotelStay: (hotelId: string) => void;
   setSelectedStayZoneId: (zoneId: string | null) => void;
@@ -614,7 +621,7 @@ export const usePlanStore = create<PlanState>()(
         void get().maybeAutoGenerateItinerary().then((result) => {
           const show = useToastStore.getState().show;
           if (result === 'api') show('路线图已自动生成', 'info');
-          else if (result === 'mock') show('生成 API 不可用，已回退 Mock 行程', 'warning');
+          // error：generateItinerary 已 toast 真实 detail，此处不再二次提示
         });
       }
 
@@ -674,14 +681,11 @@ export const usePlanStore = create<PlanState>()(
         useToastStore.getState().show('优化适配需要已有行程', 'warning');
         return 'blocked';
       }
-      const hasHotels = p.travel_intel.hotels.length > 0;
-      const hasZones = (p.travel_intel.recommended_stay_zones ?? []).some(
-        (z) => z.status === 'confirmed',
-      );
-      if (!hasHotels && !hasZones) {
+      if (mode !== 'optimize' && !hasLockedHotel(p.travel_intel.hotels)) {
         useToastStore
           .getState()
-          .show('尚未确认酒店或住宿片区；行程住宿区域将为估算', 'warning');
+          .show('请先在住宿面板锁定具体酒店（名称+位置）后再生成玩法', 'warning');
+        return 'blocked';
       }
 
       const hasFlights = p.travel_intel.flights.length > 0;
@@ -797,6 +801,25 @@ export const usePlanStore = create<PlanState>()(
                   chatActivity: activity,
                 };
               });
+              return;
+            }
+            if (evt.step === 'validate') {
+              set((s) => ({
+                generationProgress: {
+                  ...s.generationProgress,
+                  phase: 'validate',
+                },
+                chatActivity:
+                  s.chatActivity?.op === 'generate'
+                    ? patchActivityStep(s.chatActivity, 'generate_llm', {
+                        status: 'running',
+                        detail:
+                          evt.status === 'fixing'
+                            ? '输出不完整，正在修复…'
+                            : '校验行程结构…',
+                      })
+                    : s.chatActivity,
+              }));
             }
           },
         });
@@ -846,29 +869,17 @@ export const usePlanStore = create<PlanState>()(
           settleChatActivity(get, set);
         }
         return 'api';
-      } catch {
-        if (mode !== 'generate') {
-          settleChatActivity(get, set, '行程更新失败');
-          set({ isGeneratingItinerary: false, generationProgress: idleProgress });
-          useToastStore.getState().show('行程更新失败，请稍后重试', 'error');
-          return 'blocked';
-        }
-        set((s) =>
-          updateActivePlan(s, (plan) => {
-            const itinerary = buildMockItinerary(plan.trip_request);
-            return { ...plan, itinerary: syncItineraryMeta(itinerary, plan.trip_request) };
-          }),
-        );
-        set({ isGeneratingItinerary: false });
-        const dest = p.trip_request.destination?.trim();
-        const mockItinerary = get().getItinerary();
-        if (dest && mockItinerary) {
-          runBackgroundGeocode(set, get, mockItinerary, dest);
-        } else {
-          set({ generationProgress: idleProgress });
-          settleChatActivity(get, set, '已回退 Mock 行程');
-        }
-        return 'mock';
+      } catch (err) {
+        // P91: 禁止失败静默 Mock——露出真实错误便于检索（与 llm-api-engineering 一致）
+        const detail =
+          err instanceof Error && err.message.trim()
+            ? err.message.trim()
+            : '行程生成失败，请稍后重试';
+        const short = detail.length > 320 ? `${detail.slice(0, 320)}…` : detail;
+        settleChatActivity(get, set, short);
+        set({ isGeneratingItinerary: false, generationProgress: idleProgress });
+        useToastStore.getState().show(short, 'error');
+        return 'error';
       }
     },
 
@@ -955,7 +966,7 @@ export const usePlanStore = create<PlanState>()(
       // UX-CHAT-09：确认后对话给出下一跳，不自动 regenerate
       get().addChatMessage(
         'assistant',
-        '航班已确认。可继续确认住宿片区，或使用下方检查清单生成玩法。',
+        '航班已确认。请继续确认住宿片区并锁定具体酒店，再生成玩法。',
       );
       get().requestReadinessPrompt();
     },
@@ -1062,7 +1073,7 @@ export const usePlanStore = create<PlanState>()(
       // UX-CHAT-09
       get().addChatMessage(
         'assistant',
-        '住宿片区已确认。可使用下方检查清单生成玩法（不会因改机酒自动重生成）。',
+        '住宿片区已确认。请在片区内锁定具体酒店后，再生成玩法（不会因改机酒自动重生成）。',
       );
       get().requestReadinessPrompt();
     },
@@ -1082,15 +1093,6 @@ export const usePlanStore = create<PlanState>()(
 
     addHotelFromZone: (zoneId, input) => {
       const plan = get().getActivePlan();
-      const itinerary = plan.itinerary;
-      if (!itinerary?.days?.length) {
-        // P72: 无行程时不得静默失败
-        useToastStore.getState().show(
-          '请先生成玩法行程，再将酒店添加到路线图（片区可先确认）',
-          'warning',
-        );
-        return null;
-      }
       const zone = (plan.travel_intel.recommended_stay_zones ?? []).find(
         (z) => z.id === zoneId,
       );
@@ -1099,58 +1101,115 @@ export const usePlanStore = create<PlanState>()(
         return null;
       }
 
-      get().recordItineraryHistory();
-      const { itinerary: nextItinerary, nodeId } = addHotelNodeForZone(itinerary, zone, {
-        name: input.name,
-        lat: input.lat,
-        lng: input.lng,
-        address: input.address,
-        coord_source: input.pendingMapPick ? 'map_pick' : input.coord_source,
-      });
-
-      const ctx = findNodeContext(nextItinerary, nodeId);
-      const node = ctx?.node;
-      if (!node) return null;
-
+      const prev = plan.travel_intel.hotels.find((h) => h.zone_id === zoneId);
       const sequence =
-        plan.travel_intel.hotels.length > 0
+        prev?.sequence ??
+        (plan.travel_intel.hotels.length > 0
           ? Math.max(...plan.travel_intel.hotels.map((h) => h.sequence)) + 1
-          : 1;
+          : 1);
 
-      const hotel = hotelFromZoneAndNode(zone, nodeId, node, {
+      let hotel = hotelFromZoneInput(zone, input, {
         sequence,
-        pendingMapPick: input.pendingMapPick,
+        previousId: prev?.id,
       });
+
+      const itinerary = plan.itinerary;
+      const label = input.name.trim() || '酒店';
+
+      // Pre-generate: lock into travel_intel only (P88)
+      if (!itinerary?.days?.length) {
+        if (input.pendingMapPick) {
+          useToastStore
+            .getState()
+            .show('生成前请选择带坐标的酒店，或手输名称并完成地理编码', 'warning');
+          return null;
+        }
+        set((s) =>
+          updateActivePlan(s, (p) => ({
+            ...p,
+            travel_intel: syncTravelIntelStatus({
+              ...p.travel_intel,
+              hotels: [
+                ...p.travel_intel.hotels.filter((h) => h.zone_id !== zoneId),
+                hotel,
+              ],
+            }),
+          })),
+        );
+        useToastStore.getState().show(`已锁定酒店「${label}」，可生成玩法`, 'info');
+        get().addChatMessage(
+          'assistant',
+          `已锁定住宿「${label}」。确认航班与酒店后，可点「生成玩法」；生成后将按日闭环写入路线图。`,
+        );
+        return hotel.id;
+      }
+
+      get().recordItineraryHistory();
+      const hotels = [
+        ...plan.travel_intel.hotels.filter((h) => h.zone_id !== zoneId),
+        hotel,
+      ];
+      const zones = plan.travel_intel.recommended_stay_zones ?? [];
+      const { itinerary: looped, bindings } = applyHotelDayLoop(
+        itinerary,
+        hotels,
+        zones,
+        plan.travel_intel.flights,
+      );
+      const primaryBind =
+        bindings.find((b) => b.hotel_id === hotel.id) ?? bindings[0];
+      if (primaryBind) {
+        hotel = { ...hotel, itinerary_node_id: primaryBind.node_id };
+      }
+
+      const bindDay =
+        primaryBind != null
+          ? Math.max(0, (primaryBind.day_index || 1) - 1)
+          : 0;
 
       set((s) => ({
         ...updateActivePlan(s, (p) => ({
           ...p,
-          itinerary: nextItinerary,
+          itinerary: {
+            ...looped,
+            meta: {
+              ...looped.meta,
+              hotel_bindings: bindings,
+            },
+          },
           travel_intel: syncTravelIntelStatus({
             ...p.travel_intel,
-            hotels: [...p.travel_intel.hotels.filter((h) => h.zone_id !== zoneId), hotel],
+            hotels: [
+              ...p.travel_intel.hotels.filter((h) => h.zone_id !== zoneId),
+              hotel,
+            ],
           }),
         })),
-        selectedNodeId: nodeId,
-        activeDayIndex: ctx.dayIndex,
+        selectedNodeId: hotel.itinerary_node_id ?? s.selectedNodeId,
+        activeDayIndex: bindDay,
         leftPanelMode: input.pendingMapPick ? 'form' : s.leftPanelMode,
         previewExpandedWithoutItinerary: true,
         activeView: 'map' as const,
       }));
 
-      const label = input.name.trim() || '酒店';
+      if (input.pendingMapPick && hotel.itinerary_node_id) {
+        get().startMapPick(hotel.itinerary_node_id);
+      }
+
       useToastStore.getState().show(
-        input.pendingMapPick ? `已添加「${label}」，请在地图点选位置` : `已添加酒店「${label}」`,
+        input.pendingMapPick
+          ? `已替换为「${label}」，请在地图点选位置`
+          : `已锁定并更新日闭环酒店「${label}」`,
         'info',
       );
       get().addChatMessage(
         'assistant',
         input.pendingMapPick
-          ? `已将「${label}」加入路线图，请在地图上点选精确位置。`
-          : `已将「${label}」加入路线图，可在地图上查看或继续生成/调整玩法。`,
+          ? `已将「${label}」设为住宿锚点，请在地图上点选精确位置。`
+          : `已将「${label}」写入每日酒店闭环；若餐饮动线需跟着换片区，可点「优化适配」。`,
       );
 
-      return nodeId;
+      return hotel.id;
     },
 
     removeHotelStay: (hotelId) => {
@@ -1158,31 +1217,56 @@ export const usePlanStore = create<PlanState>()(
       const hotel = plan.travel_intel.hotels.find((h) => h.id === hotelId);
       if (!hotel) return;
 
-      if (hotel.itinerary_node_id && plan.itinerary) {
-        const ctx = findNodeContext(plan.itinerary, hotel.itinerary_node_id);
-        if (ctx) {
-          get().recordItineraryHistory();
-          set((s) => {
-            const next = updateActivePlan(s, (p) => {
-              if (!p.itinerary) return p;
-              return {
-                ...p,
-                itinerary: removeNodeFromItinerary(
-                  p.itinerary,
-                  ctx.dayIndex,
-                  hotel.itinerary_node_id!,
-                ),
-                travel_intel: removeHotelFromIntel(p.travel_intel, hotelId),
-              };
-            });
-            return {
-              ...next,
-              selectedNodeId:
-                s.selectedNodeId === hotel.itinerary_node_id ? null : s.selectedNodeId,
-            };
-          });
-          return;
+      const remaining = plan.travel_intel.hotels.filter((h) => h.id !== hotelId);
+      const zones = plan.travel_intel.recommended_stay_zones ?? [];
+
+      if (plan.itinerary?.days?.length) {
+        get().recordItineraryHistory();
+        const { itinerary: looped } = applyHotelDayLoop(
+          plan.itinerary,
+          remaining,
+          zones,
+          plan.travel_intel.flights,
+        );
+        // If no hotels left, strip hotel nodes left from previous loop
+        let nextItinerary = looped;
+        if (!remaining.length) {
+          nextItinerary = {
+            ...looped,
+            days: looped.days.map((day) => {
+              const nodes = day.nodes.filter((n) => n.category !== 'hotel');
+              const idSet = new Set(nodes.map((n) => n.id));
+              const edges = (day.edges ?? []).filter(
+                (e) => idSet.has(e.from) && idSet.has(e.to),
+              );
+              return { ...day, nodes, edges };
+            }),
+            meta: {
+              ...looped.meta,
+              hotel_bindings: [],
+            },
+          };
         }
+        set((s) => ({
+          ...updateActivePlan(s, (p) => ({
+            ...p,
+            itinerary: nextItinerary,
+            travel_intel: removeHotelFromIntel(p.travel_intel, hotelId),
+          })),
+          selectedNodeId:
+            s.selectedNodeId &&
+            plan.itinerary!.days.some((d) =>
+              d.nodes.some(
+                (n) =>
+                  n.id === s.selectedNodeId &&
+                  n.category === 'hotel' &&
+                  n.name.trim().toLowerCase() === hotel.name.trim().toLowerCase(),
+              ),
+            )
+              ? null
+              : s.selectedNodeId,
+        }));
+        return;
       }
 
       set((s) =>

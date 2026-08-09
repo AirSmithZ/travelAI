@@ -43,6 +43,41 @@ export function hotelFromZoneAndNode(
   };
 }
 
+/** Lock hotel into travel_intel before itinerary exists (generate gate). */
+export function hotelFromZoneInput(
+  zone: RecommendedStayZone,
+  input: {
+    name: string;
+    lat: number;
+    lng: number;
+    address?: string;
+    pendingMapPick?: boolean;
+  },
+  opts: { sequence: number; previousId?: string },
+): ConfirmedHotelStay {
+  const hasCoords =
+    !input.pendingMapPick &&
+    input.lat != null &&
+    input.lng != null &&
+    (Math.abs(input.lat) > 1e-6 || Math.abs(input.lng) > 1e-6);
+  return {
+    id: opts.previousId ?? crypto.randomUUID(),
+    sequence: opts.sequence,
+    city: zone.city,
+    name: input.name.trim() || '酒店（待命名）',
+    check_in: zone.check_in,
+    check_out: zone.check_out,
+    is_primary: opts.sequence === 1,
+    is_anchor: true,
+    booking_status: hasCoords ? 'selected' : 'zone_only',
+    zone_id: zone.id,
+    lat: input.lat,
+    lng: input.lng,
+    address: input.address,
+    purchase_url: zone.purchase_url,
+  };
+}
+
 export function syncIntelHotelFromNode(
   intel: TravelIntel,
   nodeId: string,

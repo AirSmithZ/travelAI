@@ -11,6 +11,7 @@ import { usePlanStore, findNodeContext, findEdgeContext } from '../../stores/use
 import { useToastStore } from '../../stores/useToastStore';
 import { chatHistoryForParse } from '../../utils/chatHelpers';
 import { dedupeConflictingPatches } from '../../utils/patchDedupe';
+import { patchesFromSearchFlightsTool } from '../../utils/flightToolTripSync';
 import { isGenerateIntent } from '../../utils/generateIntent';
 import {
   derivePlanReadiness,
@@ -125,7 +126,7 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
   const emptyHint =
     plan.phase === 'detailed'
       ? '行程已生成：直接说要改的点，例如「第二天晚一点出发」。换目的地请说「改去曼谷」（将新建计划）。'
-      : '用一句话说清需求，例如「上海出发去新加坡 4 天，偏美食」。目的地与日期会自动写入；确认航班与住宿后，再点生成玩法。';
+      : '用一句话说清需求，例如「上海出发去新加坡 4 天，偏美食」。写好后上方会出现「下一步」指引，可跳转机票/酒店面板确认。';
 
   const openReadiness = useCallback(() => {
     const readiness = derivePlanReadiness(usePlanStore.getState().getActivePlan());
@@ -280,26 +281,45 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
           ? formatDroppedPatchNotice(result.dropped_patch_count ?? 0, result.warnings)
           : '';
 
-      const { patches, conflictFields } = dedupeConflictingPatches(result.patches);
+      const { patches: dedupedPatches, conflictFields } = dedupeConflictingPatches(
+        result.patches,
+      );
+      // P89: search_flights 不能替代表单同步；补齐 OD/日期/人数 → trip_request
+      const toolSyncPatches = patchesFromSearchFlightsTool(
+        result.tool_calls,
+        usePlanStore.getState().getActivePlan().trip_request,
+        dedupedPatches
+          .filter((p) => p.target === 'trip_request')
+          .map((p) => p.field_path),
+      );
+      const patches = [...dedupedPatches, ...toolSyncPatches];
+
       addChatMessage('assistant', result.reply, {
         chat_mode: result.chat_mode_used ?? chatModeNow,
         ...(patches.length > 0 ? { patches, patch_status: 'pending' as const } : {}),
       });
 
+      // Write trip_request before flight search so panels reflect chat OD/dates.
+      let autoCount = 0;
+      let confirmCount = 0;
+      if (patches.length > 0) {
+        ({ autoCount, confirmCount } = applyPatchesWithLowRiskAuto(patches));
+      }
+
       const toolResult = await executeChatToolCalls(result.tool_calls);
 
-      if (patches.length > 0) {
-        const { autoCount, confirmCount } = applyPatchesWithLowRiskAuto(patches);
-        const conflictNote =
-          conflictFields.length > 0
-            ? `（同字段 ${conflictFields.join('、')} 已保留最新解析）`
+      const conflictNote =
+        conflictFields.length > 0
+          ? `（同字段 ${conflictFields.join('、')} 已保留最新解析）`
+          : '';
+      const warnNote =
+        result.warnings && result.warnings.length > 0 && !droppedNote
+          ? ` ${result.warnings[0]}`
+          : droppedNote
+            ? ` ${droppedNote}`
             : '';
-        const warnNote =
-          result.warnings && result.warnings.length > 0 && !droppedNote
-            ? ` ${result.warnings[0]}`
-            : droppedNote
-              ? ` ${droppedNote}`
-              : '';
+
+      if (patches.length > 0) {
         if (autoCount > 0 && confirmCount === 0) {
           showToast(`已写入 ${autoCount} 项（可撤销）${conflictNote}${warnNote}`, 'info');
         } else if (autoCount > 0) {
