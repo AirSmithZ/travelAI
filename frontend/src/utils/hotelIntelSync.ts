@@ -93,3 +93,53 @@ export function patchStayZones(
   const zones = updater(intel.recommended_stay_zones ?? []);
   return syncTravelIntelStatus({ ...intel, recommended_stay_zones: zones });
 }
+
+/**
+ * After generate: rebind travel_intel.hotels → new itinerary hotel nodes
+ * (LLM invents new ids; without this Stay panel and graph diverge).
+ */
+export function rebindHotelsAfterGenerate(
+  intel: TravelIntel,
+  itinerary: { days: Array<{ nodes: ItineraryNode[] }>; meta?: { hotel_bindings?: Array<{ hotel_id?: string; hotel_name?: string; node_id: string }> } },
+): TravelIntel {
+  if (!intel.hotels.length) return intel;
+
+  const bindings = itinerary.meta?.hotel_bindings ?? [];
+  const byHotelId = new Map<string, string>();
+  const byName = new Map<string, string>();
+  for (const b of bindings) {
+    if (b.hotel_id) byHotelId.set(b.hotel_id, b.node_id);
+    if (b.hotel_name?.trim()) byName.set(b.hotel_name.trim().toLowerCase(), b.node_id);
+  }
+
+  const hotelNodes: ItineraryNode[] = [];
+  for (const day of itinerary.days) {
+    for (const n of day.nodes) {
+      if (n.category === 'hotel') hotelNodes.push(n);
+    }
+  }
+
+  const hotels = intel.hotels.map((h) => {
+    let nodeId =
+      (h.id && byHotelId.get(h.id)) ||
+      (h.name?.trim() && byName.get(h.name.trim().toLowerCase())) ||
+      undefined;
+    if (!nodeId) {
+      const match = hotelNodes.find(
+        (n) => n.name.trim().toLowerCase() === h.name.trim().toLowerCase(),
+      );
+      nodeId = match?.id;
+    }
+    const node = nodeId ? hotelNodes.find((n) => n.id === nodeId) : undefined;
+    return {
+      ...h,
+      itinerary_node_id: nodeId,
+      lat: node?.lat ?? h.lat,
+      lng: node?.lng ?? h.lng,
+      address: node?.address ?? h.address,
+      name: h.name,
+    };
+  });
+
+  return syncTravelIntelStatus({ ...intel, hotels });
+}

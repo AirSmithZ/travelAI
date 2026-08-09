@@ -21,6 +21,7 @@ import {
   getRegionTintVar,
   layoutOverview,
 } from '../../utils/layoutOverview';
+import { mergeLivePlacementsWithDomAnchors } from '../../utils/overviewEdgeGeometry';
 import { getCellLongNote, getCrossRegionEdges } from '../../utils/overviewRoute';
 import {
   EXPORT_SHELL_LIGHT,
@@ -224,26 +225,35 @@ export function OverviewGraphView() {
     [itinerary, travelIntel],
   );
 
-  const domAnchors = useOverviewNodeAnchors(
-    matrixRef,
-    `${liveMatrixPlacements.size}:${itinerary?.days.length ?? 0}:${layout?.regions.length ?? 0}`,
-  );
-
-  /** OV-01: prefer measured DOM centers when available */
-  const edgePlacements = useMemo(() => {
-    if (domAnchors.size === 0) return liveMatrixPlacements;
-    const map = new Map(liveMatrixPlacements);
-    for (const [id, place] of map) {
-      const a = domAnchors.get(id);
-      if (!a) continue;
-      map.set(id, {
-        ...place,
-        x: a.x - place.width / 2,
-        y: a.y - place.height / 2,
-      });
+  /**
+   * Remeasure when node *positions* change (drag commit / offset), not only count.
+   * ResizeObserver ignores absolute left/top moves — without this, stale DOM anchors
+   * pin cross-region edges until scroll/resize fires measure().
+   */
+  const anchorRevision = useMemo(() => {
+    if (!matrixPlacements.size) {
+      return `0:${itinerary?.days.length ?? 0}:${layout?.regions.length ?? 0}`;
     }
-    return map;
-  }, [liveMatrixPlacements, domAnchors]);
+    const parts: string[] = [];
+    for (const [id, p] of matrixPlacements) {
+      parts.push(`${id}:${Math.round(p.x)}:${Math.round(p.y)}`);
+    }
+    parts.sort();
+    return `${parts.join('|')}:${layout?.regions.length ?? 0}`;
+  }, [matrixPlacements, itinerary?.days.length, layout?.regions.length]);
+
+  const domAnchors = useOverviewNodeAnchors(matrixRef, anchorRevision);
+
+  /** OV-01: prefer measured DOM centers; keep drag ghost coords for active node */
+  const edgePlacements = useMemo(
+    () =>
+      mergeLivePlacementsWithDomAnchors(
+        liveMatrixPlacements,
+        domAnchors,
+        dragPreview?.nodeId ?? null,
+      ),
+    [liveMatrixPlacements, domAnchors, dragPreview?.nodeId],
+  )
 
   const dragGhostNode = useMemo(() => {
     if (!dragPreview || !itinerary) return null;

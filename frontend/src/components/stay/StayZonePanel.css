@@ -227,10 +227,21 @@
   border-top: 1px dashed var(--border);
 }
 
+.stay-zone__add-step {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .stay-zone__add-hint {
   margin: 0 0 8px;
   font-size: 10px;
   color: var(--text-dim);
+}
+
+.stay-zone__add-hint--warn {
+  color: var(--accent);
 }
 
 .stay-zone__hotel-list {
@@ -292,6 +303,11 @@
 
 .stay-zone__lodging-item:hover {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.stay-zone__lodging-item--selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-base));
 }
 
 .stay-zone__lodging-meta {

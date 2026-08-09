@@ -5,31 +5,31 @@ import { IconEdit, IconTrash } from './PlanIcons';
 import './PlanSelector.css';
 
 const DROPDOWN_GAP = 6;
-const DROPDOWN_MAX_HEIGHT = 320;
+const DROPDOWN_MAX_HEIGHT = 280;
 const VIEWPORT_PADDING = 12;
-const DROPDOWN_MIN_WIDTH = 280;
+/** 与触发按钮同宽为底，略放宽以容纳操作图标，避免 fixed 子项 width:100% 撑满视口 */
+const DROPDOWN_MIN_WIDTH = 240;
+const DROPDOWN_MAX_WIDTH = 320;
 
-function computeDropdownStyle(trigger: HTMLElement, dropdownEl?: HTMLElement | null): CSSProperties {
+function computeDropdownStyle(trigger: HTMLElement): CSSProperties {
   const rect = trigger.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
-  const maxWidth = viewportWidth - VIEWPORT_PADDING * 2;
   const width = Math.min(
-    Math.max(dropdownEl?.offsetWidth ?? 0, rect.width, DROPDOWN_MIN_WIDTH),
-    maxWidth,
+    Math.max(rect.width, DROPDOWN_MIN_WIDTH),
+    DROPDOWN_MAX_WIDTH,
+    viewportWidth - VIEWPORT_PADDING * 2,
   );
 
-  let left = rect.left;
-  if (left + width > viewportWidth - VIEWPORT_PADDING) {
-    left = rect.right - width;
-  }
+  // 右对齐触发按钮，保持「紧贴按钮」的下拉菜单感
+  let left = rect.right - width;
   left = Math.max(VIEWPORT_PADDING, Math.min(left, viewportWidth - VIEWPORT_PADDING - width));
 
   const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_PADDING;
   const spaceAbove = rect.top - VIEWPORT_PADDING;
-  const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+  const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
   const availableHeight = Math.min(
     DROPDOWN_MAX_HEIGHT,
-    Math.max(160, (openUp ? spaceAbove : spaceBelow) - DROPDOWN_GAP),
+    Math.max(140, (openUp ? spaceAbove : spaceBelow) - DROPDOWN_GAP),
   );
 
   return {
@@ -66,15 +66,13 @@ export function PlanSelector() {
 
     const updatePosition = () => {
       if (!triggerRef.current) return;
-      setDropdownStyle(computeDropdownStyle(triggerRef.current, dropdownRef.current));
+      setDropdownStyle(computeDropdownStyle(triggerRef.current));
     };
 
     updatePosition();
-    const frame = requestAnimationFrame(updatePosition);
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
     return () => {
-      cancelAnimationFrame(frame);
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };

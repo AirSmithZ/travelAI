@@ -17,7 +17,7 @@ export function DayChips({ days, activeIndex, focusedIndex, onChange, onAddDay }
         const isFocused = focusedIndex === index;
         return (
           <button
-            key={day.day_index}
+            key={`day-chip-${index}-${day.day_index}`}
             type="button"
             role="tab"
             aria-selected={isActive}

@@ -30,6 +30,7 @@
 | **GEO-03** | ✅ | P1 | SerpApi Google Maps 主源 | [20 §5](./20-L1L2运行验证记录.md) |
 | **GEO-05** | ✅ | P1 | NodeCoordEditor 400ms debounce | `NodeCoordEditor.tsx` |
 | **GEO-09** | ✅ | P2 | 和风 GeoAPI 城市中心优先 + 英译 query 变体 | `qweather_geo.py` · `geocoding.py` |
+| **GEO-10** | ✅ | P1 | LLM `name_en` + 英文优先检索/评分 + Wikidata 补查（P82） | `itinerary_llm.py` · `geocoding.py` · `wikidata_geo.py` |
 
 ### 酒店 / 流程 / 排序
 
@@ -41,7 +42,7 @@
 | **FLT-RANK-01/02** | ✅ | — | 5:2:2:1 + 参考价文案 | `rank.py` · FlightIntelPanel |
 | **FLOW-01/01b** | ✅ | — | 无航班阻断前后端 | [18](./18-机酒优先与迭代行程产品决策.md) |
 | **FLOW-02** | ✅ | P1 | `optimize` / `regenerate` + dirty banner（不自动重跑） | [18 §4](./18-机酒优先与迭代行程产品决策.md) · [20 §6](./20-L1L2运行验证记录.md) |
-| **UX-FLT-CACHE** | ✅ | P2 | 航班 / lodging 同条件前端缓存 + TTL + 刷新 | [22 §2.4](./22-对话编排与玩法印证UX调研.md) · `searchResultCache.ts` |
+| **UX-FLT-CACHE** | ✅ | P2 | 航班 / lodging 同条件前端缓存 + TTL + 刷新（**P70：空结果不入缓存**） | [22 §2.4](./22-对话编排与玩法印证UX调研.md) · `searchResultCache.ts` · [问题日志 P70](../问题日志.md) |
 
 ---
 

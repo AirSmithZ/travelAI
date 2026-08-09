@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { PlanSelector } from './plan/PlanSelector';
 import { InputPanel } from './input/InputPanel';
 import { PreviewPane } from './preview/PreviewPane';
 import { IntelDirtyBanner } from './flow/IntelDirtyBanner';
+import { ExpensePanel } from './expense/ExpensePanel';
 import {
   usePlanStore,
   selectLeftPanelCollapsed,
@@ -15,10 +17,12 @@ export function AppShell() {
   const { width: panelWidth, startResize } = useLeftPanelWidth();
   const leftPanelCollapsed = usePlanStore(selectLeftPanelCollapsed);
   const previewCollapsed = usePlanStore(selectPreviewCollapsed);
+  const [expenseOpen, setExpenseOpen] = useState(false);
 
   return (
     <div className="app-shell">
       <GlobalToast />
+      <ExpensePanel open={expenseOpen} onClose={() => setExpenseOpen(false)} />
       <header className="app-shell__header">
         <div className="app-shell__brand">
           <span className="app-shell__logo">✦</span>
@@ -27,7 +31,18 @@ export function AppShell() {
             <p className="app-shell__subtitle">AI 行程规划</p>
           </div>
         </div>
-        <PlanSelector />
+        <div className="app-shell__header-actions">
+          <button
+            type="button"
+            className="app-shell__expense-btn"
+            onClick={() => setExpenseOpen(true)}
+            title="开销汇总"
+            aria-label="打开开销面板"
+          >
+            开销
+          </button>
+          <PlanSelector />
+        </div>
       </header>
       <IntelDirtyBanner />
 

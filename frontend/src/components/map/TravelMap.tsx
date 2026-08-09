@@ -32,6 +32,7 @@ function collectMapDays(
   graphViewMode: 'day' | 'overview',
   activeDayIndex: number,
 ): DayPlan[] {
+  // 总览：全部天；单日：仅当前 DayTabs 选中天（设计文档 §3.3.1）
   if (graphViewMode === 'overview') return itinerary.days;
   const day = itinerary.days[activeDayIndex];
   return day ? [day] : [];
@@ -56,9 +57,11 @@ function buildNodesGeoJSON(
 ) {
   return {
     type: 'FeatureCollection' as const,
-    features: nodes.map((node) => ({
+    features: nodes.map((node, index) => ({
       type: 'Feature' as const,
-      id: node.id,
+      // Numeric Feature.id avoids MapLibre string-id / duplicate-id drop quirks;
+      // app id stays in properties for click handlers.
+      id: index + 1,
       properties: {
         id: node.id,
         name: node.overlapCount > 1 ? `${node.name} (${node.overlapCount}处重合)` : node.name,
@@ -76,87 +79,121 @@ function buildNodesGeoJSON(
   };
 }
 
+/** Only edges whose both ends are in the current mappable day set (no orphan segments). */
+function buildDayRouteFeatures(
+  edges: ItineraryEdge[],
+  displayById: Map<string, MapDisplayNode>,
+) {
+  return edges
+    .map((edge) => {
+      const from = displayById.get(edge.from);
+      const to = displayById.get(edge.to);
+      if (!from || !to) return null;
+      if (from.id === to.id) return null;
+      return {
+        type: 'Feature' as const,
+        properties: { edgeId: edge.id },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [
+            [from.displayLng, from.displayLat],
+            [to.displayLng, to.displayLat],
+          ],
+        },
+      };
+    })
+    .filter(Boolean);
+}
+
+function bringNodeLayersToFront(map: maplibregl.Map) {
+  try {
+    if (map.getLayer(NODE_CIRCLE)) map.moveLayer(NODE_CIRCLE);
+    if (map.getLayer(NODE_LABEL)) map.moveLayer(NODE_LABEL);
+  } catch {
+    /* ignore */
+  }
+}
+
+function wipeNodeLayersAndSource(map: maplibregl.Map) {
+  for (const id of [NODE_LABEL, NODE_CIRCLE, NODE_CLUSTER_COUNT, NODE_CLUSTER]) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  if (map.getSource(NODE_SOURCE)) map.removeSource(NODE_SOURCE);
+}
+
+function nodeSourceIsClustered(map: maplibregl.Map): boolean {
+  const spec = map.getStyle()?.sources?.[NODE_SOURCE];
+  return Boolean(spec && spec.type === 'geojson' && 'cluster' in spec && spec.cluster);
+}
+
 function ensureNodeLayers(map: maplibregl.Map) {
-  if (!map.isStyleLoaded() || map.getSource(NODE_SOURCE)) return;
+  if (!map.isStyleLoaded()) return;
 
-  // UX-GEN-01: cluster dense markers
-  map.addSource(NODE_SOURCE, {
-    type: 'geojson',
-    data: { type: 'FeatureCollection', features: [] },
-    cluster: true,
-    clusterMaxZoom: 14,
-    clusterRadius: 46,
-  });
+  // P81/P86: clustering off. Legacy path only tore down when NODE_CLUSTER layer
+  // still existed — HMR/style glitches could leave cluster:true source + no
+  // cluster layers → circle filter excluded every point at city zoom (badge>0, 0 pins).
+  const legacyClusterLayers =
+    Boolean(map.getLayer(NODE_CLUSTER)) || Boolean(map.getLayer(NODE_CLUSTER_COUNT));
+  if (legacyClusterLayers || nodeSourceIsClustered(map)) {
+    wipeNodeLayersAndSource(map);
+  }
 
-  map.addLayer({
-    id: NODE_CLUSTER,
-    type: 'circle',
-    source: NODE_SOURCE,
-    filter: ['has', 'point_count'],
-    paint: {
-      'circle-color': '#5b8def',
-      'circle-radius': ['step', ['get', 'point_count'], 16, 4, 20, 8, 26],
-      'circle-stroke-width': 2,
-      'circle-stroke-color': '#ffffff',
-      'circle-opacity': 0.92,
-    },
-  });
+  if (!map.getSource(NODE_SOURCE)) {
+    map.addSource(NODE_SOURCE, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+      cluster: false,
+    });
+  }
 
-  map.addLayer({
-    id: NODE_CLUSTER_COUNT,
-    type: 'symbol',
-    source: NODE_SOURCE,
-    filter: ['has', 'point_count'],
-    layout: {
-      'text-field': ['get', 'point_count_abbreviated'],
-      'text-size': 11,
-      'text-font': [...MAP_LABEL_FONT],
-      'text-allow-overlap': true,
-    },
-    paint: {
-      'text-color': '#0c1219',
-    },
-  });
+  if (!map.getLayer(NODE_CIRCLE)) {
+    map.addLayer({
+      id: NODE_CIRCLE,
+      type: 'circle',
+      source: NODE_SOURCE,
+      paint: {
+        'circle-radius': [
+          'case',
+          ['boolean', ['get', 'selected'], false],
+          12,
+          ['case', ['boolean', ['get', 'overlap'], false], 10, 9],
+        ],
+        'circle-color': ['get', 'color'],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': ['case', ['boolean', ['get', 'optional'], false], 0.78, 1],
+      },
+    });
+  }
 
-  map.addLayer({
-    id: NODE_CIRCLE,
-    type: 'circle',
-    source: NODE_SOURCE,
-    filter: ['!', ['has', 'point_count']],
-    paint: {
-      'circle-radius': [
-        'case',
-        ['boolean', ['get', 'selected'], false],
-        12,
-        ['case', ['boolean', ['get', 'overlap'], false], 10, 9],
-      ],
-      'circle-color': ['get', 'color'],
-      'circle-stroke-width': 2,
-      'circle-stroke-color': '#ffffff',
-      'circle-opacity': ['case', ['boolean', ['get', 'optional'], false], 0.78, 1],
-    },
-  });
+  if (!map.getLayer(NODE_LABEL)) {
+    map.addLayer({
+      id: NODE_LABEL,
+      type: 'symbol',
+      source: NODE_SOURCE,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-size': 10,
+        'text-font': [...MAP_LABEL_FONT],
+        'text-offset': [0, -1.8],
+        'text-anchor': 'bottom',
+        'text-max-width': 9,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: {
+        'text-color': '#e2e8f0',
+        'text-halo-color': 'rgba(12, 18, 25, 0.92)',
+        'text-halo-width': 1.2,
+      },
+    });
+  }
+}
 
-  map.addLayer({
-    id: NODE_LABEL,
-    type: 'symbol',
-    source: NODE_SOURCE,
-    filter: ['!', ['has', 'point_count']],
-    layout: {
-      'text-field': ['get', 'name'],
-      'text-size': 10,
-      'text-font': [...MAP_LABEL_FONT],
-      'text-offset': [0, -1.8],
-      'text-anchor': 'bottom',
-      'text-max-width': 9,
-      'text-allow-overlap': true,
-      'text-ignore-placement': true,
-    },
-    paint: {
-      'text-color': '#e2e8f0',
-      'text-halo-color': 'rgba(12, 18, 25, 0.92)',
-      'text-halo-width': 1.2,
-    },
+function clearRouteLayers(map: maplibregl.Map) {
+  ROUTE_LAYER_IDS.forEach((id) => {
+    if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(id)) map.removeSource(id);
   });
 }
 
@@ -205,7 +242,8 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
   const isPickMode = Boolean(mapPickNodeId && pickNode);
 
   const mapDays = useMemo(
-    () => (itinerary ? collectMapDays(itinerary, graphViewMode, activeDayIndex) : []),
+    () =>
+      itinerary ? collectMapDays(itinerary, graphViewMode, activeDayIndex) : [],
     [itinerary, graphViewMode, activeDayIndex],
   );
 
@@ -234,10 +272,11 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
   const fitKey = useMemo(() => {
     if (!itinerary) return '';
     const dayKey = mapDays.map((d) => d.day_index).join(',');
+    const nodeKey = mappableNodes.map((n) => n.id).join(',');
     const coordKey = mappableNodes
       .map((n) => `${n.id}:${n.lat.toFixed(5)},${n.lng.toFixed(5)}`)
       .join('|');
-    return `${graphViewMode}:${activeDayIndex}:${dayKey}:${coordKey}`;
+    return `${graphViewMode}:${activeDayIndex}:${dayKey}:${nodeKey}:${coordKey}`;
   }, [itinerary, graphViewMode, activeDayIndex, mapDays, mappableNodes]);
 
   const clearPickMarker = useCallback(() => {
@@ -255,24 +294,19 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       const bounds = new maplibregl.LngLatBounds();
       nodes.forEach((node) => bounds.extend([node.displayLng, node.displayLat]));
       if (bounds.isEmpty()) return;
-      const isSingle =
-        nodes.length === 1 ||
-        (nodes.length > 1 &&
-          nodes.every(
-            (n) =>
-              Math.abs(n.lat - nodes[0].lat) < 1e-6 && Math.abs(n.lng - nodes[0].lng) < 1e-6,
-          ));
+      const isSingle = nodes.length === 1;
       if (isSingle) {
         const n = nodes[0];
         map.easeTo({
           center: [n.displayLng, n.displayLat],
-          zoom: 14,
+          zoom: 15,
           duration: animate ? 600 : 0,
         });
       } else {
+        // Always fitBounds when multiple display pins (incl. spread-apart overlaps)
         map.fitBounds(bounds, {
           padding: 60,
-          maxZoom: 14,
+          maxZoom: 16,
           duration: animate ? 600 : 0,
         });
       }
@@ -292,21 +326,6 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
         if (typeof id === 'string') selectNode(id);
       };
 
-      const onClusterClick = (e: MapLayerMouseEvent) => {
-        if (usePlanStore.getState().mapPickNodeId) return;
-        const feature = e.features?.[0];
-        const clusterId = feature?.properties?.cluster_id;
-        const source = map.getSource(NODE_SOURCE) as GeoJSONSource | undefined;
-        if (clusterId == null || !source || !feature?.geometry) return;
-        const geom = feature.geometry as { type?: string; coordinates?: number[] };
-        if (geom.type !== 'Point' || !geom.coordinates) return;
-        const coords: [number, number] = [geom.coordinates[0], geom.coordinates[1]];
-        source.getClusterExpansionZoom(Number(clusterId), (err, zoom) => {
-          if (err || zoom == null) return;
-          map.easeTo({ center: coords, zoom });
-        });
-      };
-
       const onEnter = () => {
         if (!usePlanStore.getState().mapPickNodeId) {
           map.getCanvas().style.cursor = 'pointer';
@@ -317,11 +336,8 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       };
 
       map.on('click', NODE_CIRCLE, onNodeClick);
-      map.on('click', NODE_CLUSTER, onClusterClick);
       map.on('mouseenter', NODE_CIRCLE, onEnter);
       map.on('mouseleave', NODE_CIRCLE, onLeave);
-      map.on('mouseenter', NODE_CLUSTER, onEnter);
-      map.on('mouseleave', NODE_CLUSTER, onLeave);
     },
     [selectNode],
   );
@@ -388,43 +404,32 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
     return () => ro.disconnect();
   }, [fitKey, fitToNodes, mappableNodes]);
 
-  // 路线图层
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !itinerary || mapDays.length === 0) return;
+  const syncMapData = useCallback(
+    (opts?: { fit?: boolean; animateFit?: boolean }) => {
+      const map = mapRef.current;
+      if (!map || !map.isStyleLoaded()) return;
 
-    let cancelled = false;
+      ensureNodeLayers(map);
+      const source = map.getSource(NODE_SOURCE) as GeoJSONSource | undefined;
+      if (source) source.setData(nodesGeoJSON);
 
-    const syncRoutes = () => {
-      if (cancelled || !map.isStyleLoaded()) return;
+      clearRouteLayers(map);
 
-      ROUTE_LAYER_IDS.forEach((id) => {
-        if (map.getLayer(id)) map.removeLayer(id);
-        if (map.getSource(id)) map.removeSource(id);
-      });
-
-      const nodeMap = new Map<string, ItineraryNode>();
-      itinerary.days.forEach((day) => {
-        day.nodes.forEach((n) => nodeMap.set(n.id, n));
-      });
-
-      const allEdges: ItineraryEdge[] = [];
-      mapDays.forEach((day) => allEdges.push(...day.edges));
-
-      const dayNodeIds =
-        graphViewMode === 'day' && mapDays[0]
-          ? new Set(mapDays[0].nodes.map((n) => n.id))
-          : null;
-
-      (itinerary.cross_day_edges ?? []).forEach((edge) => {
-        if (graphViewMode === 'overview') {
-          allEdges.push(edge);
-          return;
+      const displayById = new Map(displayNodes.map((n) => [n.id, n]));
+      // Build routes per day so id collisions across days don't invent orphan segments
+      const primaryEdges: ItineraryEdge[] = [];
+      const altEdges: ItineraryEdge[] = [];
+      for (const day of mapDays) {
+        const dayIds = new Set(day.nodes.map((n) => n.id));
+        const dayDisplay = new Map(
+          [...displayById.entries()].filter(([id]) => dayIds.has(id)),
+        );
+        for (const edge of day.edges) {
+          if (!dayDisplay.has(edge.from) || !dayDisplay.has(edge.to)) continue;
+          if (edge.type === 'alternative') altEdges.push(edge);
+          else primaryEdges.push(edge);
         }
-        if (dayNodeIds && (dayNodeIds.has(edge.from) || dayNodeIds.has(edge.to))) {
-          allEdges.push(edge);
-        }
-      });
+      }
 
       const addRoutes = (
         edges: ItineraryEdge[],
@@ -434,32 +439,13 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
         opacity: number,
         dash?: number[],
       ) => {
-        const features = edges
-          .map((edge) => {
-            const from = nodeMap.get(edge.from);
-            const to = nodeMap.get(edge.to);
-            if (!from || !to || !hasMapCoords(from) || !hasMapCoords(to)) return null;
-            return {
-              type: 'Feature' as const,
-              properties: {},
-              geometry: {
-                type: 'LineString' as const,
-                coordinates: [
-                  [from.lng, from.lat],
-                  [to.lng, to.lat],
-                ],
-              },
-            };
-          })
-          .filter(Boolean);
-
+        const features = buildDayRouteFeatures(edges, displayById);
         if (features.length === 0) return;
 
         map.addSource(sourceId, {
           type: 'geojson',
           data: { type: 'FeatureCollection', features },
         });
-
         map.addLayer(
           {
             id: sourceId,
@@ -476,78 +462,64 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
         );
       };
 
-      const crossDayIds = new Set((itinerary.cross_day_edges ?? []).map((e) => e.id));
-      const primaryEdges = allEdges.filter((e) => e.type === 'primary' && !crossDayIds.has(e.id));
-      const altEdges = allEdges.filter((e) => e.type === 'alternative' && !crossDayIds.has(e.id));
-      const crossEdges = allEdges.filter((e) => crossDayIds.has(e.id));
-
       addRoutes(primaryEdges, 'route-primary', '#4a9eff', 3, 0.85);
       addRoutes(altEdges, 'route-alt', '#64748b', 2, 0.5, [2, 2]);
-      addRoutes(crossEdges, 'route-cross-day', '#a78bfa', 2, 0.7, [4, 3]);
-    };
 
-    const unbindStyleReady = whenMapStyleReady(map, syncRoutes);
-
-    return () => {
-      cancelled = true;
-      unbindStyleReady();
-    };
-  }, [mapDays, itinerary, graphViewMode]);
-
-  // 节点：GeoJSON 图层（与底图同一坐标系，缩放不漂移）
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    let cancelled = false;
-
-    const syncNodes = () => {
-      if (cancelled || !map.isStyleLoaded()) return;
-
-      ensureNodeLayers(map);
-      const source = map.getSource(NODE_SOURCE) as GeoJSONSource | undefined;
-      if (!source) return;
-
-      source.setData(nodesGeoJSON);
-
-      if (fitKey && fitKey !== lastFitKeyRef.current) {
-        if (visible) {
-          fitToNodes(map, displayNodes, lastFitKeyRef.current != null);
-          lastFitKeyRef.current = fitKey;
-        } else {
-          pendingFitRef.current = true;
-          lastFitKeyRef.current = fitKey;
-        }
+      if (graphViewMode === 'overview' && itinerary) {
+        const cross = (itinerary.cross_day_edges ?? []).filter(
+          (e) => displayById.has(e.from) && displayById.has(e.to),
+        );
+        addRoutes(cross, 'route-cross-day', '#a78bfa', 2, 0.7, [4, 3]);
       }
-    };
 
-    const unbindStyleReady = whenMapStyleReady(map, syncNodes);
+      updateStayZoneSource(map, stayZones, selectedStayZoneId, NODE_CIRCLE);
+      bringNodeLayersToFront(map);
 
-    return () => {
-      cancelled = true;
-      unbindStyleReady();
-    };
-  }, [nodesGeoJSON, displayNodes, fitKey, fitToNodes, visible]);
+      if (opts?.fit && displayNodes.length > 0) {
+        fitToNodes(map, displayNodes, Boolean(opts.animateFit));
+        lastFitKeyRef.current = fitKey;
+        pendingFitRef.current = false;
+      }
+    },
+    [
+      nodesGeoJSON,
+      displayNodes,
+      mapDays,
+      graphViewMode,
+      itinerary,
+      stayZones,
+      selectedStayZoneId,
+      fitToNodes,
+      fitKey,
+    ],
+  );
 
+  // 节点 + 当日路线：随天切换 / 坐标变化同步
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     let cancelled = false;
-
-    const syncStayZones = () => {
-      if (cancelled || !map.isStyleLoaded()) return;
-      ensureNodeLayers(map);
-      updateStayZoneSource(map, stayZones, selectedStayZoneId, NODE_CIRCLE);
+    const run = () => {
+      if (cancelled) return;
+      if (!visible) {
+        pendingFitRef.current = true;
+        return;
+      }
+      const shouldFit = Boolean(fitKey && fitKey !== lastFitKeyRef.current);
+      syncMapData({
+        fit: shouldFit || pendingFitRef.current,
+        animateFit: shouldFit && lastFitKeyRef.current != null,
+      });
+      if (shouldFit) lastFitKeyRef.current = fitKey;
     };
 
-    const unbindStyleReady = whenMapStyleReady(map, syncStayZones);
-
+    const unbindStyleReady = whenMapStyleReady(map, run);
     return () => {
       cancelled = true;
       unbindStyleReady();
     };
-  }, [stayZones, selectedStayZoneId]);
+  }, [syncMapData, visible, fitKey]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -579,7 +551,7 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
     };
   }, [mapReady, setSelectedStayZoneId]);
 
-  // 从路线图切回地图：强制 resize（visibility 切换不一定触发 ResizeObserver）
+  // 从路线图切回地图：resize + 强制按当前天重绘（避免隐藏期间旧图层残留）
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -587,10 +559,7 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
     if (visible && !wasVisibleRef.current) {
       const frame = requestAnimationFrame(() => {
         map.resize();
-        if (displayNodes.length > 0 && pendingFitRef.current) {
-          fitToNodes(map, displayNodes, false);
-          lastFitKeyRef.current = fitKey;
-        }
+        syncMapData({ fit: true, animateFit: false });
       });
       wasVisibleRef.current = true;
       return () => cancelAnimationFrame(frame);
@@ -598,8 +567,9 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
 
     if (!visible) {
       wasVisibleRef.current = false;
+      pendingFitRef.current = true;
     }
-  }, [visible, mapReady, fitKey, displayNodes, fitToNodes]);
+  }, [visible, mapReady, syncMapData]);
 
   // 选点模式
   useEffect(() => {
@@ -714,16 +684,15 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       {!isPickMode && mappableNodes.length > 0 && (
         <span className="travel-map__mode-badge travel-map__mode-badge--count">
           {graphViewMode === 'overview'
-            ? `共 ${mappableNodes.length} 个节点`
+            ? `总览 · 共 ${mappableNodes.length} 个节点`
             : `第 ${activeDayIndex + 1} 天 · ${mappableNodes.length} 个节点`}
         </span>
       )}
-      {graphViewMode === 'overview' && !isPickMode && (
-        <span className="travel-map__mode-badge travel-map__mode-badge--sub">总览 · 全部天数</span>
-      )}
-      {graphViewMode === 'day' && !isPickMode && (
+      {!isPickMode && (
         <span className="travel-map__mode-badge travel-map__mode-badge--sub">
-          单日模式 · 切换总览可看全部
+          {graphViewMode === 'overview'
+            ? '总览地图 · 展示全部行程天'
+            : '单日地图 · 用上方日期切换'}
         </span>
       )}
       {overlapExtra > 0 && !isPickMode && (

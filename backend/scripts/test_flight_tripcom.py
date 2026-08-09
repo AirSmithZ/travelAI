@@ -10,7 +10,11 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from app.services.flight.city_codes import UnknownCityCodeError, resolve_tripcom_city_code
+from app.services.flight.city_codes import (
+    UnknownCityCodeError,
+    resolve_ignav_iata,
+    resolve_tripcom_city_code,
+)
 from app.services.flight.tripcom_deeplink import TripcomAffiliateParams, build_tripcom_flight_url
 
 
@@ -19,6 +23,24 @@ def test_resolve_sha_sin():
     assert resolve_tripcom_city_code("上海") == "sha"
     assert resolve_tripcom_city_code("SIN") == "sin"
     assert resolve_tripcom_city_code("新加坡") == "sin"
+
+
+def test_resolve_ignav_iata_metro_vs_airport():
+    """Ignav rejects Trip.com metro codes (BJS/TYO); keep airport aliases."""
+    assert resolve_ignav_iata("北京") == "PEK"
+    assert resolve_ignav_iata("BJS") == "PEK"
+    assert resolve_ignav_iata("PEK") == "PEK"
+    assert resolve_ignav_iata("PKX") == "PKX"
+    assert resolve_ignav_iata("东京") == "NRT"
+    assert resolve_ignav_iata("NRT") == "NRT"
+    assert resolve_ignav_iata("HND") == "HND"
+    assert resolve_ignav_iata("首尔") == "ICN"
+    assert resolve_ignav_iata("大阪") == "KIX"
+    assert resolve_ignav_iata("上海") == "PVG"
+    assert resolve_ignav_iata("新加坡") == "SIN"
+    # Trip.com deeplink still uses metro
+    assert resolve_tripcom_city_code("北京") == "bjs"
+    assert resolve_tripcom_city_code("东京") == "tyo"
 
 
 def test_build_oneway_url():
@@ -64,6 +86,7 @@ def test_unknown_city():
 
 if __name__ == "__main__":
     test_resolve_sha_sin()
+    test_resolve_ignav_iata_metro_vs_airport()
     test_build_oneway_url()
     test_build_with_affiliate()
     test_unknown_city()

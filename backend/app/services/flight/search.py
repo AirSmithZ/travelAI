@@ -9,7 +9,11 @@ from app.schemas.flight import (
     FlightSearchResponse,
     PurchaseChannel,
 )
-from app.services.flight.city_codes import UnknownCityCodeError, resolve_search_iata, resolve_tripcom_city_code
+from app.services.flight.city_codes import (
+    UnknownCityCodeError,
+    resolve_ignav_iata,
+    resolve_tripcom_city_code,
+)
 from app.services.flight.ignav_provider import search_ignav
 from app.services.flight.letsfg_provider import search_letsfg
 from app.services.flight.rank import rank_offers
@@ -21,10 +25,12 @@ from app.services.flight.tripcom_deeplink import (
 
 def search_flights(body: FlightSearchRequest, settings: Settings) -> FlightSearchResponse:
     try:
+        # Trip.com deeplink keeps metro city codes (bjs/tyo/…);
+        # Ignav requires real airport IATA (PEK/NRT/…) — see resolve_ignav_iata.
         dcity = resolve_tripcom_city_code(body.origin)
         acity = resolve_tripcom_city_code(body.destination)
-        origin_iata = resolve_search_iata(body.origin)
-        dest_iata = resolve_search_iata(body.destination)
+        origin_iata = resolve_ignav_iata(body.origin)
+        dest_iata = resolve_ignav_iata(body.destination)
     except UnknownCityCodeError as e:
         raise ValueError(str(e)) from e
 

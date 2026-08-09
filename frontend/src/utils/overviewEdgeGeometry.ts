@@ -99,3 +99,34 @@ export function connectionBetweenPlacements(
   );
   return { edge, ...conn };
 }
+
+export interface OverviewDomAnchor {
+  x: number;
+  y: number;
+}
+
+/**
+ * OV-01: merge measured DOM centers into layout placements.
+ * During drag, skip the active node — ghost-source stays put in the cell while the
+ * floating ghost moves; using DOM would pin cross-region (solid) edges to the stale
+ * source and desync from the ghost (intra-cell edges already use dragPreview deltas).
+ */
+export function mergeLivePlacementsWithDomAnchors(
+  live: Map<string, CellNodePlacement>,
+  domAnchors: Map<string, OverviewDomAnchor>,
+  skipNodeId?: string | null,
+): Map<string, CellNodePlacement> {
+  if (domAnchors.size === 0) return live;
+  const map = new Map(live);
+  for (const [id, place] of map) {
+    if (skipNodeId && id === skipNodeId) continue;
+    const a = domAnchors.get(id);
+    if (!a) continue;
+    map.set(id, {
+      ...place,
+      x: a.x - place.width / 2,
+      y: a.y - place.height / 2,
+    });
+  }
+  return map;
+}

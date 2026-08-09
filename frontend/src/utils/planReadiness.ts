@@ -66,7 +66,7 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
   const evidenceStatus = plan.itinerary?.meta?.evidence_status;
   const dayCount = plan.itinerary?.days?.length ?? 0;
 
-  let evidenceDetail = '生成时检索（软提示）';
+  let evidenceDetail = '生成玩法时自动检索公开笔记（点此了解）';
   if (evidenceCount > 0) {
     evidenceDetail =
       evidenceVerified > 0
@@ -148,9 +148,10 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
       done: evidenceCount > 0,
       hard: false,
       soft: true,
-      hint: '印证较弱也可以先生成',
-      modifyHint: '查看玩法参考依据',
-      action: dayCount > 0 || evidenceCount > 0 ? 'open_evidence' : 'prefill',
+      hint: '印证会在生成时自动检索，较弱也可先生成',
+      modifyHint: '打开玩法印证面板',
+      // P76: 始终可打开说明面板（生成前看用法，生成后看链接）
+      action: 'open_evidence',
     },
     {
       id: 'itinerary',

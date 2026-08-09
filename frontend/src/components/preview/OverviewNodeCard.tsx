@@ -9,6 +9,8 @@ interface OverviewNodeCardProps {
   compact?: boolean;
   /** B-P6-02 */
   primaryHotel?: boolean;
+  /** Drag ghost must not register as a layout anchor (duplicate id). */
+  omitAnchor?: boolean;
   onSelect: () => void;
   onOpenMap: () => void;
 }
@@ -18,6 +20,7 @@ export function OverviewNodeCard({
   selected,
   compact,
   primaryHotel,
+  omitAnchor,
   onSelect,
   onOpenMap,
 }: OverviewNodeCardProps) {
@@ -31,7 +34,7 @@ export function OverviewNodeCard({
   return (
     <button
       type="button"
-      data-overview-node={node.id}
+      data-overview-node={omitAnchor ? undefined : node.id}
       className={`trip-node overview-trip-node ${compact ? 'trip-node--compact' : ''} ${node.is_optional ? 'trip-node--optional' : ''} ${selected ? 'trip-node--selected' : ''}${primaryHotel ? ' overview-trip-node--primary-hotel' : ''}`}
       style={
         {

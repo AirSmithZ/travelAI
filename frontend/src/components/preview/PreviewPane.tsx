@@ -3,7 +3,6 @@ import { usePlanStore, selectActivePlan } from '../../stores/usePlanStore';
 import { ViewTabs } from '../tabs/ViewTabs';
 import { GraphModeTabs } from '../tabs/GraphModeTabs';
 import { DayTabs } from '../tabs/DayTabs';
-import { DayChips } from '../tabs/DayChips';
 import { ItineraryGraph } from '../graph/ItineraryGraph';
 import { TravelMap } from '../map/TravelMap';
 import { OverviewGraphView } from './OverviewGraphView';
@@ -22,19 +21,16 @@ export function PreviewPane() {
   const addDay = usePlanStore((s) => s.addDay);
   const setActiveView = usePlanStore((s) => s.setActiveView);
   const setGraphViewMode = usePlanStore((s) => s.setGraphViewMode);
-  const scrollOverviewToDay = usePlanStore((s) => s.scrollOverviewToDay);
-
-  const handleAddDay = () => {
-    const newIndex = addDay();
-    if (newIndex >= 0 && graphViewMode === 'overview') {
-      scrollOverviewToDay(newIndex);
-    }
-  };
 
   const hasItinerary = Boolean(itinerary?.days.length);
-  const showDayTabs = hasItinerary && graphViewMode === 'day';
-  const showOverviewControls = hasItinerary && graphViewMode === 'overview';
+  // P74: 无行程但有住宿片区 geometry 时仍渲染地图（片区圈选）
+  const hasStayGeometry = (plan.travel_intel.recommended_stay_zones ?? []).some((z) =>
+    Boolean(z.geometry),
+  );
+  const showMapOnly = !hasItinerary && hasStayGeometry;
   const showGraphModeTabs = hasItinerary;
+  // 总览 = 全部天矩阵/全图，日期在列头；工具栏日期条仅单日模式
+  const showDayTabs = hasItinerary && graphViewMode === 'day';
 
   return (
     <div className="preview-pane">
@@ -56,22 +52,14 @@ export function PreviewPane() {
             days={itinerary.days}
             activeIndex={activeDayIndex}
             onChange={selectDay}
-            onAddDay={handleAddDay}
-          />
-        )}
-        {showOverviewControls && itinerary && (
-          <DayChips
-            days={itinerary.days}
-            activeIndex={activeDayIndex}
-            onChange={scrollOverviewToDay}
-            onAddDay={handleAddDay}
+            onAddDay={() => addDay()}
           />
         )}
       </div>
 
       <main className="preview-pane__main">
         <AnimatePresence mode="wait">
-          {!hasItinerary ? (
+          {!hasItinerary && !showMapOnly ? (
             <motion.div
               key="empty"
               className="preview-pane__view"
@@ -80,6 +68,16 @@ export function PreviewPane() {
               exit={{ opacity: 0 }}
             >
               <EmptyPreview type={activeView} phase={plan.phase} />
+            </motion.div>
+          ) : showMapOnly ? (
+            <motion.div
+              key="map-zones"
+              className="preview-pane__view"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <TravelMap visible />
             </motion.div>
           ) : (
             <motion.div

@@ -32,6 +32,7 @@ class ItineraryNodeOut(BaseModel):
 
     id: str
     name: str
+    name_en: Optional[str] = None
     category: str = "attraction"
     lat: float = 0
     lng: float = 0

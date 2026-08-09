@@ -62,59 +62,81 @@ export const STAY_ZONE_FILL = 'stay-zone-fill';
 export const STAY_ZONE_LINE = 'stay-zone-line';
 
 export function ensureStayZoneLayers(map: maplibregl.Map, beforeLayerId?: string) {
-  if (!map.isStyleLoaded() || map.getSource(STAY_ZONE_SOURCE)) return;
+  if (!map.isStyleLoaded()) return;
 
-  map.addSource(STAY_ZONE_SOURCE, {
-    type: 'geojson',
-    data: { type: 'FeatureCollection', features: [] },
-  });
+  if (!map.getSource(STAY_ZONE_SOURCE)) {
+    map.addSource(STAY_ZONE_SOURCE, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
+  }
 
-  map.addLayer(
-    {
-      id: STAY_ZONE_FILL,
-      type: 'fill',
-      source: STAY_ZONE_SOURCE,
-      paint: {
-        'fill-color': [
-          'case',
-          ['boolean', ['get', 'confirmed'], false],
-          'rgba(26, 127, 75, 0.18)',
-          'rgba(99, 102, 212, 0.14)',
-        ],
-        'fill-opacity': [
-          'case',
-          ['boolean', ['get', 'selected'], false],
-          0.55,
-          0.35,
-        ],
+  const before =
+    beforeLayerId && map.getLayer(beforeLayerId) ? beforeLayerId : undefined;
+
+  if (!map.getLayer(STAY_ZONE_FILL)) {
+    map.addLayer(
+      {
+        id: STAY_ZONE_FILL,
+        type: 'fill',
+        source: STAY_ZONE_SOURCE,
+        paint: {
+          'fill-color': [
+            'case',
+            ['boolean', ['get', 'confirmed'], false],
+            'rgba(26, 127, 75, 0.18)',
+            'rgba(99, 102, 212, 0.14)',
+          ],
+          'fill-opacity': [
+            'case',
+            ['boolean', ['get', 'selected'], false],
+            0.55,
+            0.35,
+          ],
+        },
       },
-    },
-    beforeLayerId,
-  );
+      before,
+    );
+  } else if (before) {
+    // Keep zones under itinerary markers/clusters after hot updates
+    try {
+      map.moveLayer(STAY_ZONE_FILL, before);
+    } catch {
+      /* ignore if already ordered */
+    }
+  }
 
-  map.addLayer(
-    {
-      id: STAY_ZONE_LINE,
-      type: 'line',
-      source: STAY_ZONE_SOURCE,
-      paint: {
-        'line-color': [
-          'case',
-          ['boolean', ['get', 'confirmed'], false],
-          '#1a7f4b',
-          '#6366d4',
-        ],
-        'line-width': [
-          'case',
-          ['boolean', ['get', 'selected'], false],
-          2.5,
-          1.5,
-        ],
-        'line-opacity': 0.85,
+  if (!map.getLayer(STAY_ZONE_LINE)) {
+    map.addLayer(
+      {
+        id: STAY_ZONE_LINE,
+        type: 'line',
+        source: STAY_ZONE_SOURCE,
+        paint: {
+          'line-color': [
+            'case',
+            ['boolean', ['get', 'confirmed'], false],
+            '#1a7f4b',
+            '#6366d4',
+          ],
+          'line-width': [
+            'case',
+            ['boolean', ['get', 'selected'], false],
+            2.5,
+            1.5,
+          ],
+          'line-opacity': 0.85,
+        },
       },
-    },
-    beforeLayerId,
-  );
+      before,
+    );
+  } else if (before) {
+    try {
+      map.moveLayer(STAY_ZONE_LINE, before);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export function updateStayZoneSource(

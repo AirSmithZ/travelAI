@@ -60,8 +60,12 @@ const hardPatch: FormPatch = {
   confidence: 'high',
 };
 assert(isLowRiskAutoPatch(autoPatch), 'tags auto');
-assert(!isLowRiskAutoPatch(hardPatch), 'dest confirm');
-const split = splitLowRiskPatches([autoPatch, hardPatch]);
-assert(split.auto.length === 1 && split.confirm.length === 1, 'split');
+// P71: before itinerary, destination auto-applies; after, needs confirm
+assert(isLowRiskAutoPatch(hardPatch, { hasItinerary: false }), 'dest auto pre-itinerary');
+assert(!isLowRiskAutoPatch(hardPatch, { hasItinerary: true }), 'dest confirm post-itinerary');
+const splitPlanning = splitLowRiskPatches([autoPatch, hardPatch], { hasItinerary: false });
+assert(splitPlanning.auto.length === 2 && splitPlanning.confirm.length === 0, 'planning split');
+const splitDetailed = splitLowRiskPatches([autoPatch, hardPatch], { hasItinerary: true });
+assert(splitDetailed.auto.length === 1 && splitDetailed.confirm.length === 1, 'detailed split');
 
 console.log('planReadiness.test.ts ok');

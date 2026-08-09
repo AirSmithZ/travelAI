@@ -16,6 +16,9 @@ function emptyCopy(status?: string | null): string {
   if (status === 'empty') {
     return '已配置数据源，但本次未检索到可用印证链接（上游无结果或过滤后为空）。';
   }
+  if (!status) {
+    return '用法：确认机酒后点「生成玩法」，系统会检索公开笔记/网页摘要作为参考（非官方）。生成完成后链接会出现在此面板。';
+  }
   return '本次生成未附带印证链接（可能上游未返回或未配置）。';
 }
 
@@ -46,9 +49,9 @@ export function EvidencePanel({
     <section className="evidence-panel" aria-label="参考依据">
       <header className="evidence-panel__head">
         <div>
-          <h2 className="evidence-panel__title">参考依据</h2>
+          <h2 className="evidence-panel__title">玩法印证</h2>
           <p className="evidence-panel__sub">
-            非官方来源 · 生成时参考的公开笔记/网页摘要，非票价与营业资质；链接请自行打开核对
+            非官方参考 · 生成玩法时自动检索的公开笔记/网页摘要，用于提高行程可行性；请自行打开链接核对
           </p>
           {items.length > 0 && (
             <p className="evidence-panel__tally">

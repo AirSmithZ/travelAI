@@ -1,6 +1,6 @@
 # 项目待办总索引
 
-> **更新**：2026-08-08（[21 §0.1](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) 成本决策：保留 TikHub；Wave A/B 已落地）  
+> **更新**：2026-08-09（P67–P77 UX 十一项 ✅ · [问题日志](./问题日志.md)）  
 > **用途**：从各分析/方案文档汇总的 **开放待办**；实施完成后在本索引与子清单中勾选，并在源文档同步状态。  
 > **原则**：每条待办必须有 **TODO ID** 与 **关联文档** 链接，便于后续 PR / 实施计划引用。
 
@@ -36,6 +36,7 @@
 | 域 | 里程碑 | 关联文档 |
 |----|--------|----------|
 | **OPS-01** | 独立 `/ops.html` API 用量看板（主壳零入口） | [llm TODO](./llm-travel-data/TODO.md) · [backend README](../backend/README.md) |
+| **UX P67–P77** | 对话提示 · 地图门禁 · 航班缓存/空态 · Patch 审批策略 · 酒店两步选 · 印证可见 · 开销抽屉 | [问题日志](./问题日志.md) · [TODO-布局](./TODO-布局与前端.md) |
 | **玩法可信度** | `WX-01` 预报注入 · POI hours · 雨日/通勤 warnings | [15](./llm-travel-data/15-天气联网与决策Agent缺口分析.md) |
 | **Wave C + 可选增强** | `04/07` · FLT-CACHE · WS-08b · P6-02 · FLT-06 · GEN-01/02 · OV-01/02 | [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 | **印证 P1** | `WS-CACHE` · `WS-08a/b` · `UX-EVD-01`（**保留 TikHub**；Reach 仅 bench） | [21 §0.1](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
@@ -59,4 +60,4 @@
 
 ---
 
-*索引版本：v1.13 · 2026-08-08（WX-01 + OPS-01）*
+*索引版本：v1.14 · 2026-08-09（P67–P77）*

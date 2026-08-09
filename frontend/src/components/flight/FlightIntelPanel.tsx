@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { searchFlights } from '../../api/flights';
 import type { FlightSearchResponse } from '../../types/flight';
 import {
   FLIGHT_CACHE_TTL_MS,
   cacheGet,
+  cacheInvalidate,
   cacheSet,
   flightCacheKey,
 } from '../../utils/searchResultCache';
@@ -246,6 +247,16 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
   const [templateHint, setTemplateHint] = useState<string | null>(null);
   const [cacheHint, setCacheHint] = useState<string | null>(null);
 
+  // trip_request 经表单/Chat patch 更新后，须同步本地搜票字段；
+  // 否则会继续用挂载时的旧日期（如 2025）打 Ignav。
+  useEffect(() => {
+    setOrigin(tr.departure ?? '');
+    setDestination(tr.destination ?? '');
+    setDate(tr.date_start ?? '');
+    setReturnDate(tr.date_end ?? '');
+    setAdults(tr.travelers ?? 1);
+  }, [tr.departure, tr.destination, tr.date_start, tr.date_end, tr.travelers]);
+
   const searchResult = intel.last_flight_search;
   const ranked = searchResult?.ranked ?? [];
   const hideRanked = Boolean(searchResult?.hide_ranked);
@@ -345,13 +356,21 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
     });
     try {
       let res: FlightSearchResponse;
+      let fromCache = false;
       const cached = opts?.forceRefresh
         ? null
         : cacheGet<FlightSearchResponse>('flight', cacheKey, FLIGHT_CACHE_TTL_MS);
-      if (cached) {
+      // P70: only reuse cache that has ranked quotes (never empty/error shells)
+      if (cached && (cached.value.ranked?.length ?? 0) > 0) {
         res = cached.value;
-        setCacheHint(`缓存命中（${Math.round((Date.now() - cached.fetchedAt) / 1000)}s 前）· 可刷新`);
+        fromCache = true;
+        setCacheHint(
+          `缓存命中（${Math.round((Date.now() - cached.fetchedAt) / 1000)}s 前）· 可刷新`,
+        );
       } else {
+        if (cached) {
+          cacheInvalidate('flight', cacheKey);
+        }
         res = await searchFlights({
           origin: origin.trim(),
           destination: destination.trim(),
@@ -362,7 +381,9 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
           include_ignav: true,
           include_letsfg: false,
         });
-        cacheSet('flight', cacheKey, res);
+        if ((res.ranked?.length ?? 0) > 0) {
+          cacheSet('flight', cacheKey, res);
+        }
       }
       const newRanked = res.ranked ?? [];
       if (newRanked.length > 0) {
@@ -373,7 +394,7 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
           purchase_url: res.purchase.url,
           warnings: [
             ...(res.warnings ?? []),
-            ...(cached ? ['结果来自前端缓存，可点「刷新」重新查价'] : []),
+            ...(fromCache ? ['结果来自前端缓存，可点「刷新」重新查价'] : []),
           ],
           is_round_trip: Boolean(ret),
           confirmed_quote_id: null,
@@ -381,13 +402,35 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
         });
       } else {
         const prev = usePlanStore.getState().getActivePlan().travel_intel.last_flight_search;
+        const purchaseUrl = res.purchase?.url || prev?.purchase_url || '';
         if (prev) {
           usePlanStore.getState().mergeFlightSearchResult({
             warnings: res.warnings?.length ? res.warnings : prev.warnings,
-            purchase_url: res.purchase.url || prev.purchase_url,
+            purchase_url: purchaseUrl || prev.purchase_url,
+          });
+        } else if (purchaseUrl) {
+          usePlanStore.getState().setFlightSearchResult({
+            request_key: requestKey,
+            fetched_at: res.fetched_at,
+            ranked: [],
+            purchase_url: purchaseUrl,
+            warnings: res.warnings ?? [],
+            is_round_trip: Boolean(ret),
+            confirmed_quote_id: null,
+            hide_ranked: false,
           });
         }
-        setError(res.errors?.ignav ?? '未找到航班报价');
+        // P73: distinguish provider/config vs true empty
+        const ignavErr = res.errors?.ignav?.trim();
+        if (ignavErr && /not configured|api.?key|未配置/i.test(ignavErr)) {
+          setError(
+            '报价源未配置（IGNAV_API_KEY）。请用下方手动添加航段，或打开 Trip.com 深链查价。',
+          );
+        } else if (ignavErr) {
+          setError(`${ignavErr}。可刷新重试，或手动添加 / 打开 Trip.com。`);
+        } else {
+          setError('未找到可展示的航班报价。可刷新、手动添加航段，或打开 Trip.com 查价。');
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '搜索失败');

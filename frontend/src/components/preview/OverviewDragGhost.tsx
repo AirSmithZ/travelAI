@@ -29,6 +29,7 @@ export function OverviewDragGhost({
         node={node}
         compact={compact}
         selected
+        omitAnchor
         onSelect={() => {}}
         onOpenMap={() => {}}
       />

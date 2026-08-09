@@ -75,9 +75,10 @@ function applyPatchesWithLowRiskAuto(patches: FormPatch[]): {
   confirmCount: number;
 } {
   const store = usePlanStore.getState();
-  const { auto, confirm } = splitLowRiskPatches(patches);
+  const plan = store.getActivePlan();
+  const hasItinerary = Boolean(plan.itinerary?.days?.length);
+  const { auto, confirm } = splitLowRiskPatches(patches, { hasItinerary });
   if (auto.length > 0) {
-    const plan = store.getActivePlan();
     store.setPatchUndoSnapshot({
       trip_request: structuredClone(plan.trip_request),
       itinerary: plan.itinerary ? structuredClone(plan.itinerary) : null,
@@ -123,8 +124,8 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
   const modeLabel = getChatModeLabel(plan.phase);
   const emptyHint =
     plan.phase === 'detailed'
-      ? '补充行程细节，例如调整某景点时间。换目的地请说「改去曼谷」。'
-      : '用自然语言描述行程，例如「新加坡 4 天，美食 + 亲子」。解析后需确认，确认后将自动生成路线图。';
+      ? '行程已生成：直接说要改的点，例如「第二天晚一点出发」。换目的地请说「改去曼谷」（将新建计划）。'
+      : '用一句话说清需求，例如「上海出发去新加坡 4 天，偏美食」。目的地与日期会自动写入；确认航班与住宿后，再点生成玩法。';
 
   const openReadiness = useCallback(() => {
     const readiness = derivePlanReadiness(usePlanStore.getState().getActivePlan());
@@ -300,10 +301,10 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
               ? ` ${droppedNote}`
               : '';
         if (autoCount > 0 && confirmCount === 0) {
-          showToast(`已自动写入 ${autoCount} 项低风险修改${conflictNote}${warnNote}`, 'info');
+          showToast(`已写入 ${autoCount} 项（可撤销）${conflictNote}${warnNote}`, 'info');
         } else if (autoCount > 0) {
           showToast(
-            `已自动写入 ${autoCount} 项；另有 ${confirmCount} 项待确认${conflictNote}${warnNote}`,
+            `已写入 ${autoCount} 项；另有 ${confirmCount} 项待确认${conflictNote}${warnNote}`,
           );
         } else {
           showToast(
@@ -373,10 +374,10 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
   };
 
   const placeholder = selectedNodeName
-    ? `针对「${selectedNodeName}」用对话修改，如：改到 18:00`
+    ? `针对「${selectedNodeName}」说修改，如：改到 18:00、加点美食`
     : plan.phase === 'detailed'
-      ? '补充或调整行程…'
-      : '描述你的旅行计划…';
+      ? '调整行程，或说「优化适配当前机酒」…'
+      : '例如：上海→新加坡，8/30–9/2，两人，偏购物…';
 
   const busy = isLoading || isGeneratingItinerary;
   const composerDisabled = apiStatus === 'offline' || apiStatus === 'checking';

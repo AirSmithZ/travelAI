@@ -124,6 +124,16 @@
   background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
 }
 
+.input-panel__form-strip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.input-panel__form-strip:disabled:hover {
+  color: inherit;
+  background: inherit;
+}
+
 .input-panel__flight-scroll {
   flex: 1;
   min-height: 0;

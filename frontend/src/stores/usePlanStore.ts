@@ -75,6 +75,7 @@ import { findCrossDayPoiDuplicates } from '../utils/crossDayPoiDedup';
 import {
   hotelFromZoneAndNode,
   patchStayZones,
+  rebindHotelsAfterGenerate,
   removeHotelByNodeId,
   removeHotelFromIntel,
   syncIntelHotelFromNode,
@@ -269,12 +270,17 @@ export function selectOverviewColumnWidths(state: PlanState): number[] {
   return state.overviewColumnWidths[state.activePlanId] ?? EMPTY_OVERVIEW_COLUMN_WIDTHS;
 }
 
-/** 总览 / 地图浏览时折叠左栏；编辑/选点/机酒/Activity 时展开（UX-CHAT-08） */
+/** 总览 / 地图浏览时折叠左栏；编辑/选点/机酒/Activity 时展开（UX-CHAT-08 · P74） */
 export function selectLeftPanelCollapsed(state: PlanState): boolean {
   if (state.editorTarget) return false;
   if (state.mapPickNodeId) return false;
   if (state.chatActivity) return false;
   if (state.leftPanelMode === 'flight' || state.leftPanelMode === 'stay') return false;
+  // P74: 地图上看酒店/节点编辑时保持左栏，避免「在地图查看并编辑」像无反应
+  if (state.leftPanelMode === 'form' && (state.selectedNodeId || state.selectedEdgeId)) {
+    return false;
+  }
+  if (state.leftPanelMode === 'evidence') return false;
   if (state.graphViewMode === 'overview') return true;
   if (state.activeView === 'map') return true;
   return false;
@@ -795,10 +801,16 @@ export const usePlanStore = create<PlanState>()(
           },
         });
         set((s) =>
-          updateActivePlan(s, (plan) => ({
-            ...plan,
-            itinerary: syncItineraryMeta(itinerary, plan.trip_request),
-          })),
+          updateActivePlan(s, (plan) => {
+            const nextItinerary = syncItineraryMeta(itinerary, plan.trip_request);
+            // P80: keep Stay panel hotels aligned with overnight nodes after generate
+            const travel_intel = rebindHotelsAfterGenerate(plan.travel_intel, nextItinerary);
+            return {
+              ...plan,
+              itinerary: nextItinerary,
+              travel_intel,
+            };
+          }),
         );
         set((s) => ({
           isGeneratingItinerary: false,
@@ -1071,11 +1083,21 @@ export const usePlanStore = create<PlanState>()(
     addHotelFromZone: (zoneId, input) => {
       const plan = get().getActivePlan();
       const itinerary = plan.itinerary;
-      if (!itinerary) return null;
+      if (!itinerary?.days?.length) {
+        // P72: 无行程时不得静默失败
+        useToastStore.getState().show(
+          '请先生成玩法行程，再将酒店添加到路线图（片区可先确认）',
+          'warning',
+        );
+        return null;
+      }
       const zone = (plan.travel_intel.recommended_stay_zones ?? []).find(
         (z) => z.id === zoneId,
       );
-      if (!zone || zone.status !== 'confirmed') return null;
+      if (!zone || zone.status !== 'confirmed') {
+        useToastStore.getState().show('请先确认住宿片区', 'warning');
+        return null;
+      }
 
       get().recordItineraryHistory();
       const { itinerary: nextItinerary, nodeId } = addHotelNodeForZone(itinerary, zone, {
@@ -1112,7 +1134,21 @@ export const usePlanStore = create<PlanState>()(
         selectedNodeId: nodeId,
         activeDayIndex: ctx.dayIndex,
         leftPanelMode: input.pendingMapPick ? 'form' : s.leftPanelMode,
+        previewExpandedWithoutItinerary: true,
+        activeView: 'map' as const,
       }));
+
+      const label = input.name.trim() || '酒店';
+      useToastStore.getState().show(
+        input.pendingMapPick ? `已添加「${label}」，请在地图点选位置` : `已添加酒店「${label}」`,
+        'info',
+      );
+      get().addChatMessage(
+        'assistant',
+        input.pendingMapPick
+          ? `已将「${label}」加入路线图，请在地图上点选精确位置。`
+          : `已将「${label}」加入路线图，可在地图上查看或继续生成/调整玩法。`,
+      );
 
       return nodeId;
     },

@@ -88,11 +88,20 @@ export interface ItineraryMeta {
     hotels: unknown[];
     zones: unknown[];
   };
+  /** Backend intel_anchor_enforce: confirmed hotel → overnight node */
+  hotel_bindings?: Array<{
+    hotel_id?: string;
+    hotel_name?: string;
+    node_id: string;
+    day_index?: number;
+  }>;
 }
 
 export interface ItineraryNode {
   id: string;
   name: string;
+  /** Official / common English name for geocoding (from LLM) */
+  name_en?: string;
   category: NodeCategory;
   lat: number;
   lng: number;

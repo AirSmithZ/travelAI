@@ -83,8 +83,11 @@ export function InputPanel() {
 
   const formHeading = formEditorHeading(editorTarget, itinerary);
   const hasItineraryDays = Boolean(itinerary?.days?.length);
-  /** Round8 P2: keep entry visible after generate even when pack is empty / unconfigured */
-  const showEvidenceEntry = showChat && hasItineraryDays;
+  const hasStayGeometry = (plan.travel_intel.recommended_stay_zones ?? []).some((z) =>
+    Boolean(z.geometry),
+  );
+  /** P76: 生成前也可打开印证说明；生成后展示条数 */
+  const showEvidenceEntry = showChat;
   const evidenceStripHint =
     evidenceCount > 0
       ? `${evidenceCount} 条公开笔记 · 自行打开`
@@ -92,7 +95,9 @@ export function InputPanel() {
         ? '未配置数据源 · 点击查看说明'
         : evidenceStatus === 'empty'
           ? '本次无印证链接 · 点击查看说明'
-          : '查看印证说明';
+          : hasItineraryDays
+            ? '查看印证说明'
+            : '生成时检索 · 点此了解用法';
   /** UX-CHAT-04: 需求阶段以对话+摘要为主；有行程后才强调节点编辑 */
   const showNodeEditorStrip = showChat && hasItineraryDays;
   const nodeEditorHint = nodeName
@@ -161,7 +166,7 @@ export function InputPanel() {
           className="input-panel__form-strip input-panel__form-strip--evidence"
           onClick={() => setLeftPanelMode('evidence')}
         >
-          <span>参考依据</span>
+          <span>玩法印证</span>
           <span className="input-panel__form-strip-hint">{evidenceStripHint}</span>
         </button>
       )}
@@ -177,16 +182,27 @@ export function InputPanel() {
         </button>
       )}
 
+      {/* P68: 无行程时禁止空壳展开；有片区 geometry 时可展开地图看片区 */}
       {showChat && !hasItineraryDays && (
         <button
           type="button"
           className="input-panel__form-strip input-panel__form-strip--preview"
+          disabled={!hasStayGeometry}
+          title={
+            hasStayGeometry
+              ? '打开地图查看住宿片区'
+              : '生成玩法行程后可预览路线图'
+          }
           onClick={() => {
+            if (!hasStayGeometry) return;
             usePlanStore.getState().setPreviewExpandedWithoutItinerary(true);
+            usePlanStore.getState().setActiveView('map');
           }}
         >
-          <span>路线预览</span>
-          <span className="input-panel__form-strip-hint">生成行程后可用 · 点击展开</span>
+          <span>{hasStayGeometry ? '片区地图' : '路线预览'}</span>
+          <span className="input-panel__form-strip-hint">
+            {hasStayGeometry ? '查看已推荐片区' : '生成行程后可用'}
+          </span>
         </button>
       )}
 

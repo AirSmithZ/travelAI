@@ -19,7 +19,7 @@ export function DayTabs({ days, activeIndex, onChange, onAddDay }: DayTabsProps)
 
         return (
           <button
-            key={day.day_index}
+            key={`day-tab-${index}-${day.day_index}`}
             type="button"
             role="tab"
             aria-selected={isActive}

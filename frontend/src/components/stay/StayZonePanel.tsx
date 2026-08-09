@@ -3,11 +3,13 @@ import { recommendStayZones, searchStayZoneLodging, type StayZoneLodgingCandidat
 import {
   LODGING_CACHE_TTL_MS,
   cacheGet,
+  cacheInvalidate,
   cacheSet,
   lodgingCacheKey,
 } from '../../utils/searchResultCache';
 import { geocodeAutocomplete } from '../../api/geocode';
 import { usePlanStore } from '../../stores/usePlanStore';
+import { useToastStore } from '../../stores/useToastStore';
 import type { StayZonePreferences } from '../../types/stayZone';
 import {
   formatStayZoneDays,
@@ -37,17 +39,25 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   const startMapPick = usePlanStore((s) => s.startMapPick);
   const setLeftPanelMode = usePlanStore((s) => s.setLeftPanelMode);
   const setActiveView = usePlanStore((s) => s.setActiveView);
+  const setPreviewExpandedWithoutItinerary = usePlanStore(
+    (s) => s.setPreviewExpandedWithoutItinerary,
+  );
+  const showToast = useToastStore((s) => s.show);
 
   const zones = intel.recommended_stay_zones ?? [];
   const prefs = intel.stay_zone_preferences;
   const panelPhase = getStayZonePanelPhase(intel);
   const badgeLabel = stayZonePanelBadgeLabel(panelPhase);
+  const hasItineraryDays = Boolean(itinerary?.days?.length);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [expandedAddId, setExpandedAddId] = useState<string | null>(null);
   const [hotelNames, setHotelNames] = useState<Record<string, string>>({});
+  const [pickedLodging, setPickedLodging] = useState<
+    Record<string, StayZoneLodgingCandidate | null>
+  >({});
   const [addLoading, setAddLoading] = useState<string | null>(null);
   const [lodgingByZone, setLodgingByZone] = useState<Record<string, StayZoneLodgingCandidate[]>>({});
   const [lodgingLoading, setLodgingLoading] = useState<string | null>(null);
@@ -82,13 +92,48 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
     }
   }
 
+  function openHotelPicker(zoneId: string) {
+    const next = expandedAddId === zoneId ? null : zoneId;
+    setExpandedAddId(next);
+    if (!next) return;
+    setHotelNames((m) => (m[zoneId] !== undefined ? m : { ...m, [zoneId]: '' }));
+    setPickedLodging((m) => ({ ...m, [zoneId]: m[zoneId] ?? null }));
+    void handleSearchLodging(zoneId);
+  }
+
   async function handleAddHotel(zoneId: string) {
     const zone = zones.find((z) => z.id === zoneId);
-    if (!zone || !itinerary) return;
-    const name = (hotelNames[zoneId] ?? `${zone.label} 附近酒店`).trim();
+    if (!zone) return;
+    if (!hasItineraryDays) {
+      showToast('请先生成玩法行程，再将酒店添加到路线图', 'warning');
+      return;
+    }
+    const picked = pickedLodging[zoneId];
+    const name = (hotelNames[zoneId] ?? picked?.name ?? '').trim();
+    if (!name) {
+      showToast('请先从下方列表选择酒店，或手动输入酒店名称', 'warning');
+      return;
+    }
     setAddLoading(zoneId);
     setError(null);
     try {
+      if (picked && picked.name === name) {
+        const nodeId = addHotelFromZone(zoneId, {
+          name,
+          lat: picked.lat,
+          lng: picked.lng,
+          address: picked.address ?? undefined,
+          coord_source: picked.coord_source ?? 'serpapi_lodging',
+        });
+        if (nodeId) {
+          setExpandedAddId(null);
+          setLeftPanelMode('form');
+          setActiveView('map');
+          setPreviewExpandedWithoutItinerary(true);
+        }
+        return;
+      }
+
       let lat: number | undefined;
       let lng: number | undefined;
       let address: string | undefined;
@@ -112,14 +157,27 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
           startMapPick(nodeId);
           setActiveView('map');
           setLeftPanelMode('form');
+          setPreviewExpandedWithoutItinerary(true);
+          setExpandedAddId(null);
         }
         return;
       }
-      addHotelFromZone(zoneId, { name, lat, lng, address, coord_source: 'geocode' });
-      setExpandedAddId(null);
-      setLeftPanelMode('form');
+      const nodeId = addHotelFromZone(zoneId, {
+        name,
+        lat,
+        lng,
+        address,
+        coord_source: 'geocode',
+      });
+      if (nodeId) {
+        setExpandedAddId(null);
+        setLeftPanelMode('form');
+        setActiveView('map');
+        setPreviewExpandedWithoutItinerary(true);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : '添加失败');
+      showToast(e instanceof Error ? e.message : '添加失败', 'warning');
     } finally {
       setAddLoading(null);
     }
@@ -128,7 +186,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   async function handleSearchLodging(zoneId: string, opts?: { forceRefresh?: boolean }) {
     const zone = zones.find((z) => z.id === zoneId);
     if (!zone?.geometry || zone.geometry.type !== 'circle') {
-      setError('该片区无圆心坐标，无法检索 lodging');
+      setError('该片区无圆心坐标，无法检索附近酒店');
       return;
     }
     setLodgingLoading(zoneId);
@@ -148,13 +206,13 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
             key,
             LODGING_CACHE_TTL_MS,
           );
-      if (cached) {
+      // P70 同理：仅复用非空 lodging 缓存
+      if (cached && cached.value.candidates.length > 0) {
         setLodgingByZone((m) => ({ ...m, [zoneId]: cached.value.candidates }));
-        if (cached.value.warnings[0]) {
-          setWarnings((w) => [...w, `缓存：${cached.value.warnings[0]}`]);
-        }
         return;
       }
+      if (cached) cacheInvalidate('lodging', key);
+
       const res = await searchStayZoneLodging({
         zone_id: zone.id,
         city: zone.city,
@@ -163,25 +221,25 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
         lng: zone.geometry.center.lng,
         radius_m: radius,
       });
-      cacheSet('lodging', key, { candidates: res.candidates, warnings: res.warnings });
+      if (res.candidates.length > 0) {
+        cacheSet('lodging', key, { candidates: res.candidates, warnings: res.warnings });
+      }
       setLodgingByZone((m) => ({ ...m, [zoneId]: res.candidates }));
+      if (res.candidates.length === 0) {
+        setError('片区内暂无酒店候选，可手动输入名称后确认添加');
+      }
       if (res.warnings[0]) setWarnings((w) => [...w, res.warnings[0]!]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'lodging 检索失败');
+      setError(e instanceof Error ? e.message : '酒店检索失败');
     } finally {
       setLodgingLoading(null);
     }
   }
 
   function handlePickLodging(zoneId: string, c: StayZoneLodgingCandidate) {
-    addHotelFromZone(zoneId, {
-      name: c.name,
-      lat: c.lat,
-      lng: c.lng,
-      address: c.address ?? undefined,
-      coord_source: c.coord_source ?? 'serpapi_lodging',
-    });
-    setExpandedAddId(null);
+    // P75: 选中候选 → 填入名称，等「确认添加」
+    setHotelNames((m) => ({ ...m, [zoneId]: c.name }));
+    setPickedLodging((m) => ({ ...m, [zoneId]: c }));
   }
 
   const confirmedZones = useMemo(
@@ -311,25 +369,39 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                       <button
                         type="button"
                         className="form-btn form-btn--sm form-btn--primary"
-                        onClick={() => setExpandedAddId(expandedAddId === zone.id ? null : zone.id)}
+                        onClick={() => openHotelPicker(zone.id)}
                       >
-                        添加酒店到路线图
+                        {expandedAddId === zone.id ? '收起选酒店' : '在此片区选酒店'}
                       </button>
                     )}
                   </div>
                   {expandedAddId === zone.id && zone.status === 'confirmed' && (
                     <div className="stay-zone__add">
-                      <FormField label="酒店名称">
+                      <p className="stay-zone__add-step">
+                        片区「{zone.label}」已确认 · 下一步：从列表选酒店（或手输名称）后确认添加
+                      </p>
+                      {!hasItineraryDays && (
+                        <p className="stay-zone__add-hint stay-zone__add-hint--warn">
+                          生成玩法行程后，才能把酒店加入路线图；现在可先浏览候选。
+                        </p>
+                      )}
+                      <FormField label="已选酒店">
                         <FormInput
-                          value={hotelNames[zone.id] ?? `${zone.label} 附近酒店`}
-                          onChange={(e) =>
-                            setHotelNames((m) => ({ ...m, [zone.id]: e.target.value }))
-                          }
-                          placeholder="如：滨海湾金沙"
+                          value={hotelNames[zone.id] ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setHotelNames((m) => ({ ...m, [zone.id]: v }));
+                            setPickedLodging((m) => {
+                              const cur = m[zone.id];
+                              if (cur && cur.name !== v) return { ...m, [zone.id]: null };
+                              return m;
+                            });
+                          }}
+                          placeholder="点击下方酒店，或手动输入名称"
                         />
                       </FormField>
                       <p className="stay-zone__add-hint">
-                        可检索片区内 lodging（无 OTA 价，价走 Trip 深链）；或手动输入名称。
+                        列表为片区内酒店候选（无平台报价，预订走 Trip.com）；选定后点确认添加。
                       </p>
                       <div className="stay-zone__add-actions">
                         <button
@@ -338,7 +410,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                           disabled={lodgingLoading === zone.id}
                           onClick={() => void handleSearchLodging(zone.id)}
                         >
-                          {lodgingLoading === zone.id ? '检索中…' : '片区内找酒店'}
+                          {lodgingLoading === zone.id ? '检索中…' : '搜索片区酒店'}
                         </button>
                         <button
                           type="button"
@@ -352,29 +424,36 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                         <button
                           type="button"
                           className="form-btn form-btn--sm form-btn--primary"
-                          disabled={addLoading === zone.id}
+                          disabled={addLoading === zone.id || !hasItineraryDays}
                           onClick={() => void handleAddHotel(zone.id)}
                         >
                           {addLoading === zone.id ? '添加中…' : '确认添加'}
                         </button>
                       </div>
                       {(lodgingByZone[zone.id] ?? []).length > 0 && (
-                        <ul className="stay-zone__lodging-list">
-                          {(lodgingByZone[zone.id] ?? []).map((c) => (
-                            <li key={c.place_id || `${c.lat}-${c.lng}-${c.name}`}>
-                              <button
-                                type="button"
-                                className="stay-zone__lodging-item"
-                                onClick={() => handlePickLodging(zone.id, c)}
-                              >
-                                <span>{c.name}</span>
-                                <span className="stay-zone__lodging-meta">
-                                  {c.distance_m}m
-                                  {c.rating != null ? ` · ★${c.rating}` : ''}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
+                        <ul className="stay-zone__lodging-list" aria-label="片区酒店候选">
+                          {(lodgingByZone[zone.id] ?? []).map((c) => {
+                            const selected =
+                              pickedLodging[zone.id]?.place_id === c.place_id ||
+                              pickedLodging[zone.id]?.name === c.name;
+                            return (
+                              <li key={c.place_id || `${c.lat}-${c.lng}-${c.name}`}>
+                                <button
+                                  type="button"
+                                  className={`stay-zone__lodging-item${
+                                    selected ? ' stay-zone__lodging-item--selected' : ''
+                                  }`}
+                                  onClick={() => handlePickLodging(zone.id, c)}
+                                >
+                                  <span>{c.name}</span>
+                                  <span className="stay-zone__lodging-meta">
+                                    {c.distance_m}m
+                                    {c.rating != null ? ` · ★${c.rating}` : ''}
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                       {zone.purchase_url && (
@@ -402,7 +481,14 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
             className="form-btn form-btn--sm form-btn--primary"
             onClick={() => {
               setActiveView('map');
-              setLeftPanelMode('form');
+              setPreviewExpandedWithoutItinerary(true);
+              const hotelNode = intel.hotels.find((h) => h.itinerary_node_id)?.itinerary_node_id;
+              if (hotelNode) {
+                usePlanStore.getState().selectNode(hotelNode);
+                setLeftPanelMode('form');
+              } else {
+                setLeftPanelMode('stay');
+              }
             }}
           >
             在地图查看并编辑
