@@ -452,26 +452,48 @@ def _apply_credibility(
     return enrich_itinerary_credibility(itinerary, forecast)
 
 
+def _resolve_evidence_status(
+    settings: Settings,
+    evidence: list[dict[str, Any]] | None,
+) -> str:
+    """ok | empty | unconfigured — for FE discoverability when pack is empty."""
+    if evidence:
+        return "ok"
+    if not settings.tikhub_configured and not settings.web_search_configured:
+        return "unconfigured"
+    return "empty"
+
+
 def _attach_evidence_meta(
     itinerary: dict[str, Any],
     evidence: list[dict[str, Any]] | None,
     poi_candidates: list[dict[str, Any]] | None = None,
+    *,
+    evidence_status: str | None = None,
 ) -> dict[str, Any]:
-    if not evidence and not poi_candidates:
+    """Attach evidence (+ status). Always write status when provided so empty packs stay discoverable."""
+    if not evidence and not poi_candidates and not evidence_status:
         return itinerary
     meta = itinerary.setdefault("meta", {})
     if evidence:
         meta["evidence"] = evidence
     if poi_candidates:
         meta["poi_candidates"] = poi_candidates
+    if evidence_status:
+        meta["evidence_status"] = evidence_status
     warnings = list(meta.get("warnings") or [])
+    note: str | None = None
     if evidence:
         verified_n = sum(1 for e in evidence if isinstance(e, dict) and e.get("verified"))
         note = f"已注入 {len(evidence)} 条公开笔记印证（非官方）"
         if verified_n:
             note = f"{note}；其中 {verified_n} 条含围栏内已定位地点"
-        if note not in warnings:
-            warnings.append(note)
+    elif evidence_status == "unconfigured":
+        note = "玩法印证未启用：未配置 TIKHUB_API_KEY / TAVILY_API_KEY"
+    elif evidence_status == "empty":
+        note = "本次未检索到可用的公开笔记印证（非官方）"
+    if note and note not in warnings:
+        warnings.append(note)
     meta["warnings"] = warnings
     return itinerary
 
@@ -660,6 +682,7 @@ async def generate_itinerary_async(
             trip_request,
             settings=cfg,
         )
+    ev_status = _resolve_evidence_status(cfg, evidence) if dest else None
 
     if client and dest:
         try:
@@ -681,7 +704,9 @@ async def generate_itinerary_async(
                 endpoint="generate",
             )
             itinerary = _llm_to_itinerary(raw, trip_request, geocoded=geocode)
-            itinerary = _attach_evidence_meta(itinerary, evidence, poi_candidates)
+            itinerary = _attach_evidence_meta(
+                itinerary, evidence, poi_candidates, evidence_status=ev_status
+            )
             itinerary = attach_intel_snapshot(itinerary, intel)
             itinerary = _apply_credibility(itinerary, forecast)
             return _finalize_llm_itinerary(itinerary, client, dest, geocode=geocode, settings=cfg)
@@ -695,7 +720,9 @@ async def generate_itinerary_async(
 
     # No LLM client / empty destination → deterministic mock (dev / tests)
     itinerary = build_mock_itinerary(trip_request)
-    itinerary = _attach_evidence_meta(itinerary, evidence, poi_candidates)
+    itinerary = _attach_evidence_meta(
+        itinerary, evidence, poi_candidates, evidence_status=ev_status
+    )
     itinerary = attach_intel_snapshot(itinerary, intel)
     itinerary = _apply_credibility(itinerary, forecast)
     if geocode and dest:
@@ -807,10 +834,13 @@ async def generate_itinerary_stream_events(
                 "count": len(forecast),
             },
         }
+    ev_status = _resolve_evidence_status(cfg, evidence) if dest else None
 
     if not (client and dest):
         itinerary = build_mock_itinerary(trip_request)
-        itinerary = _attach_evidence_meta(itinerary, evidence, poi_candidates)
+        itinerary = _attach_evidence_meta(
+            itinerary, evidence, poi_candidates, evidence_status=ev_status
+        )
         itinerary = attach_intel_snapshot(itinerary, intel)
         itinerary = _apply_credibility(itinerary, forecast)
         if geocode and dest:
@@ -920,7 +950,9 @@ async def generate_itinerary_stream_events(
         )
         itinerary = _llm_to_itinerary(raw, trip_request, geocoded=geocode)
 
-    itinerary = _attach_evidence_meta(itinerary, evidence, poi_candidates)
+    itinerary = _attach_evidence_meta(
+        itinerary, evidence, poi_candidates, evidence_status=ev_status
+    )
     itinerary = attach_intel_snapshot(itinerary, intel)
     itinerary = _apply_credibility(itinerary, forecast)
     itinerary, llm_ms, geocode_ms = _finalize_llm_itinerary(
@@ -956,6 +988,7 @@ def generate_itinerary(
             trip_request, settings=cfg, travel_intel=intel
         )
         forecast = _load_forecast_for_generate(trip_request, settings=cfg)
+    ev_status = _resolve_evidence_status(cfg, evidence) if dest else None
 
     if client and dest:
         try:
@@ -975,7 +1008,9 @@ def generate_itinerary(
                 endpoint="generate",
             )
             itinerary = _llm_to_itinerary(raw, trip_request, geocoded=geocode)
-            itinerary = _attach_evidence_meta(itinerary, evidence, poi_candidates)
+            itinerary = _attach_evidence_meta(
+                itinerary, evidence, poi_candidates, evidence_status=ev_status
+            )
             itinerary = _apply_credibility(itinerary, forecast)
             return _finalize_llm_itinerary(itinerary, client, dest, geocode=geocode, settings=cfg)
         except (ValidationError, ValueError) as e:
@@ -986,7 +1021,9 @@ def generate_itinerary(
             raise
 
     itinerary = build_mock_itinerary(trip_request)
-    itinerary = _attach_evidence_meta(itinerary, evidence, poi_candidates)
+    itinerary = _attach_evidence_meta(
+        itinerary, evidence, poi_candidates, evidence_status=ev_status
+    )
     itinerary = _apply_credibility(itinerary, forecast)
     if geocode and dest:
         started = time.perf_counter()

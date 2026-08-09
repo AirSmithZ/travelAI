@@ -22,6 +22,9 @@ class EvidencePreviewResponse(BaseModel):
     destination: str
     day_count: int | None = None
     configured: bool
+    tikhub_configured: bool = False
+    tavily_configured: bool = False
+    evidence_status: str = "empty"
     evidence: list[dict[str, Any]]
     count: int
 
@@ -35,10 +38,20 @@ async def evidence_preview(body: EvidencePreviewRequest) -> EvidencePreviewRespo
         raise HTTPException(status_code=400, detail="destination 不能为空")
 
     evidence = await fetch_evidence_pack(dest, body.day_count, settings=settings)
+    configured = settings.tikhub_configured or settings.web_search_configured
+    if evidence:
+        status = "ok"
+    elif not configured:
+        status = "unconfigured"
+    else:
+        status = "empty"
     return EvidencePreviewResponse(
         destination=dest,
         day_count=body.day_count,
-        configured=settings.tikhub_configured,
+        configured=configured,
+        tikhub_configured=settings.tikhub_configured,
+        tavily_configured=settings.web_search_configured,
+        evidence_status=status,
         evidence=evidence,
         count=len(evidence),
     )

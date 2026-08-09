@@ -224,11 +224,10 @@ export function OverviewGraphView() {
     [itinerary, travelIntel],
   );
 
-  const domAnchors = useOverviewNodeAnchors(matrixRef, [
-    liveMatrixPlacements.size,
-    itinerary?.days.length,
-    layout?.regions.length,
-  ]);
+  const domAnchors = useOverviewNodeAnchors(
+    matrixRef,
+    `${liveMatrixPlacements.size}:${itinerary?.days.length ?? 0}:${layout?.regions.length ?? 0}`,
+  );
 
   /** OV-01: prefer measured DOM centers when available */
   const edgePlacements = useMemo(() => {

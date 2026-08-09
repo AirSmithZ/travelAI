@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   parseChatMessage,
   parseChatMessageStream,
@@ -18,7 +18,7 @@ import {
 } from '../../utils/planReadiness';
 import { splitLowRiskPatches } from '../../utils/lowRiskPatches';
 import { ChatMessageList } from './ChatMessageList';
-import { ChatComposer } from './ChatComposer';
+import { ChatComposer, type ChatComposerHandle } from './ChatComposer';
 import { ChatStatusBar } from './ChatStatusBar';
 import { PatchConfirmPanel } from './PatchConfirmPanel';
 import { PlanSummaryCard } from './PlanSummaryCard';
@@ -106,7 +106,16 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
   const consumeReadinessPrompt = usePlanStore((s) => s.consumeReadinessPrompt);
   const showToast = useToastStore((s) => s.show);
   const [input, setInput] = useState('');
+  const composerRef = useRef<ChatComposerHandle>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const prefillComposer = useCallback((text: string) => {
+    const next = (text || '').trim();
+    if (!next) return;
+    setInput(next);
+    // Next paint: focus so user sees the filled draft
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }, []);
   const [streamingHint, setStreamingHint] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
   const [showReadiness, setShowReadiness] = useState(false);
@@ -425,7 +434,7 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
       />
 
       <PlanSummaryCard
-        onPrefill={setInput}
+        onPrefill={prefillComposer}
         onRequestGenerate={openReadiness}
       />
 
@@ -439,7 +448,7 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
             showReadiness ? (
               <ReadinessChecklist
                 onClose={() => setShowReadiness(false)}
-                onPrefill={setInput}
+                onPrefill={prefillComposer}
               />
             ) : null
           }
@@ -450,6 +459,7 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
         <PatchUndoBar />
         <PatchConfirmPanel />
         <ChatComposer
+          ref={composerRef}
           value={input}
           onChange={setInput}
           onSubmit={handleSend}

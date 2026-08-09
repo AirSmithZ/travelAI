@@ -18,11 +18,20 @@ function handleItemAction(
     onPrefill: (text: string) => void;
     onRequestGenerate?: () => void;
     setLeftPanelMode: (mode: 'flight' | 'stay' | 'evidence' | 'chat' | 'form') => void;
+    /** true = chip「用对话修改」→ 始终预填，不跳面板 */
     modify: boolean;
   },
 ) {
-  const action: ReadinessAction = modify ? 'prefill' : item.action;
-  const text = modify ? item.modifyHint : item.hint;
+  // Chip path: never open flight/stay panels — only fill composer
+  if (opts.modify) {
+    const text = (item.modifyHint || item.hint || '').trim();
+    if (text) opts.onPrefill(text);
+    return;
+  }
+
+  const action: ReadinessAction = item.action;
+  // Already-done rows that are chat-editable: prefill modify phrasing
+  const text = item.done && action === 'prefill' ? item.modifyHint : item.hint;
 
   if (action === 'open_flight') {
     opts.setLeftPanelMode('flight');
@@ -40,8 +49,9 @@ function handleItemAction(
     opts.onRequestGenerate?.();
     return;
   }
-  if (action === 'prefill' || modify) {
-    opts.onPrefill(text);
+  if (action === 'prefill') {
+    const t = (text || '').trim();
+    if (t) opts.onPrefill(t);
   }
 }
 
@@ -102,14 +112,16 @@ export function PlanSummaryCard({ onPrefill, onRequestGenerate }: PlanSummaryCar
                 <button
                   type="button"
                   className="plan-summary__chip"
-                  onClick={() =>
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     handleItemAction(item, {
                       onPrefill,
                       onRequestGenerate,
                       setLeftPanelMode,
                       modify: true,
-                    })
-                  }
+                    });
+                  }}
                 >
                   用对话修改
                 </button>

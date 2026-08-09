@@ -21,6 +21,7 @@
 | **UX-CHAT-04** | ✅ | P2 | 左栏模式收敛：需求阶段弱化「行程编辑」与摘要分离 | [22 §5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-CHAT-07** | ✅ | P3 | 可选 reasoning 折叠（有则显示） | [22 §3b.5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-EVD-01** | ✅ | P2 | 非官方文案 · 已定位/仅网友 · 摘要条数 · StatusBar evidence | [22 §3](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
+| **UX-EVD-02** | ✅ | P2 | 空印证可发现性：`evidence_status` + 入口不消失 | [Round8 §五](./现存问题复查报告-travelAI-drag_dev2-round8-2026-08-06.md) |
 
 ---
 

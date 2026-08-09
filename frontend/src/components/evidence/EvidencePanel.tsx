@@ -4,7 +4,19 @@ import './EvidencePanel.css';
 interface EvidencePanelProps {
   items: ItineraryEvidenceItem[];
   poiCandidates?: ItineraryPoiCandidate[];
+  /** From meta.evidence_status when pack is empty */
+  status?: string | null;
   onClose?: () => void;
+}
+
+function emptyCopy(status?: string | null): string {
+  if (status === 'unconfigured') {
+    return '未配置公开笔记数据源。请在后端 .env 设置 TIKHUB_API_KEY（和/或 TAVILY_API_KEY）后重新生成。';
+  }
+  if (status === 'empty') {
+    return '已配置数据源，但本次未检索到可用印证链接（上游无结果或过滤后为空）。';
+  }
+  return '本次生成未附带印证链接（可能上游未返回或未配置）。';
 }
 
 function sourceLabel(source?: string): string {
@@ -17,7 +29,12 @@ function sourceLabel(source?: string): string {
 }
 
 /** UX-EVD-01: 非官方免责 + 已核验 / 仅网友 */
-export function EvidencePanel({ items, poiCandidates = [], onClose }: EvidencePanelProps) {
+export function EvidencePanel({
+  items,
+  poiCandidates = [],
+  status = null,
+  onClose,
+}: EvidencePanelProps) {
   const verifiedCount = items.filter((i) => i.verified).length;
   const factPois = poiCandidates.filter(
     (p) =>
@@ -71,7 +88,9 @@ export function EvidencePanel({ items, poiCandidates = [], onClose }: EvidencePa
       )}
 
       {items.length === 0 ? (
-        <p className="evidence-panel__empty">本次生成未附带印证链接（可能上游未返回或未配置）</p>
+        <p className="evidence-panel__empty" role="status">
+          {emptyCopy(status)}
+        </p>
       ) : (
         <ul className="evidence-panel__list">
           {items.map((item, i) => {

@@ -21,6 +21,8 @@ class ItineraryMetaOut(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     evidence: Optional[list[dict[str, Any]]] = None
     poi_candidates: Optional[list[dict[str, Any]]] = None
+    # ok | empty | unconfigured — empty packs stay discoverable in UI
+    evidence_status: Optional[str] = None
     flight_quote_ids: Optional[list[str]] = None
     intel_fingerprint: Optional[str] = None
 

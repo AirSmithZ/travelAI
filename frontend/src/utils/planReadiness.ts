@@ -63,7 +63,20 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
   const evidenceItems = plan.itinerary?.meta?.evidence ?? [];
   const evidenceCount = evidenceItems.length;
   const evidenceVerified = evidenceItems.filter((e) => e.verified).length;
+  const evidenceStatus = plan.itinerary?.meta?.evidence_status;
   const dayCount = plan.itinerary?.days?.length ?? 0;
+
+  let evidenceDetail = '生成时检索（软提示）';
+  if (evidenceCount > 0) {
+    evidenceDetail =
+      evidenceVerified > 0
+        ? `${evidenceCount} 条参考 · ${evidenceVerified} 条含已定位`
+        : `${evidenceCount} 条网友提及·未核验（非官方）`;
+  } else if (evidenceStatus === 'unconfigured') {
+    evidenceDetail = '未配置公开笔记数据源';
+  } else if (evidenceStatus === 'empty' || dayCount > 0) {
+    evidenceDetail = '本次无印证链接（可查看说明）';
+  }
 
   const items: ReadinessItem[] = [
     {
@@ -74,7 +87,7 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
       hard: true,
       soft: false,
       hint: '目的地还没定，我想去新加坡',
-      modifyHint: dest ? `把目的地改成${dest}` : '目的地改成…',
+      modifyHint: '把目的地改成…',
       action: 'prefill',
     },
     {
@@ -131,18 +144,13 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
     {
       id: 'evidence',
       label: '玩法印证',
-      detail:
-        evidenceCount > 0
-          ? evidenceVerified > 0
-            ? `${evidenceCount} 条参考 · ${evidenceVerified} 条含已定位`
-            : `${evidenceCount} 条网友提及·未核验（非官方）`
-          : '生成时检索（软提示）',
+      detail: evidenceDetail,
       done: evidenceCount > 0,
       hard: false,
       soft: true,
       hint: '印证较弱也可以先生成',
       modifyHint: '查看玩法参考依据',
-      action: evidenceCount > 0 ? 'open_evidence' : 'prefill',
+      action: dayCount > 0 || evidenceCount > 0 ? 'open_evidence' : 'prefill',
     },
     {
       id: 'itinerary',

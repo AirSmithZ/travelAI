@@ -76,6 +76,8 @@ export interface ItineraryMeta {
   locale: 'zh-CN';
   warnings: string[];
   evidence?: ItineraryEvidenceItem[];
+  /** ok | empty | unconfigured — set even when evidence[] is missing */
+  evidence_status?: 'ok' | 'empty' | 'unconfigured' | string;
   /** WS-08a light POI tally after fence validate */
   poi_candidates?: ItineraryPoiCandidate[];
   /** B-P4-04 / FLOW-02 */

@@ -68,6 +68,7 @@ export function InputPanel() {
 
   const evidenceItems = itinerary?.meta?.evidence ?? [];
   const evidenceCount = evidenceItems.length;
+  const evidenceStatus = itinerary?.meta?.evidence_status;
   const showChat = leftPanelMode === 'chat';
   const showFlight = leftPanelMode === 'flight' && plan.phase !== 'detailed';
   const showStay = leftPanelMode === 'stay' && plan.phase !== 'detailed';
@@ -82,6 +83,16 @@ export function InputPanel() {
 
   const formHeading = formEditorHeading(editorTarget, itinerary);
   const hasItineraryDays = Boolean(itinerary?.days?.length);
+  /** Round8 P2: keep entry visible after generate even when pack is empty / unconfigured */
+  const showEvidenceEntry = showChat && hasItineraryDays;
+  const evidenceStripHint =
+    evidenceCount > 0
+      ? `${evidenceCount} 条公开笔记 · 自行打开`
+      : evidenceStatus === 'unconfigured'
+        ? '未配置数据源 · 点击查看说明'
+        : evidenceStatus === 'empty'
+          ? '本次无印证链接 · 点击查看说明'
+          : '查看印证说明';
   /** UX-CHAT-04: 需求阶段以对话+摘要为主；有行程后才强调节点编辑 */
   const showNodeEditorStrip = showChat && hasItineraryDays;
   const nodeEditorHint = nodeName
@@ -144,16 +155,14 @@ export function InputPanel() {
         </button>
       )}
 
-      {showChat && evidenceCount > 0 && (
+      {showEvidenceEntry && (
         <button
           type="button"
           className="input-panel__form-strip input-panel__form-strip--evidence"
           onClick={() => setLeftPanelMode('evidence')}
         >
           <span>参考依据</span>
-          <span className="input-panel__form-strip-hint">
-            {evidenceCount} 条公开笔记 · 自行打开
-          </span>
+          <span className="input-panel__form-strip-hint">{evidenceStripHint}</span>
         </button>
       )}
 
@@ -187,6 +196,7 @@ export function InputPanel() {
             <EvidencePanel
               items={evidenceItems}
               poiCandidates={itinerary?.meta?.poi_candidates ?? []}
+              status={evidenceStatus}
               onClose={() => setLeftPanelMode('chat')}
             />
           </div>
@@ -303,13 +313,13 @@ export function InputPanel() {
                   住宿片区
                 </button>
               )}
-              {evidenceCount > 0 && (
+              {hasItineraryDays && (
                 <button
                   type="button"
                   className="input-panel__expand-chat"
                   onClick={() => setLeftPanelMode('evidence')}
                 >
-                  参考依据 ({evidenceCount})
+                  {evidenceCount > 0 ? `参考依据 (${evidenceCount})` : '参考依据'}
                 </button>
               )}
               <button
