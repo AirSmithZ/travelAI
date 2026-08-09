@@ -70,9 +70,11 @@ import {
   patchActivityStep,
 } from '../types/chatActivity';
 import type { RecommendedStayZone, StayZonePreferences } from '../types/stayZone';
+import type { StayHotelMapPin } from '../utils/stayHotelMapPins';
 import { applyHotelDayLoop, hasLockedHotel } from '../utils/hotelDayLoop';
 import { findCrossDayPoiDuplicates } from '../utils/crossDayPoiDedup';
 import {
+  hotelFromStandaloneInput,
   hotelFromZoneInput,
   patchStayZones,
   rebindHotelsAfterGenerate,
@@ -125,6 +127,22 @@ export interface AddHotelFromZoneInput {
   pendingMapPick?: boolean;
 }
 
+/** P112: 店名搜索锁定 — 不绑定 zone_id */
+export interface AddStandaloneHotelInput {
+  name: string;
+  lat: number;
+  lng: number;
+  address?: string;
+  coord_source?: string;
+  city?: string;
+  check_in?: string;
+  check_out?: string;
+}
+
+function isStandaloneHotel(h: { zone_id?: string | null }): boolean {
+  return !h.zone_id;
+}
+
 interface PlanState {
   plans: TravelPlan[];
   activePlanId: string;
@@ -144,6 +162,10 @@ interface PlanState {
   mapPickNodeId: string | null;
   /** 住宿片区卡片 hover / 选中，驱动地图高亮 */
   selectedStayZoneId: string | null;
+  /** P100: 锁店阶段酒店候选/已锁酒店预览钉（无行程节点时） */
+  stayHotelMapPins: StayHotelMapPin[];
+  /** P109: 地图钉点击 → StayZonePanel 选中对应候选 */
+  stayHotelMapPinPickId: string | null;
   /** 总览导出时临时渲染全部列 */
   exportOverviewCapture: boolean;
   /** 总览列宽（按 planId），用户拖拽表头调整 */
@@ -190,8 +212,13 @@ interface PlanState {
   rejectStayZone: (zoneId: string) => void;
   /** Returns hotel id on success (intel lock and/or itinerary day-loop). */
   addHotelFromZone: (zoneId: string, input: AddHotelFromZoneInput) => string | null;
+  /** P112: lock hotel without zone_id (name-search path). */
+  addStandaloneHotel: (input: AddStandaloneHotelInput) => string | null;
   removeHotelStay: (hotelId: string) => void;
   setSelectedStayZoneId: (zoneId: string | null) => void;
+  setStayHotelMapPins: (pins: StayHotelMapPin[]) => void;
+  requestStayHotelMapPinPick: (pinId: string) => void;
+  clearStayHotelMapPinPick: () => void;
   generateMockItinerary: () => void;
   updateNode: (dayIndex: number, nodeId: string, partial: Partial<ItineraryNode>) => void;
   updateDay: (dayIndex: number, partial: Partial<DayPlan>) => void;
@@ -279,6 +306,8 @@ export function selectOverviewColumnWidths(state: PlanState): number[] {
 
 /** 总览 / 地图浏览时折叠左栏；编辑/选点/机酒/Activity 时展开（UX-CHAT-08 · P74） */
 export function selectLeftPanelCollapsed(state: PlanState): boolean {
+  // P104: 右栏已折叠时左栏必须展开，避免双折叠空屏
+  if (selectPreviewCollapsed(state)) return false;
   if (state.editorTarget) return false;
   if (state.mapPickNodeId) return false;
   if (state.chatActivity) return false;
@@ -293,13 +322,21 @@ export function selectLeftPanelCollapsed(state: PlanState): boolean {
   return false;
 }
 
-/** UX-14：无路线图时折叠右侧预览；有 itinerary 或用户手动展开时展开 */
+/** UX-14：无路线图时折叠右侧预览；有 itinerary 或住宿面板内「有可展示内容」时展开 */
 export function selectPreviewCollapsed(state: PlanState): boolean {
   const itinerary = selectActiveItinerary(state);
   const hasItinerary = Boolean(itinerary?.days?.length);
   if (hasItinerary) return false;
-  if (state.previewExpandedWithoutItinerary) return false;
-  return true;
+  // P104: 生成前片区/酒店图仅住宿面板可用；回对话等板块必须折叠
+  if (state.leftPanelMode !== 'stay') return true;
+  if (!state.previewExpandedWithoutItinerary) return true;
+  // P103: 仅展开标志不够——无片区 geometry / 酒店钉时仍折叠，避免 EmptyPreview 挤对话
+  const plan = selectActivePlan(state);
+  const hasStayGeometry = (plan.travel_intel.recommended_stay_zones ?? []).some((z) =>
+    Boolean(z.geometry),
+  );
+  const hasHotelPins = state.stayHotelMapPins.length > 0;
+  return !(hasStayGeometry || hasHotelPins);
 }
 
 function settleChatActivity(
@@ -450,6 +487,8 @@ export const usePlanStore = create<PlanState>()(
     previewExpandedWithoutItinerary: false,
     mapPickNodeId: null,
     selectedStayZoneId: null,
+    stayHotelMapPins: [],
+    stayHotelMapPinPickId: null,
     exportOverviewCapture: false,
     overviewColumnWidths: {},
     isGeneratingItinerary: false,
@@ -1038,8 +1077,9 @@ export const usePlanStore = create<PlanState>()(
             stay_zones_fetched_at: fetchedAt,
           }),
         }));
-        // UX-14-05：有 geometry 时强制展开预览并切 map
-        if (hasGeometry) {
+        const hasItinerary = Boolean(selectActiveItinerary(s)?.days?.length);
+        // P97: 生成前不因推荐片区强开空白地图；有行程时仍展开预览（UX-14-05）
+        if (hasGeometry && hasItinerary) {
           return {
             ...next,
             previewExpandedWithoutItinerary: true,
@@ -1212,6 +1252,126 @@ export const usePlanStore = create<PlanState>()(
       return hotel.id;
     },
 
+    addStandaloneHotel: (input) => {
+      const plan = get().getActivePlan();
+      const tr = plan.trip_request;
+      const zones = plan.travel_intel.recommended_stay_zones ?? [];
+      const dateHint =
+        zones.find((z) => z.status === 'confirmed') ??
+        zones.find((z) => z.status === 'proposed');
+      const check_in =
+        input.check_in?.trim() ||
+        dateHint?.check_in ||
+        tr.date_start ||
+        new Date().toISOString().slice(0, 10);
+      const check_out =
+        input.check_out?.trim() ||
+        dateHint?.check_out ||
+        tr.date_end ||
+        check_in;
+      const city =
+        input.city?.trim() ||
+        dateHint?.city ||
+        tr.destination?.trim() ||
+        '目的地';
+
+      const prev = plan.travel_intel.hotels.find(isStandaloneHotel);
+      const sequence =
+        prev?.sequence ??
+        (plan.travel_intel.hotels.length > 0
+          ? Math.max(...plan.travel_intel.hotels.map((h) => h.sequence)) + 1
+          : 1);
+
+      let hotel = hotelFromStandaloneInput(
+        {
+          name: input.name,
+          lat: input.lat,
+          lng: input.lng,
+          address: input.address,
+          city,
+          check_in,
+          check_out,
+        },
+        { sequence, previousId: prev?.id },
+      );
+
+      const itinerary = plan.itinerary;
+      const label = input.name.trim() || '酒店';
+      const nextHotels = [
+        ...plan.travel_intel.hotels.filter((h) => !isStandaloneHotel(h)),
+        hotel,
+      ];
+
+      if (!itinerary?.days?.length) {
+        set((s) =>
+          updateActivePlan(s, (p) => ({
+            ...p,
+            travel_intel: syncTravelIntelStatus({
+              ...p.travel_intel,
+              hotels: [
+                ...p.travel_intel.hotels.filter((h) => !isStandaloneHotel(h)),
+                hotel,
+              ],
+            }),
+          })),
+        );
+        useToastStore.getState().show(`已锁定酒店「${label}」，可生成玩法`, 'info');
+        get().addChatMessage(
+          'assistant',
+          `已锁定住宿「${label}」（未绑定片区）。确认航班与酒店后，可点「生成玩法」。`,
+        );
+        return hotel.id;
+      }
+
+      get().recordItineraryHistory();
+      const { itinerary: looped, bindings } = applyHotelDayLoop(
+        itinerary,
+        nextHotels,
+        zones,
+        plan.travel_intel.flights,
+      );
+      const primaryBind =
+        bindings.find((b) => b.hotel_id === hotel.id) ?? bindings[0];
+      if (primaryBind) {
+        hotel = { ...hotel, itinerary_node_id: primaryBind.node_id };
+      }
+      const bindDay =
+        primaryBind != null
+          ? Math.max(0, (primaryBind.day_index || 1) - 1)
+          : 0;
+
+      set((s) => ({
+        ...updateActivePlan(s, (p) => ({
+          ...p,
+          itinerary: {
+            ...looped,
+            meta: {
+              ...looped.meta,
+              hotel_bindings: bindings,
+            },
+          },
+          travel_intel: syncTravelIntelStatus({
+            ...p.travel_intel,
+            hotels: [
+              ...p.travel_intel.hotels.filter((h) => !isStandaloneHotel(h)),
+              hotel,
+            ],
+          }),
+        })),
+        selectedNodeId: hotel.itinerary_node_id ?? s.selectedNodeId,
+        activeDayIndex: bindDay,
+        previewExpandedWithoutItinerary: true,
+        activeView: 'map' as const,
+      }));
+
+      useToastStore.getState().show(`已锁定并更新日闭环酒店「${label}」`, 'info');
+      get().addChatMessage(
+        'assistant',
+        `已将「${label}」写入每日酒店闭环（未绑定片区）。`,
+      );
+      return hotel.id;
+    },
+
     removeHotelStay: (hotelId) => {
       const plan = get().getActivePlan();
       const hotel = plan.travel_intel.hotels.find((h) => h.id === hotelId);
@@ -1278,6 +1438,9 @@ export const usePlanStore = create<PlanState>()(
     },
 
     setSelectedStayZoneId: (zoneId) => set({ selectedStayZoneId: zoneId }),
+    setStayHotelMapPins: (pins) => set({ stayHotelMapPins: pins }),
+    requestStayHotelMapPinPick: (pinId) => set({ stayHotelMapPinPickId: pinId }),
+    clearStayHotelMapPinPick: () => set({ stayHotelMapPinPickId: null }),
 
     maybeAutoGenerateItinerary: async () => {
       const plan = get().getActivePlan();
@@ -1673,7 +1836,22 @@ export const usePlanStore = create<PlanState>()(
       set((s) => updateActivePlan(s, (p) => ({ ...p, last_chat_mode: mode })));
     },
 
-    setLeftPanelMode: (mode) => set({ leftPanelMode: mode }),
+    setLeftPanelMode: (mode) =>
+      set((s) => {
+        const leavingStay = s.leftPanelMode === 'stay' && mode !== 'stay';
+        const hasItinerary = Boolean(selectActiveItinerary(s)?.days?.length);
+        // P104: 离开住宿回对话/机票等时，无玩法则收起片区地图并清钉
+        // 同时离开 map 视图，否则左栏仍按 activeView=map 折叠 → 双折叠空屏
+        if (leavingStay && !hasItinerary) {
+          return {
+            leftPanelMode: mode,
+            previewExpandedWithoutItinerary: false,
+            stayHotelMapPins: [],
+            activeView: 'graph' as const,
+          };
+        }
+        return { leftPanelMode: mode };
+      }),
     setPreviewExpandedWithoutItinerary: (expanded) =>
       set({ previewExpandedWithoutItinerary: expanded }),
     setChatActivity: (activity) => set({ chatActivity: activity }),

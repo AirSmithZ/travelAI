@@ -53,8 +53,9 @@ plan.travel_intel.hotels = [
 assert(derivePlanReadiness(plan).canGenerate, 'dest+flight+hotel can generate');
 assert(getPlanningNextStep(plan)?.kind === 'generate', 'next step generate');
 const itineraryItem = derivePlanReadiness(plan).items.find((i) => i.id === 'itinerary');
-assert(itineraryItem?.action === 'none', 'no preview until geometry or days');
+assert(itineraryItem?.action === 'none', 'no preview until itinerary days');
 
+// P104: 片区 geometry 不再从摘要打开行程图
 plan.travel_intel.recommended_stay_zones = [
   {
     id: 'z1',
@@ -69,8 +70,8 @@ plan.travel_intel.recommended_stay_zones = [
   },
 ];
 assert(
-  derivePlanReadiness(plan).items.find((i) => i.id === 'itinerary')?.action === 'open_preview',
-  'zone geometry opens preview',
+  derivePlanReadiness(plan).items.find((i) => i.id === 'itinerary')?.action === 'none',
+  'zone geometry alone does not open preview from summary',
 );
 
 const bare = createEmptyPlan();

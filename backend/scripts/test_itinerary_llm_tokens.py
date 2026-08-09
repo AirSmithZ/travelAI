@@ -51,11 +51,23 @@ def test_require_itinerary_raw():
 
 def test_empty_content_rejected():
     try:
-        LLMClient._require_message_content("", finish_reason="length")
+        LLMClient._require_message_content(
+            "", finish_reason="length", endpoint="parse_stream"
+        )
         raise AssertionError("expected empty content to fail")
     except ValueError as e:
         assert "空 content" in str(e)
         assert "length" in str(e)
+        assert "LLM_MAX_TOKENS_PARSE" in str(e)
+        assert "LLM_MAX_TOKENS_GENERATE" not in str(e)
+
+    try:
+        LLMClient._require_message_content(
+            "", finish_reason="length", endpoint="generate_stream"
+        )
+        raise AssertionError("expected empty content to fail")
+    except ValueError as e:
+        assert "LLM_MAX_TOKENS_GENERATE" in str(e)
 
     text = LLMClient._require_message_content('{"a":1}', finish_reason="stop")
     assert text.startswith("{")

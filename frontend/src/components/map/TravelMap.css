@@ -150,6 +150,59 @@
   flex-shrink: 0;
 }
 
+/* P108: stay hotel DOM markers (pre-itinerary lodging candidates) */
+.stay-hotel-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transform: translateY(4px);
+}
+
+.stay-hotel-marker__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  border: 2px solid #0f172a;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.stay-hotel-marker--selected .stay-hotel-marker__dot {
+  width: 18px;
+  height: 18px;
+  background: #f59e0b;
+  box-shadow:
+    0 0 0 3px rgba(245, 158, 11, 0.28),
+    0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.stay-hotel-marker__label {
+  max-width: 120px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #e2e8f0;
+  background: rgba(12, 18, 25, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.stay-hotel-marker--selected .stay-hotel-marker__label {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
 .map-pick-marker {
   width: 22px;
   height: 22px;

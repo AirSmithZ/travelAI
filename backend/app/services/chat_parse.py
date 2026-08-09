@@ -372,6 +372,7 @@ def _validate_llm_result(raw: dict, message: str, client: LLMClient, system: str
             model=settings.llm_model_parse,
             max_tokens=settings.llm_max_tokens_parse,
             endpoint="parse_fix",
+            thinking=False,
         )
         try:
             return LLMParseToolResult.model_validate(fixed_raw)
@@ -398,6 +399,7 @@ async def _validate_llm_result_async(
             model=settings.llm_model_parse,
             max_tokens=settings.llm_max_tokens_parse,
             endpoint="parse_fix",
+            thinking=False,
         )
         try:
             return LLMParseToolResult.model_validate(fixed_raw)
@@ -435,6 +437,7 @@ async def _fix_truncated_json_async(
         model=settings.llm_model_parse,
         max_tokens=settings.llm_max_tokens_parse + 500,
         endpoint="parse_fix_json",
+        thinking=False,
     )
 
 
@@ -470,6 +473,7 @@ def parse_chat(req: ChatParseRequest, client: LLMClient) -> ChatParseResponse:
         model=settings.llm_model_parse,
         max_tokens=settings.llm_max_tokens_parse,
         endpoint="parse",
+        thinking=False,
     )
     parsed = _validate_llm_result(raw, req.message, client, system)
     return _build_parse_response(req, parsed)
@@ -485,6 +489,7 @@ async def parse_chat_async(req: ChatParseRequest, client: LLMClient) -> ChatPars
         model=settings.llm_model_parse,
         max_tokens=settings.llm_max_tokens_parse,
         endpoint="parse",
+        thinking=False,
     )
     parsed = await _validate_llm_result_async(raw, req.message, client, system)
     return _build_parse_response(req, parsed)
@@ -506,6 +511,7 @@ async def parse_chat_stream_async(req: ChatParseRequest, client: LLMClient):
         model=settings.llm_model_parse,
         max_tokens=settings.llm_max_tokens_parse,
         endpoint="parse_stream",
+        thinking=False,
     ):
         accumulated += delta
         reply_preview = extract_streaming_reply(accumulated)

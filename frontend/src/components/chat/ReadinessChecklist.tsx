@@ -13,12 +13,17 @@ export function ReadinessChecklist({ onClose, onPrefill }: ReadinessChecklistPro
   const setLeftPanelMode = usePlanStore((s) => s.setLeftPanelMode);
   const generateItinerary = usePlanStore((s) => s.generateItinerary);
   const addChatMessage = usePlanStore((s) => s.addChatMessage);
-  const isGenerating = usePlanStore((s) => s.isGeneratingItinerary);
   const readiness = derivePlanReadiness(plan);
+  const hasItinerary = Boolean(plan.itinerary?.days?.length);
 
   const primaryMissing = readiness.items.find((i) => !i.done && i.hard);
 
   const handleGenerate = async () => {
+    // P98: 已有行程不再从此入口重复 generate
+    if (hasItinerary) {
+      onClose();
+      return;
+    }
     if (!readiness.canGenerate) {
       if (primaryMissing?.action === 'open_flight') {
         setLeftPanelMode('flight');
@@ -27,6 +32,7 @@ export function ReadinessChecklist({ onClose, onPrefill }: ReadinessChecklistPro
       }
       return;
     }
+    // P105: 先关闸门，进度只由 ChatActivityBubble 承担
     onClose();
     const result = await generateItinerary('generate');
     if (result === 'blocked') {
@@ -45,7 +51,9 @@ export function ReadinessChecklist({ onClose, onPrefill }: ReadinessChecklistPro
   return (
     <div className="readiness-check" role="region" aria-label="生成前检查">
       <div className="readiness-check__head">
-        <span className="readiness-check__title">生成前检查</span>
+        <span className="readiness-check__title">
+          {hasItinerary ? '行程已生成' : '生成前检查'}
+        </span>
         <button type="button" className="readiness-check__close" onClick={onClose}>
           关闭
         </button>
@@ -70,14 +78,17 @@ export function ReadinessChecklist({ onClose, onPrefill }: ReadinessChecklistPro
         <p className="readiness-check__warn">{readiness.softWarnings[0]}</p>
       )}
       <div className="readiness-check__actions">
-        {readiness.canGenerate ? (
+        {hasItinerary ? (
+          <button type="button" className="readiness-check__primary" onClick={onClose}>
+            知道了
+          </button>
+        ) : readiness.canGenerate ? (
           <button
             type="button"
             className="readiness-check__primary"
-            disabled={isGenerating}
             onClick={() => void handleGenerate()}
           >
-            {isGenerating ? '生成中…' : '生成玩法'}
+            生成玩法
           </button>
         ) : primaryMissing?.action === 'open_flight' ? (
           <button

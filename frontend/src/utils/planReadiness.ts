@@ -69,9 +69,6 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
   const evidenceVerified = evidenceItems.filter((e) => e.verified).length;
   const evidenceStatus = plan.itinerary?.meta?.evidence_status;
   const dayCount = plan.itinerary?.days?.length ?? 0;
-  const hasStayGeometry = (plan.travel_intel.recommended_stay_zones ?? []).some((z) =>
-    Boolean(z.geometry),
-  );
 
   let evidenceDetail = '生成时检索 · 点此了解用法';
   if (evidenceCount > 0) {
@@ -167,24 +164,14 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
     {
       id: 'itinerary',
       label: '行程图',
-      detail:
-        dayCount > 0
-          ? `已有 ${dayCount} 天 · 点此预览`
-          : hasStayGeometry
-            ? '可查看片区地图'
-            : '尚未生成 · 生成后可用',
+      detail: dayCount > 0 ? `已有 ${dayCount} 天 · 点此预览` : '尚未生成 · 生成后可用',
       done: dayCount > 0,
       hard: false,
       soft: false,
-      hint:
-        dayCount > 0
-          ? '打开路线预览'
-          : hasStayGeometry
-            ? '打开地图查看住宿片区'
-            : '生成玩法行程后可预览路线图',
+      hint: dayCount > 0 ? '打开路线预览' : '生成玩法行程后可预览路线图',
       modifyHint: '优化适配当前机酒',
-      // 预览入口收拢到摘要行；生成仍走右栏下一步 / Readiness
-      action: dayCount > 0 || hasStayGeometry ? 'open_preview' : 'none',
+      // P104: 片区辅助图只在住宿面板内；摘要「行程图」仅玩法生成后可开
+      action: dayCount > 0 ? 'open_preview' : 'none',
     },
   ];
 
@@ -238,6 +225,7 @@ export interface PlanningNextStep {
 /** Sticky chat guide before itinerary exists — what to do next + panel jump. */
 export function getPlanningNextStep(plan: TravelPlan): PlanningNextStep | null {
   const dayCount = plan.itinerary?.days?.length ?? 0;
+  // P98: 已有玩法行程后不再提示「生成玩法」
   if (dayCount > 0) return null;
 
   const readiness = derivePlanReadiness(plan);

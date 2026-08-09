@@ -67,19 +67,21 @@ export function PlanSummaryCard({ onPrefill, onRequestGenerate }: PlanSummaryCar
   const plan = usePlanStore((s) => s.getActivePlan());
   const setLeftPanelMode = usePlanStore((s) => s.setLeftPanelMode);
   const setActiveView = usePlanStore((s) => s.setActiveView);
-  const setPreviewExpandedWithoutItinerary = usePlanStore(
-    (s) => s.setPreviewExpandedWithoutItinerary,
-  );
   const [expanded, setExpanded] = useState(true);
+  const isGenerating = usePlanStore((s) => s.isGeneratingItinerary);
   const readiness = derivePlanReadiness(plan);
   const nextStep = getPlanningNextStep(plan);
-  const showNext = Boolean(nextStep) && typeof onRequestGenerate === 'function';
+  // P98: 生成中或已有行程时不展示「检查并生成玩法」
+  const showNext =
+    Boolean(nextStep) &&
+    typeof onRequestGenerate === 'function' &&
+    !isGenerating &&
+    !(plan.itinerary?.days?.length);
 
   const openPreview = () => {
     const dayCount = plan.itinerary?.days?.length ?? 0;
-    if (dayCount === 0) {
-      setPreviewExpandedWithoutItinerary(true);
-    }
+    // P104: 无玩法行程时摘要不展开地图（片区图仅住宿面板内）
+    if (dayCount === 0) return;
     setActiveView('map');
   };
 

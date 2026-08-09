@@ -23,5 +23,6 @@ STAY_ZONE_SYSTEM = """你是旅行住宿区域规划助手。根据用户的 Tri
 3. 结合航班抵达/出发时刻说明首末晚取舍
 4. covers_day_indices 为 0-based，对应 itinerary.days 下标
 5. rationale 必须中文，点名主要覆盖哪些天的活动区域
-6. 仅输出 JSON
+6. 尊重 preferences：minimize_hotel_moves=true 时优先 compromise/单片区；safety_sensitive=true 时避开偏僻/夜间治安弱片区；budget 仅作价位语境参考
+7. 仅输出 JSON
 """

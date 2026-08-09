@@ -78,6 +78,40 @@ export function hotelFromZoneInput(
   };
 }
 
+
+/** P112: 店名搜索锁定 — 不挂 zone_id，与片区入口解耦。 */
+export function hotelFromStandaloneInput(
+  input: {
+    name: string;
+    lat: number;
+    lng: number;
+    address?: string;
+    city: string;
+    check_in: string;
+    check_out: string;
+  },
+  opts: { sequence: number; previousId?: string },
+): ConfirmedHotelStay {
+  const hasCoords =
+    input.lat != null &&
+    input.lng != null &&
+    (Math.abs(input.lat) > 1e-6 || Math.abs(input.lng) > 1e-6);
+  return {
+    id: opts.previousId ?? crypto.randomUUID(),
+    sequence: opts.sequence,
+    city: input.city.trim() || '目的地',
+    name: input.name.trim() || '酒店（待命名）',
+    check_in: input.check_in,
+    check_out: input.check_out || input.check_in,
+    is_primary: opts.sequence === 1,
+    is_anchor: true,
+    booking_status: hasCoords ? 'selected' : 'zone_only',
+    lat: input.lat,
+    lng: input.lng,
+    address: input.address,
+  };
+}
+
 export function syncIntelHotelFromNode(
   intel: TravelIntel,
   nodeId: string,

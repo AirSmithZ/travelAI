@@ -39,19 +39,39 @@ export function bindMapStylePatches(map: maplibregl.Map): () => void {
   };
 }
 
-/** 样式加载完成后再执行；若尚未就绪则等待 load 事件 */
+/**
+ * 样式真正可写 source/layer 后再执行。
+ * P106: `load` 时 `isStyleLoaded()` 仍可能为 false——需跟 idle/styledata，避免片区/酒店层静默跳过。
+ */
 export function whenMapStyleReady(map: maplibregl.Map, fn: () => void): () => void {
-  const run = () => {
-    if (map.isStyleLoaded()) fn();
+  let settled = false;
+
+  const tryRun = () => {
+    if (settled) return;
+    if (!map.isStyleLoaded()) return;
+    settled = true;
+    map.off('load', onLoad);
+    map.off('idle', tryRun);
+    map.off('styledata', tryRun);
+    fn();
+  };
+
+  const onLoad = () => {
+    tryRun();
+    if (!settled) map.once('idle', tryRun);
   };
 
   if (map.isStyleLoaded()) {
-    run();
+    queueMicrotask(tryRun);
   } else {
-    map.once('load', run);
+    map.once('load', onLoad);
+    map.on('styledata', tryRun);
   }
 
   return () => {
-    map.off('load', run);
+    settled = true;
+    map.off('load', onLoad);
+    map.off('idle', tryRun);
+    map.off('styledata', tryRun);
   };
 }

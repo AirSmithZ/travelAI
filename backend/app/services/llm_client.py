@@ -82,15 +82,28 @@ class LLMClient:
         }
 
     @staticmethod
-    def _require_message_content(content: str | None, *, finish_reason: str | None) -> str:
+    def _require_message_content(
+        content: str | None,
+        *,
+        finish_reason: str | None,
+        endpoint: str = "",
+    ) -> str:
         """llm-api-engineering：禁止把空 content 当成 "{}" 糊弄下游。"""
         text = (content or "").strip()
         if text:
             return text
+        ep = (endpoint or "").lower()
+        if "parse" in ep:
+            knobs = "LLM_MAX_TOKENS_PARSE，并确认结构化调用已关闭 thinking"
+        elif "generate" in ep:
+            knobs = "LLM_MAX_TOKENS_GENERATE，并确认结构化调用已关闭 thinking"
+        else:
+            knobs = "对应接口的 max_tokens，并确认结构化调用已关闭 thinking"
         raise ValueError(
             "LLM 返回空 content"
-            f"（finish_reason={finish_reason or 'unknown'}）；"
-            "可能被 max_tokens 截断或仅输出了 reasoning，请增大 LLM_MAX_TOKENS_GENERATE 后重试"
+            f"（finish_reason={finish_reason or 'unknown'}）"
+            f"{f' endpoint={endpoint}' if endpoint else ''}；"
+            f"可能被 max_tokens 截断或仅输出了 reasoning，请检查 {knobs} 后重试"
         )
 
     def _log_and_parse(
@@ -178,7 +191,9 @@ class LLMClient:
                     choice = resp.choices[0]
                     finish_reason = getattr(choice, "finish_reason", None)
                     content = self._require_message_content(
-                        choice.message.content, finish_reason=finish_reason
+                        choice.message.content,
+                        finish_reason=finish_reason,
+                        endpoint=endpoint,
                     )
                     return self._log_and_parse(
                         content,
@@ -385,7 +400,9 @@ class LLMClient:
                     choice = resp.choices[0]
                     finish_reason = getattr(choice, "finish_reason", None)
                     content = self._require_message_content(
-                        choice.message.content, finish_reason=finish_reason
+                        choice.message.content,
+                        finish_reason=finish_reason,
+                        endpoint=endpoint,
                     )
                     return self._log_and_parse(
                         content,

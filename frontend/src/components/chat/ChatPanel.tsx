@@ -31,6 +31,7 @@ import {
   createParseActivity,
   formatActivitySummary,
   patchActivityStep,
+  summarizeParseHintFromMessage,
 } from '../../types/chatActivity';
 import type { ChatMode, ChatParseSelection, FormPatch } from '../../types/travelPlan';
 import './Chat.css';
@@ -129,7 +130,19 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
       : '用一句话说清需求，例如「上海出发去新加坡 4 天，偏美食」。写好后上方会出现「下一步」指引，可跳转机票/酒店面板确认。';
 
   const openReadiness = useCallback(() => {
-    const readiness = derivePlanReadiness(usePlanStore.getState().getActivePlan());
+    const store = usePlanStore.getState();
+    const active = store.getActivePlan();
+    // P98: 已有玩法行程不再打开「生成玩法」闸门
+    if (active.itinerary?.days?.length) {
+      setShowReadiness(false);
+      return;
+    }
+    // P105: 生成进行中只留 Activity，不再叠闸门卡
+    if (store.isGeneratingItinerary || store.chatActivity?.op === 'generate') {
+      setShowReadiness(false);
+      return;
+    }
+    const readiness = derivePlanReadiness(active);
     addChatMessage('assistant', formatReadinessAssistantText(readiness));
     setShowReadiness(true);
   }, [addChatMessage]);
@@ -139,6 +152,17 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
     consumeReadinessPrompt();
     openReadiness();
   }, [pendingReadinessPrompt, consumeReadinessPrompt, openReadiness]);
+
+  useEffect(() => {
+    if (plan.itinerary?.days?.length) setShowReadiness(false);
+  }, [plan.itinerary?.days?.length]);
+
+  // P105: UX-CHAT-02 闸门与 UX-CHAT-05 Activity 互斥
+  useEffect(() => {
+    if (isGeneratingItinerary || chatActivity?.op === 'generate') {
+      setShowReadiness(false);
+    }
+  }, [isGeneratingItinerary, chatActivity?.op]);
 
   const checkHealth = useCallback(async () => {
     const data = await fetchHealth();
@@ -186,7 +210,7 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
     setIsLoading(true);
     setStreamingHint('');
     const parseStartedAt = Date.now();
-    setChatActivity(createParseActivity());
+    setChatActivity(createParseActivity(summarizeParseHintFromMessage(text)));
 
     const afterUser = usePlanStore.getState().getActivePlan();
 
@@ -237,12 +261,12 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
                 );
               },
               onValidating: () => {
-                setStreamingHint((prev) => prev || '正在校验解析结果…');
+                setStreamingHint((prev) => prev || '正在整理待确认项…');
                 updateChatActivity((prev) =>
                   patchActivityStep(
                     patchActivityStep(prev, 'parse_llm', { status: 'done' }),
                     'parse_validate',
-                    { status: 'running' },
+                    { status: 'running', detail: '即将请你确认' },
                   ),
                 );
               },
@@ -466,7 +490,9 @@ export function ChatPanel({ onCollapse, selectedNodeName }: ChatPanelProps) {
           activity={chatActivity}
           emptyHint={emptyHint}
           footer={
-            showReadiness ? (
+            showReadiness &&
+            !isGeneratingItinerary &&
+            chatActivity?.op !== 'generate' ? (
               <ReadinessChecklist
                 onClose={() => setShowReadiness(false)}
                 onPrefill={prefillComposer}

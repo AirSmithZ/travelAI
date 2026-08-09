@@ -23,11 +23,16 @@ export function PreviewPane() {
   const setGraphViewMode = usePlanStore((s) => s.setGraphViewMode);
 
   const hasItinerary = Boolean(itinerary?.days.length);
-  // P74: 无行程但有住宿片区 geometry 时仍渲染地图（片区圈选）
+  const stayHotelMapPins = usePlanStore((s) => s.stayHotelMapPins);
+  const previewExpanded = usePlanStore((s) => s.previewExpandedWithoutItinerary);
+  // P97/P100: 无行程仅在用户展开且有片区/酒店钉时渲染地图（避免空白底图）
   const hasStayGeometry = (plan.travel_intel.recommended_stay_zones ?? []).some((z) =>
     Boolean(z.geometry),
   );
-  const showMapOnly = !hasItinerary && hasStayGeometry;
+  const showMapOnly =
+    !hasItinerary &&
+    previewExpanded &&
+    (stayHotelMapPins.length > 0 || hasStayGeometry);
   const showGraphModeTabs = hasItinerary;
   // 总览 = 全部天矩阵/全图，日期在列头；工具栏日期条仅单日模式
   const showDayTabs = hasItinerary && graphViewMode === 'day';
@@ -70,15 +75,10 @@ export function PreviewPane() {
               <EmptyPreview type={activeView} phase={plan.phase} />
             </motion.div>
           ) : showMapOnly ? (
-            <motion.div
-              key="map-zones"
-              className="preview-pane__view"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
+            // P108: 勿对地图做 opacity 动画——MapLibre 在 opacity:0 / transform 父级下易丢自定义层与镜头
+            <div key="map-zones" className="preview-pane__view">
               <TravelMap visible />
-            </motion.div>
+            </div>
           ) : (
             <motion.div
               key="preview-stack"

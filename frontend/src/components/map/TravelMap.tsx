@@ -14,7 +14,14 @@ import {
   STAY_ZONE_FILL,
   updateStayZoneSource,
 } from '../../utils/stayZoneGeoJSON';
+import {
+  clearStayHotelDomMarkers,
+  syncStayHotelDomMarkers,
+  type StayHotelMapPin,
+} from '../../utils/stayHotelMapPins';
+import { isValidMapCoord } from '../../utils/mapCoordGuards';
 import type { DayPlan, ItineraryEdge, ItineraryNode, NodeCategory } from '../../types/itinerary';
+import type { RecommendedStayZone } from '../../types/stayZone';
 import './TravelMap.css';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
@@ -205,6 +212,7 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
   const lastFitKeyRef = useRef<string | null>(null);
   const pendingFitRef = useRef(false);
   const pickMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const stayHotelMarkersRef = useRef<maplibregl.Marker[]>([]);
   const nodeHandlersBoundRef = useRef(false);
   const wasVisibleRef = useRef(false);
 
@@ -221,6 +229,7 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
     () => plan.travel_intel.recommended_stay_zones ?? [],
     [plan.travel_intel.recommended_stay_zones],
   );
+  const stayHotelMapPins = usePlanStore((s) => s.stayHotelMapPins);
   const selectedStayZoneId = usePlanStore((s) => s.selectedStayZoneId);
   const setSelectedStayZoneId = usePlanStore((s) => s.setSelectedStayZoneId);
   const activeDayIndex = usePlanStore((s) => s.activeDayIndex);
@@ -270,14 +279,32 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
   );
 
   const fitKey = useMemo(() => {
-    if (!itinerary) return '';
+    if (!itinerary) {
+      const zoneKey = stayZones
+        .filter((z) => z.geometry && z.status !== 'rejected')
+        .map((z) => z.id)
+        .join(',');
+      const pinKey = stayHotelMapPins
+        .map((p) => `${p.id}:${p.selected ? 1 : 0}:${p.lat.toFixed(4)}`)
+        .join('|');
+      return `stay:${selectedStayZoneId ?? ''}:${zoneKey}:${pinKey}`;
+    }
     const dayKey = mapDays.map((d) => d.day_index).join(',');
     const nodeKey = mappableNodes.map((n) => n.id).join(',');
     const coordKey = mappableNodes
       .map((n) => `${n.id}:${n.lat.toFixed(5)},${n.lng.toFixed(5)}`)
       .join('|');
     return `${graphViewMode}:${activeDayIndex}:${dayKey}:${nodeKey}:${coordKey}`;
-  }, [itinerary, graphViewMode, activeDayIndex, mapDays, mappableNodes]);
+  }, [
+    itinerary,
+    graphViewMode,
+    activeDayIndex,
+    mapDays,
+    mappableNodes,
+    stayZones,
+    stayHotelMapPins,
+    selectedStayZoneId,
+  ]);
 
   const clearPickMarker = useCallback(() => {
     pickMarkerRef.current?.remove();
@@ -313,6 +340,87 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       pendingFitRef.current = false;
     },
     [],
+  );
+
+  /** P100/P108: 无行程节点时 fit 片区 + 酒店候选钉；@returns 是否完成 fit */
+  const fitToStayPreview = useCallback(
+    (
+      map: maplibregl.Map,
+      zones: RecommendedStayZone[],
+      pins: StayHotelMapPin[],
+      animate: boolean,
+    ): boolean => {
+      const container = containerRef.current;
+      if (!container || container.clientWidth < 2 || container.clientHeight < 2) {
+        pendingFitRef.current = true;
+        return false;
+      }
+      const bounds = new maplibregl.LngLatBounds();
+      let any = false;
+
+      const preferZoneId = selectedStayZoneId;
+      const zoneList =
+        preferZoneId && zones.some((z) => z.id === preferZoneId)
+          ? zones.filter((z) => z.id === preferZoneId)
+          : zones;
+
+      for (const z of zoneList) {
+        if (z.status === 'rejected' || !z.geometry) continue;
+        if (z.geometry.type === 'circle') {
+          const lat = Number(z.geometry.center.lat);
+          const lng = Number(z.geometry.center.lng);
+          if (!isValidMapCoord(lat, lng)) continue;
+          const r = Math.max(z.geometry.radius_m, 400);
+          const dLat = r / 111_320;
+          const dLng = r / Math.max(Math.abs(111_320 * Math.cos((lat * Math.PI) / 180)), 1e-3);
+          bounds.extend([lng - dLng, lat - dLat]);
+          bounds.extend([lng + dLng, lat + dLat]);
+          any = true;
+        } else {
+          for (const [lngRaw, latRaw] of z.geometry.coordinates) {
+            const lat = Number(latRaw);
+            const lng = Number(lngRaw);
+            if (!isValidMapCoord(lat, lng)) continue;
+            bounds.extend([lng, lat]);
+            any = true;
+          }
+        }
+      }
+      for (const p of pins) {
+        const lat = Number(p.lat);
+        const lng = Number(p.lng);
+        if (!isValidMapCoord(lat, lng)) continue;
+        bounds.extend([lng, lat]);
+        any = true;
+      }
+      if (!any || bounds.isEmpty()) return false;
+
+      // Guard against null-island contamination → world view
+      const ne = bounds.getNorthEast();
+      const sw = bounds.getSouthWest();
+      if (ne.lng - sw.lng > 8 || ne.lat - sw.lat > 8) {
+        const focus = pins.find((p) => isValidMapCoord(Number(p.lat), Number(p.lng)));
+        if (focus) {
+          map.easeTo({
+            center: [Number(focus.lng), Number(focus.lat)],
+            zoom: 14,
+            duration: animate ? 600 : 0,
+          });
+          pendingFitRef.current = false;
+          return true;
+        }
+        return false;
+      }
+
+      map.fitBounds(bounds, {
+        padding: 56,
+        maxZoom: 15,
+        duration: animate ? 600 : 0,
+      });
+      pendingFitRef.current = false;
+      return true;
+    },
+    [selectedStayZoneId],
   );
 
   const bindNodeLayerHandlers = useCallback(
@@ -367,6 +475,9 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       ensureNodeLayers(map);
       bindNodeLayerHandlers(map);
       map.resize();
+      // Style async load can leave camera at 0,0 — reassert constructor center until stay fit runs
+      map.jumpTo({ center: [103.86, 1.29], zoom: 11 });
+      pendingFitRef.current = true;
     };
 
     const unbindStyleReady = whenMapStyleReady(map, onLoad);
@@ -378,6 +489,8 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       setMapReady(false);
       nodeHandlersBoundRef.current = false;
       clearPickMarker();
+      clearStayHotelDomMarkers(stayHotelMarkersRef.current);
+      stayHotelMarkersRef.current = [];
       map.remove();
       mapRef.current = null;
       lastFitKeyRef.current = null;
@@ -385,100 +498,118 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
     };
   }, [bindNodeLayerHandlers, clearPickMarker]);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    const map = mapRef.current;
-    if (!container || !map) return;
-
-    const ro = new ResizeObserver(() => {
-      map.resize();
-      if (pendingFitRef.current && mapReadyRef.current) {
-        const nodes = mappableNodes;
-        if (nodes.length > 0) {
-          fitToNodes(map, spreadMapNodes(nodes), false);
-          lastFitKeyRef.current = fitKey;
-        }
-      }
-    });
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, [fitKey, fitToNodes, mappableNodes]);
-
+  /** @returns false if style not ready — caller must not advance lastFitKeyRef */
   const syncMapData = useCallback(
-    (opts?: { fit?: boolean; animateFit?: boolean }) => {
+    (opts?: { fit?: boolean; animateFit?: boolean }): boolean => {
       const map = mapRef.current;
-      if (!map || !map.isStyleLoaded()) return;
+      if (!map || !map.isStyleLoaded()) return false;
 
-      ensureNodeLayers(map);
-      const source = map.getSource(NODE_SOURCE) as GeoJSONSource | undefined;
-      if (source) source.setData(nodesGeoJSON);
+      try {
+        ensureNodeLayers(map);
+        const source = map.getSource(NODE_SOURCE) as GeoJSONSource | undefined;
+        if (source) source.setData(nodesGeoJSON);
 
-      clearRouteLayers(map);
+        clearRouteLayers(map);
 
-      const displayById = new Map(displayNodes.map((n) => [n.id, n]));
-      // Build routes per day so id collisions across days don't invent orphan segments
-      const primaryEdges: ItineraryEdge[] = [];
-      const altEdges: ItineraryEdge[] = [];
-      for (const day of mapDays) {
-        const dayIds = new Set(day.nodes.map((n) => n.id));
-        const dayDisplay = new Map(
-          [...displayById.entries()].filter(([id]) => dayIds.has(id)),
-        );
-        for (const edge of day.edges) {
-          if (!dayDisplay.has(edge.from) || !dayDisplay.has(edge.to)) continue;
-          if (edge.type === 'alternative') altEdges.push(edge);
-          else primaryEdges.push(edge);
+        const displayById = new Map(displayNodes.map((n) => [n.id, n]));
+        // Build routes per day so id collisions across days don't invent orphan segments
+        const primaryEdges: ItineraryEdge[] = [];
+        const altEdges: ItineraryEdge[] = [];
+        for (const day of mapDays) {
+          const dayIds = new Set(day.nodes.map((n) => n.id));
+          const dayDisplay = new Map(
+            [...displayById.entries()].filter(([id]) => dayIds.has(id)),
+          );
+          for (const edge of day.edges) {
+            if (!dayDisplay.has(edge.from) || !dayDisplay.has(edge.to)) continue;
+            if (edge.type === 'alternative') altEdges.push(edge);
+            else primaryEdges.push(edge);
+          }
         }
-      }
 
-      const addRoutes = (
-        edges: ItineraryEdge[],
-        sourceId: string,
-        color: string,
-        width: number,
-        opacity: number,
-        dash?: number[],
-      ) => {
-        const features = buildDayRouteFeatures(edges, displayById);
-        if (features.length === 0) return;
+        const addRoutes = (
+          edges: ItineraryEdge[],
+          sourceId: string,
+          color: string,
+          width: number,
+          opacity: number,
+          dash?: number[],
+        ) => {
+          const features = buildDayRouteFeatures(edges, displayById);
+          if (features.length === 0) return;
 
-        map.addSource(sourceId, {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features },
-        });
-        map.addLayer(
-          {
-            id: sourceId,
-            type: 'line',
-            source: sourceId,
-            paint: {
-              'line-color': color,
-              'line-width': width,
-              'line-opacity': opacity,
-              ...(dash ? { 'line-dasharray': dash } : {}),
+          map.addSource(sourceId, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          });
+          map.addLayer(
+            {
+              id: sourceId,
+              type: 'line',
+              source: sourceId,
+              paint: {
+                'line-color': color,
+                'line-width': width,
+                'line-opacity': opacity,
+                ...(dash ? { 'line-dasharray': dash } : {}),
+              },
             },
-          },
-          map.getLayer(NODE_CIRCLE) ? NODE_CIRCLE : undefined,
+            map.getLayer(NODE_CIRCLE) ? NODE_CIRCLE : undefined,
+          );
+        };
+
+        addRoutes(primaryEdges, 'route-primary', '#4a9eff', 3, 0.85);
+        addRoutes(altEdges, 'route-alt', '#64748b', 2, 0.5, [2, 2]);
+
+        if (graphViewMode === 'overview' && itinerary) {
+          const cross = (itinerary.cross_day_edges ?? []).filter(
+            (e) => displayById.has(e.from) && displayById.has(e.to),
+          );
+          addRoutes(cross, 'route-cross-day', '#a78bfa', 2, 0.7, [4, 3]);
+        }
+
+        const zonesOk = updateStayZoneSource(
+          map,
+          stayZones,
+          selectedStayZoneId,
+          NODE_CIRCLE,
         );
-      };
-
-      addRoutes(primaryEdges, 'route-primary', '#4a9eff', 3, 0.85);
-      addRoutes(altEdges, 'route-alt', '#64748b', 2, 0.5, [2, 2]);
-
-      if (graphViewMode === 'overview' && itinerary) {
-        const cross = (itinerary.cross_day_edges ?? []).filter(
-          (e) => displayById.has(e.from) && displayById.has(e.to),
+        // P108/P109: 酒店候选用 DOM Marker；点击回写 store 供住宿面板选中
+        stayHotelMarkersRef.current = syncStayHotelDomMarkers(
+          map,
+          stayHotelMapPins,
+          stayHotelMarkersRef.current,
+          (pin) => usePlanStore.getState().requestStayHotelMapPinPick(pin.id),
         );
-        addRoutes(cross, 'route-cross-day', '#a78bfa', 2, 0.7, [4, 3]);
-      }
+        const pinsOk =
+          stayHotelMapPins.length === 0 || stayHotelMarkersRef.current.length > 0;
+        if (!zonesOk && !pinsOk && stayHotelMapPins.length > 0) return false;
 
-      updateStayZoneSource(map, stayZones, selectedStayZoneId, NODE_CIRCLE);
-      bringNodeLayersToFront(map);
+        bringNodeLayersToFront(map);
 
-      if (opts?.fit && displayNodes.length > 0) {
-        fitToNodes(map, displayNodes, Boolean(opts.animateFit));
-        lastFitKeyRef.current = fitKey;
-        pendingFitRef.current = false;
+        if (opts?.fit) {
+          if (displayNodes.length > 0) {
+            fitToNodes(map, displayNodes, Boolean(opts.animateFit));
+            lastFitKeyRef.current = fitKey;
+            pendingFitRef.current = false;
+          } else if (stayZones.some((z) => z.geometry) || stayHotelMapPins.length > 0) {
+            const fitted = fitToStayPreview(
+              map,
+              stayZones,
+              stayHotelMapPins,
+              Boolean(opts.animateFit),
+            );
+            // P107: 容器尚未布局时勿推进 fitKey / 勿清 pending，等 resize 重试
+            if (fitted) {
+              lastFitKeyRef.current = fitKey;
+            } else {
+              pendingFitRef.current = true;
+            }
+          }
+        }
+        return zonesOk || pinsOk || stayHotelMapPins.length === 0;
+      } catch {
+        return false;
       }
     },
     [
@@ -488,18 +619,26 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       graphViewMode,
       itinerary,
       stayZones,
+      stayHotelMapPins,
       selectedStayZoneId,
       fitToNodes,
+      fitToStayPreview,
       fitKey,
     ],
   );
 
+  const hasStayOverlay =
+    stayHotelMapPins.length > 0 || stayZones.some((z) => Boolean(z.geometry));
+
   // 节点 + 当日路线：随天切换 / 坐标变化同步
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapReady) return;
 
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retries = 0;
+
     const run = () => {
       if (cancelled) return;
       if (!visible) {
@@ -507,19 +646,49 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
         return;
       }
       const shouldFit = Boolean(fitKey && fitKey !== lastFitKeyRef.current);
-      syncMapData({
+      const ok = syncMapData({
         fit: shouldFit || pendingFitRef.current,
         animateFit: shouldFit && lastFitKeyRef.current != null,
       });
-      if (shouldFit) lastFitKeyRef.current = fitKey;
+      if ((!ok || pendingFitRef.current) && retries < 12) {
+        // P107: style/尺寸瞬时空窗时短重试，避免「角标有 8 家、底图无钉」
+        retries += 1;
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+          if (cancelled) return;
+          map.resize();
+          run();
+        }, 100);
+      }
     };
 
     const unbindStyleReady = whenMapStyleReady(map, run);
+    // mapReady 后若 style 已可写，再跑一轮（覆盖 whenMapStyleReady 一次性 settled）
+    const raf = requestAnimationFrame(run);
     return () => {
       cancelled = true;
       unbindStyleReady();
+      cancelAnimationFrame(raf);
+      if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [syncMapData, visible, fitKey]);
+  }, [syncMapData, visible, fitKey, mapReady]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const map = mapRef.current;
+    if (!container || !map) return;
+
+    const ro = new ResizeObserver(() => {
+      map.resize();
+      if (!mapReadyRef.current) return;
+      // P107: 尺寸变化时重写片区/酒店层（0→有尺寸时勿只 resize）
+      if (pendingFitRef.current || hasStayOverlay) {
+        syncMapData({ fit: true, animateFit: false });
+      }
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [syncMapData, hasStayOverlay]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -681,18 +850,27 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
           </a>
         </p>
       )}
-      {!isPickMode && mappableNodes.length > 0 && (
+      {!isPickMode && Boolean(itinerary?.days?.length) && mappableNodes.length > 0 && (
         <span className="travel-map__mode-badge travel-map__mode-badge--count">
           {graphViewMode === 'overview'
             ? `总览 · 共 ${mappableNodes.length} 个节点`
             : `第 ${activeDayIndex + 1} 天 · ${mappableNodes.length} 个节点`}
         </span>
       )}
+      {!isPickMode && !itinerary?.days?.length && (
+        <span className="travel-map__mode-badge travel-map__mode-badge--count">
+          {stayHotelMapPins.length > 0
+            ? `住宿预览 · ${stayHotelMapPins.length} 家候选`
+            : '住宿预览 · 片区范围'}
+        </span>
+      )}
       {!isPickMode && (
         <span className="travel-map__mode-badge travel-map__mode-badge--sub">
-          {graphViewMode === 'overview'
-            ? '总览地图 · 展示全部行程天'
-            : '单日地图 · 用上方日期切换'}
+          {!itinerary?.days?.length
+            ? '选酒店时显示片区圈与候选钉'
+            : graphViewMode === 'overview'
+              ? '总览地图 · 展示全部行程天'
+              : '单日地图 · 用上方日期切换'}
         </span>
       )}
       {overlapExtra > 0 && !isPickMode && (

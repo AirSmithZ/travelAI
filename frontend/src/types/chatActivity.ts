@@ -22,16 +22,52 @@ export interface ChatActivitySession {
   reasoning?: string;
 }
 
-export function createParseActivity(): ChatActivitySession {
+/** Best-effort preview from user text for Activity detail (not a second parser). */
+export function summarizeParseHintFromMessage(message: string): string | undefined {
+  const text = message.replace(/\s+/g, ' ').trim();
+  if (!text) return undefined;
+
+  const parts: string[] = [];
+
+  const route = text.match(
+    /(?:从)?([\u4e00-\u9fffA-Za-z]{2,12})(?:到|至|→|->|－|-|—)([\u4e00-\u9fffA-Za-z]{2,12})/,
+  );
+  if (route?.[2]) parts.push(route[2]);
+
+  const dayMatch = text.match(/(\d+)\s*天/);
+  if (dayMatch) parts.push(`${dayMatch[1]}天`);
+
+  const dateTokens = text.match(/\d{1,2}\s*[./月]\s*\d{1,2}/g);
+  if (dateTokens?.length) {
+    const norm = dateTokens.slice(0, 2).map((d) => d.replace(/\s*月\s*/, '/').replace(/\s/g, ''));
+    parts.push(norm.join('–'));
+  }
+
+  const people = text.match(/(\d+)\s*人/);
+  if (people) parts.push(`${people[1]}人`);
+
+  const budgetPer =
+    text.match(/人均\s*([\d.]+)\s*万/) || text.match(/预算[^。；;\n]{0,12}?([\d.]+)\s*万/);
+  if (budgetPer) parts.push(`人均${budgetPer[1]}万`);
+
+  return parts.length ? parts.join(' · ') : undefined;
+}
+
+export function createParseActivity(hint?: string): ChatActivitySession {
+  const detail = hint?.trim() || undefined;
   return {
     id: crypto.randomUUID(),
     op: 'parse',
-    title: '正在理解需求',
+    title: '正在识别行程信息',
     startedAt: Date.now(),
     steps: [
-      { id: 'ack', label: '已收到消息', status: 'done' },
-      { id: 'parse_llm', label: '提取行程字段', status: 'running' },
-      { id: 'parse_validate', label: '校验结果', status: 'pending' },
+      {
+        id: 'parse_llm',
+        label: '识别行程信息',
+        status: 'running',
+        ...(detail ? { detail } : {}),
+      },
+      { id: 'parse_validate', label: '整理待确认项', status: 'pending' },
     ],
   };
 }
@@ -76,8 +112,13 @@ export function patchActivityStep(
   };
 }
 
+function activityTitleBare(title: string): string {
+  return title.replace(/^正在/, '');
+}
+
 export function formatActivitySummary(session: ChatActivitySession, elapsedMs: number): string {
   const sec = Math.max(1, Math.round(elapsedMs / 1000));
+  const bare = activityTitleBare(session.title);
   const lines = session.steps
     .filter((s) => s.status === 'done' || s.status === 'skipped' || s.status === 'error')
     .map((s) => {
@@ -86,9 +127,7 @@ export function formatActivitySummary(session: ChatActivitySession, elapsedMs: n
       return `${mark} ${s.label}${s.detail ? `（${s.detail}）` : ''}`;
     });
   const head =
-    session.error != null
-      ? `${session.title}失败（${sec}s）`
-      : `${session.title}完成（用时 ${sec}s）`;
+    session.error != null ? `${bare}失败（${sec}s）` : `${bare}完成（用时 ${sec}s）`;
   if (!lines.length) return head;
   return `${head}\n${lines.join('\n')}`;
 }

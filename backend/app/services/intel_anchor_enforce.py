@@ -10,15 +10,18 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Literal
 
+from app.services.visit_duration import (
+    apply_category_duration_clamp,
+    clamp_duration_minutes,
+    typical_duration_minutes,
+)
+
 # Flight → airport buffers (ground time estimates, not airborne duration)
 ARRIVE_BUFFER_MIN = 75
 DEPART_BUFFER_MIN = 120
 # Same-day cascade
 GAP_MIN = 15
 MIN_NODE_DUR = 20
-DEFAULT_POI_DUR = 90
-DEFAULT_MEAL_DUR = 60
-DEFAULT_AIRPORT_DUR = ARRIVE_BUFFER_MIN
 EARLY_DEPART_BEFORE_MIN = 6 * 60  # treat departures before 06:00 specially
 
 
@@ -92,9 +95,8 @@ def _duration_minutes(start: int | None, end: int | None, *, default: int) -> in
 
 
 def _default_duration_for_node(node: dict[str, Any]) -> int:
+    """Typical/clamped stay for cascade — delegates to visit_duration L1 table."""
     cat = (node.get("category") or "").strip().lower()
-    if cat == "airport":
-        return DEFAULT_AIRPORT_DUR
     if cat == "hotel":
         tips = " ".join(node.get("tips") or [])
         if "过夜" in tips or (node.get("start_time") == "21:00"):
@@ -103,15 +105,13 @@ def _default_duration_for_node(node: dict[str, Any]) -> int:
                 _parse_hhmm(node.get("end_time")),
                 default=11 * 60,
             )
-        return 30
-    if cat in {"restaurant", "snack"}:
-        return DEFAULT_MEAL_DUR
+        return typical_duration_minutes("hotel")
     if node.get("duration_minutes") is not None:
         try:
-            return max(MIN_NODE_DUR, int(node["duration_minutes"]))
+            return max(MIN_NODE_DUR, clamp_duration_minutes(cat, int(node["duration_minutes"])))
         except (TypeError, ValueError):
             pass
-    return DEFAULT_POI_DUR
+    return typical_duration_minutes(cat)
 
 
 def _resolve_departure_day_index(
@@ -970,9 +970,10 @@ def enforce_travel_intel_anchors(
     itinerary: dict[str, Any],
     travel_intel: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Public entry: hotels → flight airport pins → same-day schedule cascade."""
+    """Public entry: hotels → flights → category duration clamp → same-day cascade."""
     out = enforce_confirmed_hotels(itinerary, travel_intel)
     out, pinned = enforce_confirmed_flights(out, travel_intel)
     if out is itinerary:
         out = deepcopy(itinerary)
+    out = apply_category_duration_clamp(out, pinned_ids=pinned)
     return align_day_schedules(out, travel_intel, pinned_ids=pinned)

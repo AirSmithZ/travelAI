@@ -204,24 +204,36 @@ export function InputPanel() {
             <button
               type="button"
               className="input-panel__flight-btn"
-              onClick={() => setLeftPanelMode('chat')}
-            >
-              返回对话
-            </button>
-            <button
-              type="button"
-              className="input-panel__flight-btn"
               onClick={() => setLeftPanelMode('flight')}
             >
               航班确认
             </button>
-            <button
-              type="button"
-              className="input-panel__flight-btn input-panel__flight-btn--primary"
-              onClick={() => setLeftPanelMode('form')}
-            >
-              继续编辑行程
-            </button>
+            {hasItineraryDays ? (
+              <>
+                <button
+                  type="button"
+                  className="input-panel__flight-btn"
+                  onClick={() => setLeftPanelMode('chat')}
+                >
+                  返回对话
+                </button>
+                <button
+                  type="button"
+                  className="input-panel__flight-btn input-panel__flight-btn--primary"
+                  onClick={() => setLeftPanelMode('form')}
+                >
+                  继续编辑行程
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="input-panel__flight-btn input-panel__flight-btn--primary"
+                onClick={() => setLeftPanelMode('chat')}
+              >
+                继续编辑行程
+              </button>
+            )}
           </footer>
         </>
       )}

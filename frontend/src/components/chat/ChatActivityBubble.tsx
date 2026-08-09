@@ -1,24 +1,18 @@
 import { useEffect, useState } from 'react';
-import type { ChatActivitySession } from '../../types/chatActivity';
+import type { ChatActivitySession, ChatActivityStepStatus } from '../../types/chatActivity';
 import './Chat.css';
 
 interface ChatActivityBubbleProps {
   activity: ChatActivitySession;
 }
 
-function statusMark(status: ChatActivitySession['steps'][0]['status']): string {
-  switch (status) {
-    case 'done':
-      return '✓';
-    case 'running':
-      return '…';
-    case 'error':
-      return '✗';
-    case 'skipped':
-      return '○';
-    default:
-      return '○';
-  }
+function StatusMark({ status }: { status: ChatActivityStepStatus }) {
+  return (
+    <span
+      className={`chat-activity__mark chat-activity__mark--${status}`}
+      aria-hidden
+    />
+  );
 }
 
 export function ChatActivityBubble({ activity }: ChatActivityBubbleProps) {
@@ -50,12 +44,12 @@ export function ChatActivityBubble({ activity }: ChatActivityBubbleProps) {
             key={step.id}
             className={`chat-activity__step chat-activity__step--${step.status}`}
           >
-            <span className="chat-activity__mark" aria-hidden>
-              {statusMark(step.status)}
-            </span>
+            <StatusMark status={step.status} />
             <span className="chat-activity__label">
               {step.label}
-              {step.detail ? ` · ${step.detail}` : ''}
+              {step.detail ? (
+                <span className="chat-activity__detail"> · {step.detail}</span>
+              ) : null}
             </span>
           </li>
         ))}
@@ -76,9 +70,6 @@ export function ChatActivityBubble({ activity }: ChatActivityBubbleProps) {
         </div>
       )}
       {activity.error && <p className="chat-activity__error">{activity.error}</p>}
-      <span className="chat-activity__cursor" aria-hidden>
-        ▍
-      </span>
     </div>
   );
 }

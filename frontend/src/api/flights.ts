@@ -81,6 +81,42 @@ export async function validateManualFlight(
   return (await res.json()) as FlightManualValidateResponse;
 }
 
+export type AirportMatchType = 'iata' | 'city' | 'alias' | 'name' | 'country';
+
+export interface AirportSearchHit {
+  iata: string;
+  name: string;
+  city: string;
+  country: string;
+  name_zh?: string;
+  city_zh?: string;
+  country_zh?: string;
+  label: string;
+  match_type: AirportMatchType;
+  score: number;
+}
+
+export interface AirportSearchResponse {
+  query: string;
+  results: AirportSearchHit[];
+}
+
+export async function searchAirports(
+  q: string,
+  limit = 12,
+): Promise<AirportSearchResponse> {
+  const params = new URLSearchParams({
+    q,
+    limit: String(limit),
+  });
+  const res = await fetch(`${apiBase()}/api/v1/flights/airports?${params}`, {
+    method: 'GET',
+    signal: timeoutSignal(8_000),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as AirportSearchResponse;
+}
+
 export async function verifyFlightFromText(
   body: FlightVerifyFromTextRequest,
 ): Promise<FlightVerifyFromTextResponse> {

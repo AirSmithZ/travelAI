@@ -424,55 +424,299 @@
   border-right: none;
 }
 
+/* Editorial timetable: flat surface, hairline rules, no nested cards */
 .flight-intel__confirmed {
   margin-bottom: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-base));
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-bottom: 1px solid var(--border);
+}
+
+.flight-intel__confirmed-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 2px 10px;
+}
+
+.flight-intel__confirmed-head-text {
+  min-width: 0;
+}
+
+.flight-intel__confirmed-eyebrow {
+  margin: 0 0 2px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .flight-intel__confirmed-title {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 700;
-  color: var(--accent);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.flight-intel__confirmed-price-block {
+  flex-shrink: 0;
+  text-align: right;
+  padding-bottom: 1px;
 }
 
 .flight-intel__confirmed-price {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--text);
+  line-height: 1;
+}
+
+.flight-intel__confirmed-currency {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.flight-intel__confirmed-amount {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--accent);
 }
 
-.flight-intel__confirmed-route {
-  margin: 0 0 8px;
-  font-size: 11px;
-  color: var(--text-muted);
+.flight-intel__confirmed-price-note {
+  margin: 2px 0 0;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
 }
 
+.flight-intel__confirmed-timeline,
 .flight-intel__confirmed-legs {
-  margin: 0 0 8px;
+  margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  border-top: 1px solid var(--border);
 }
 
-.flight-intel__confirmed-leg {
+.flight-intel__confirmed-legs > li {
+  margin: 0;
+  padding: 0;
+}
+
+.flight-intel__cleg {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 2px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.flight-intel__cleg:last-child {
+  border-bottom: none;
+}
+
+.flight-intel__cleg-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 5px;
+}
+
+.flight-intel__cleg-rail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: -11px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border-strong);
+}
+
+.flight-intel__cleg:last-child .flight-intel__cleg-rail::before {
+  bottom: 50%;
+}
+
+.flight-intel__cleg:first-child .flight-intel__cleg-rail::before {
+  top: 8px;
+}
+
+.flight-intel__cleg-dot {
+  position: relative;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bg-base);
+  border: 1.5px solid var(--text-dim);
+  box-shadow: 0 0 0 3px var(--bg-base);
+}
+
+.flight-intel__cleg--outbound .flight-intel__cleg-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.flight-intel__cleg-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.flight-intel__cleg-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flight-intel__cleg-role {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.flight-intel__cleg--outbound .flight-intel__cleg-role {
+  color: var(--accent);
+}
+
+.flight-intel__cleg-times {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.flight-intel__cleg-arrow {
+  color: var(--text-dim);
+  font-weight: 500;
   font-size: 11px;
+}
+
+.flight-intel__cleg-route {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+}
+
+.flight-intel__cleg-meta {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
   color: var(--text-muted);
-  line-height: 1.45;
+}
+
+.flight-intel__cleg-flights {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
 }
 
 .flight-intel__confirmed-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  padding: 10px 2px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.flight-intel__confirmed-actions-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.flight-intel__confirmed-book {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.flight-intel__confirmed-book:hover {
+  color: var(--accent);
+}
+
+.flight-intel__confirmed-ghost {
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.flight-intel__confirmed-ghost:hover {
+  color: var(--text);
+  border-bottom-color: var(--border-strong);
+  background: transparent;
+}
+
+.flight-intel__confirmed-cta {
+  padding: 6px 14px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #1a1205;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+
+.flight-intel__confirmed-cta:hover {
+  filter: brightness(1.05);
+}
+
+.flight-intel__confirmed-cta:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flight-intel__confirmed-cta:active {
+    transform: none;
+  }
 }
 
 .flight-intel__offers-wrap {

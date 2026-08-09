@@ -68,6 +68,7 @@
 | **B-P3-01/02** | ✅ | P1 | 多航段 UI + 城际快捷 | FlightIntelPanel |
 | **B-P4-01/02/03/04** | ✅ | P0 | intel 硬约束 / 门禁 / snapshot | [18](./18-机酒优先与迭代行程产品决策.md) |
 | **B-P4-05** | ✅ | P0 | 确认航班硬钉机场时刻 + 同日接龙（P94） | [问题日志 P94](../问题日志.md) · `intel_anchor_enforce.py` |
+| **B-P4-06** | ✅ | P1 | 品类停留时长 L1 夹逼（P95；不用 Tavily 验时） | [问题日志 P95](../问题日志.md) · `visit_duration.py` |
 | **B-P6-01** | ✅ | P2 | 多酒店覆盖/缺口/重叠软警告 | `hotelStayValidate.ts` · StayZonePanel |
 | **B-P6-02** | ✅ | P2 | 总览图主酒店高亮 + 跨天/绑定软警告 | [06 §7 P6](./06-机酒确认与行程生成流程方案.md) · `primaryHotelOverview.ts` |
 

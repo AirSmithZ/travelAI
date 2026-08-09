@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from openai import APIConnectionError, APIStatusError, RateLimitError
 
 from app.config import get_settings
 from app.schemas.flight import (
+    AirportSearchHit,
+    AirportSearchResponse,
     FlightManualValidateRequest,
     FlightManualValidateResponse,
     FlightSearchRequest,
@@ -10,11 +12,39 @@ from app.schemas.flight import (
     FlightVerifyFromTextRequest,
     FlightVerifyFromTextResponse,
 )
+from app.services.flight.airport_search import search_airports
 from app.services.flight.intent_parse import verify_flight_from_text
 from app.services.flight.manual_validate import validate_manual_flight
 from app.services.flight.search import search_flights
 
 router = APIRouter(prefix="/flights", tags=["flights"])
+
+
+@router.get("/airports", response_model=AirportSearchResponse)
+def flight_airports_search(
+    q: str = Query(..., min_length=1, max_length=64, description="城市 / 国家 / IATA / 别名"),
+    limit: int = Query(12, ge=1, le=40),
+) -> AirportSearchResponse:
+    """Fuzzy airport lookup; country queries expand to that country's airports."""
+    hits = search_airports(q, limit=limit)
+    return AirportSearchResponse(
+        query=q.strip(),
+        results=[
+            AirportSearchHit(
+                iata=h.iata,
+                name=h.name,
+                city=h.city,
+                country=h.country,
+                name_zh=h.name_zh,
+                city_zh=h.city_zh,
+                country_zh=h.country_zh,
+                label=h.label,
+                match_type=h.match_type,  # type: ignore[arg-type]
+                score=h.score,
+            )
+            for h in hits
+        ],
+    )
 
 
 @router.post("/search", response_model=FlightSearchResponse)

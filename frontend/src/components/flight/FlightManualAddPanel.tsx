@@ -11,6 +11,7 @@ import {
   FormRow,
   FormSelect,
 } from '../ui/FormField';
+import { AirportCombobox } from './AirportCombobox';
 import './FlightManualAddPanel.css';
 
 const ROLES: { id: FlightLegRole; label: string }[] = [
@@ -188,23 +189,30 @@ export function FlightManualAddPanel({ defaults }: { defaults: FlightManualAddDe
           </FormRow>
           <FormRow>
             <FormField label="出发">
-              <FormInput
+              <AirportCombobox
                 value={origin}
-                onChange={(e) => setOrigin(e.target.value)}
-                placeholder="上海 / PVG"
+                onChange={setOrigin}
+                placeholder="城市 / 国家 / IATA"
               />
             </FormField>
             <FormField label="到达">
-              <FormInput
+              <AirportCombobox
                 value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                placeholder="新加坡 / SIN"
+                onChange={setDestination}
+                placeholder="如 马来西亚 / 吉隆坡 / KUL"
               />
             </FormField>
           </FormRow>
           <FormRow>
             <FormField label="出发日">
-              <FormDateInput value={departDate} onChange={(e) => setDepartDate(e.target.value)} />
+              <FormDateInput
+                value={departDate}
+                onChange={(next) => {
+                  setDepartDate(next);
+                  if (!arriveDate || arriveDate < next) setArriveDate(next);
+                }}
+                placeholder="出发日期"
+              />
             </FormField>
             <FormField label="出发时刻">
               <FormInput
@@ -216,7 +224,12 @@ export function FlightManualAddPanel({ defaults }: { defaults: FlightManualAddDe
           </FormRow>
           <FormRow>
             <FormField label="到达日">
-              <FormDateInput value={arriveDate} onChange={(e) => setArriveDate(e.target.value)} />
+              <FormDateInput
+                value={arriveDate}
+                min={departDate || undefined}
+                onChange={setArriveDate}
+                placeholder="到达日期"
+              />
             </FormField>
             <FormField label="到达时刻">
               <FormInput

@@ -57,8 +57,8 @@ function FormDaySection({ dayIndex }: FormDaySectionProps) {
         <FormField label="日期">
           <FormDateInput
             value={day.date ?? ''}
-            onChange={(e) => {
-              if (e.target.value) setDayDate(dayIndex, e.target.value);
+            onChange={(next) => {
+              if (next) setDayDate(dayIndex, next);
             }}
           />
           {day.weekday && <span className="form-field__hint">{day.weekday}</span>}

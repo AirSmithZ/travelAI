@@ -1,4 +1,5 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { DateField, type DateFieldProps } from './DateField';
 
 interface FormSectionProps {
   title: string;
@@ -57,16 +58,30 @@ export function FormSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
   );
 }
 
-export function FormDateInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
-  const { className = '', ...rest } = props;
+/** Custom calendar date field (replaces native `input[type=date]`). */
+export function FormDateInput({
+  value = '',
+  onChange,
+  min,
+  max,
+  disabled,
+  placeholder,
+  id,
+  className,
+  allowClear,
+}: DateFieldProps) {
   return (
-    <div className="form-date-wrap">
-      <input
-        type="date"
-        className={`form-control form-control--date ${className}`.trim()}
-        {...rest}
-      />
-    </div>
+    <DateField
+      id={id}
+      className={className}
+      value={value}
+      onChange={onChange}
+      min={min}
+      max={max}
+      disabled={disabled}
+      placeholder={placeholder}
+      allowClear={allowClear}
+    />
   );
 }
 

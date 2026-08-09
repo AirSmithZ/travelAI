@@ -134,3 +134,21 @@ class FlightManualValidateResponse(BaseModel):
     duration_minutes: int | None = None
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class AirportSearchHit(BaseModel):
+    iata: str
+    name: str
+    city: str
+    country: str
+    name_zh: str = ""
+    city_zh: str = ""
+    country_zh: str = ""
+    label: str
+    match_type: Literal["iata", "city", "alias", "name", "country"]
+    score: float
+
+
+class AirportSearchResponse(BaseModel):
+    query: str
+    results: list[AirportSearchHit] = Field(default_factory=list)
