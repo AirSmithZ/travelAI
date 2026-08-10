@@ -1,6 +1,6 @@
 # 项目待办总索引
 
-> **更新**：2026-08-09（P97–P102 初锁店/生成 CTA ✅ · [问题日志](./问题日志.md)）  
+> **更新**：2026-08-09（+ **WS-10** 玩法印证贴链 MVP · [23](./llm-travel-data/23-玩法印证贴链MVP实施.md)）  
 > **用途**：从各分析/方案文档汇总的 **开放待办**；实施完成后在本索引与子清单中勾选，并在源文档同步状态。  
 > **原则**：每条待办必须有 **TODO ID** 与 **关联文档** 链接，便于后续 PR / 实施计划引用。
 
@@ -27,6 +27,7 @@
 | **P1** | `HOT-01` | 酒店源探路（**商务**） | [llm TODO](./llm-travel-data/TODO.md) |
 | **P2** | `SEC-02` | 部署鉴权限流（部署前置） | [llm TODO](./llm-travel-data/TODO.md) |
 | **扩张 / ⏸** | `WS-01/05` · `AG-*` · 移动端 · P5b · OV-03/04 · FM-* | 完整网页桶 / Agent / 天气 UI | [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) · [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
+| **P2 / ⏸ 商务** | **`COST-01`** | Viator Affiliate 账号审核中；通过后补门票 `cost` + 深链（餐饮见 `COST-02`） | [llm TODO §3c](./llm-travel-data/TODO.md) · [03](./llm-travel-data/03-游玩项目.md) |
 | **P3/P4 债** | `OV-03/04` · `WX-03/04` | 故事条 / weather 对话 UI | [TODO-路线图](./TODO-路线图与总览.md) |
 
 ---
@@ -43,7 +44,16 @@
 | **P92** | 明确返程日禁止当晚入住/过夜酒店 | [问题日志 P92](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
 | **P93** | generate 关 thinking · validate UI 非假完成 | [问题日志 P93](./问题日志.md) |
 | **P97–P106** | 初锁店：不空开地图 · 生成 CTA 门禁 · lodging 空态 · 酒店钉/片区 fit · 离开住宿收图 · 圈钉绘制时序 | [问题日志](./问题日志.md) · [TODO-布局](./TODO-布局与前端.md) |
+| **P113 / GEO-11** | 片区几何 / 店名搜索 geocode 优先 zone.city（防模糊目的地错圆心） | [问题日志 P113](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
+| **P117 / GEO-12** | 国家级 destination + 歧义城名：抵达机场 IATA 钉围栏 / 国家码 | [问题日志 P117](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
+| **P118 / HOT-02b** | 片区 lodging：EN query + 429 可感知（勿当无酒店） | [问题日志 P118](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
+| **P119 / HOT-02c** | 非枢纽城 reverse→EN；SSL 瞬时重试；有坐标禁中文 q | [问题日志 P119](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
+| **P120 / HOT-02d** | 片区 lodging localStorage 缓存（刷新复用、减 429） | [问题日志 P120](./问题日志.md) · [llm TODO](./llm-travel-data/TODO.md) |
+| **P114 / TRN-01** | 按需通勤查询（Directions + 提示词海路/山路兜底）· EdgeEditor | [问题日志 P114](./问题日志.md) · [04](./llm-travel-data/04-通勤与交通卡.md) |
+| **P115 / TRN-02** | geocode 后可疑边自动补算 + Directions 缓存 | [问题日志 P115](./问题日志.md) · [04 §5.2](./llm-travel-data/04-通勤与交通卡.md) |
+| **P116 / TRN-02b** | 通勤核实后按边时长重排当日节点时刻 | [问题日志 P116](./问题日志.md) · [04 §5.3](./llm-travel-data/04-通勤与交通卡.md) |
 | **玩法可信度** | `WX-01` 预报注入 · POI hours · 雨日/通勤 warnings | [15](./llm-travel-data/15-天气联网与决策Agent缺口分析.md) |
+| **WS-10 贴链** | 多链接模块 · `from-link` · generate `user_evidence` 优先 | [23](./llm-travel-data/23-玩法印证贴链MVP实施.md) · [19](./llm-travel-data/19-玩法印证与UGC数据源分析.md) |
 | **Wave C + 可选增强** | `04/07` · FLT-CACHE · WS-08b · P6-02 · FLT-06 · GEN-01/02 · OV-01/02 | [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 | **印证 P1** | `WS-CACHE` · `WS-08a/b` · `UX-EVD-01`（**保留 TikHub**；Reach 仅 bench） | [21 §0.1](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 | **Wave B** | 只读摘要卡 · 生成 checklist · 低风险自动写+Undo · 确认本批 | [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
@@ -66,4 +76,4 @@
 
 ---
 
-*索引版本：v1.19 · 2026-08-09（P97–P102）*
+*索引版本：v1.20 · 2026-08-09（+ COST-01 审核阻塞）*

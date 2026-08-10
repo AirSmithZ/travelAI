@@ -17,6 +17,7 @@ from app.schemas.itinerary import (
     GeocodeItineraryResponse,
     validate_itinerary_dict,
 )
+from app.services.commute import enrich_itinerary_commute
 from app.services.geocoding import geocode_itinerary
 from app.services.itinerary_credibility import (
     append_credibility_warnings,
@@ -32,8 +33,23 @@ router = APIRouter(prefix="/itineraries", tags=["itineraries"])
 SSE_HEARTBEAT_SEC = 15
 
 
-def _post_geocode_credibility(itinerary: dict) -> dict:
-    """Commute soft-audit once coords are present (async geocode path)."""
+def _post_geocode_credibility(
+    itinerary: dict,
+    *,
+    free_text: str = "",
+    notes: str = "",
+) -> dict:
+    """TRN-02 enrich + TRN-02b schedule realign + commute soft-audit (async geocode)."""
+    from app.services.intel_anchor_enforce import realign_schedules_after_commute
+
+    itinerary = enrich_itinerary_commute(
+        itinerary,
+        free_text=free_text,
+        notes=notes,
+        settings=get_settings(),
+    )
+    enriched_n = int((itinerary.get("meta") or {}).get("commute_auto_enriched") or 0)
+    itinerary = realign_schedules_after_commute(itinerary, note=enriched_n > 0)
     return append_credibility_warnings(itinerary, audit_commute_load(itinerary))
 
 
@@ -106,6 +122,7 @@ async def generate_itinerary_endpoint(
         travel_intel=travel_intel,
         mode=body.mode,
         current_itinerary=body.current_itinerary,
+        user_evidence=body.user_evidence,
     )
     return GenerateItineraryResponse(
         itinerary=_validated_itinerary(itinerary),
@@ -143,6 +160,7 @@ async def generate_itinerary_stream_endpoint(
                     travel_intel=travel_intel,
                     mode=body.mode,
                     current_itinerary=body.current_itinerary,
+                    user_evidence=body.user_evidence,
                 ):
                     evt, data = item["event"], item["data"]
                     if evt == "result" and isinstance(data.get("itinerary"), dict):
@@ -207,7 +225,11 @@ def geocode_itinerary_nodes_endpoint(body: GeocodeItineraryRequest) -> GeocodeIt
         dest,
         max_workers=settings.geocode_max_workers,
     )
-    itinerary = _post_geocode_credibility(itinerary)
+    itinerary = _post_geocode_credibility(
+        itinerary,
+        free_text=body.free_text or "",
+        notes=body.notes or "",
+    )
     geocode_ms = int((time.perf_counter() - started) * 1000)
     return GeocodeItineraryResponse(
         itinerary=_validated_itinerary(itinerary),
@@ -246,7 +268,11 @@ async def geocode_itinerary_nodes_stream_endpoint(
                     max_workers=settings.geocode_max_workers,
                     on_progress=on_progress,
                 )
-                itinerary = _post_geocode_credibility(itinerary)
+                itinerary = _post_geocode_credibility(
+                    itinerary,
+                    free_text=body.free_text or "",
+                    notes=body.notes or "",
+                )
                 geocode_ms = int((time.perf_counter() - started) * 1000)
                 await queue.put(
                     ("result", {"itinerary": itinerary, "geocode_latency_ms": geocode_ms})

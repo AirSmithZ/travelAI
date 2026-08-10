@@ -30,6 +30,7 @@ import {
   totalTripDuration,
 } from '../../types/flight';
 import { todayLocalDate } from '../../utils/dateUtils';
+import { resolveAirportPlacePair } from '../../utils/resolveAirportPlace';
 import {
   FormDateInput,
   FormField,
@@ -348,8 +349,10 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
     [intel.flights],
   );
 
-  const [origin, setOrigin] = useState(tr.departure ?? '');
-  const [destination, setDestination] = useState(tr.destination ?? '');
+  const [origin, setOrigin] = useState('');
+  const [destination, setDestination] = useState('');
+  const [resolvedTripOrigin, setResolvedTripOrigin] = useState('');
+  const [resolvedTripDest, setResolvedTripDest] = useState('');
   const [date, setDate] = useState(() => normalizeTripDates(tr.date_start, tr.date_end).date_start ?? '');
   const [returnDate, setReturnDate] = useState(
     () => normalizeTripDates(tr.date_start, tr.date_end).date_end ?? '',
@@ -362,10 +365,9 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
   const [templateHint, setTemplateHint] = useState<string | null>(null);
   const [cacheHint, setCacheHint] = useState<string | null>(null);
 
-  // trip_request → 本地搜票字段；过期日期就地纠偏并写回 store，避免再打 Ignav 旧年日期。
+  // trip_request → 本地搜票字段：先经 /flights/airports 校验，再回填 IATA（避免「新西兰」等国家级 destination）。
   useEffect(() => {
-    setOrigin(tr.departure ?? '');
-    setDestination(tr.destination ?? '');
+    let cancelled = false;
     setAdults(tr.travelers ?? 1);
     const normalized = normalizeTripDates(tr.date_start, tr.date_end);
     setDate(normalized.date_start ?? '');
@@ -376,6 +378,35 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
         date_end: normalized.date_end,
       });
     }
+
+    const depRaw = (tr.departure ?? '').trim();
+    const destRaw = (tr.destination ?? '').trim();
+    void resolveAirportPlacePair(depRaw, destRaw).then(({ origin: o, destination: d }) => {
+      if (cancelled) return;
+      const originIata = o?.iata ?? '';
+      const destIata = d?.iata ?? '';
+      setResolvedTripOrigin(originIata);
+      setResolvedTripDest(destIata);
+      setOrigin(originIata);
+      setDestination(destIata);
+      if (destRaw && !destIata) {
+        setTemplateHint(
+          `目的地「${destRaw}」无法解析为机场，请从到达下拉选择城市或 IATA`,
+        );
+      } else if (depRaw && !originIata) {
+        setTemplateHint(
+          `出发地「${depRaw}」无法解析为机场，请从出发下拉选择城市或 IATA`,
+        );
+      } else if (d?.matchType === 'country' && d.cityLabel) {
+        setTemplateHint(
+          `目的地「${destRaw}」已解析为${d.cityLabel}（${d.iata}），可改选其他机场`,
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [tr.departure, tr.destination, tr.date_start, tr.date_end, tr.travelers, updateTripRequest]);
 
   function commitDepartDate(next: string) {
@@ -409,14 +440,27 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
 
   const canSearch = origin.trim() && destination.trim() && date.trim();
 
+  /** Map trip_request free text → resolved IATA; keep confirmed-leg IATAs as-is. */
+  function placeForForm(raw: string): string {
+    const t = raw.trim();
+    if (!t) return '';
+    if (t === (tr.departure ?? '').trim()) return resolvedTripOrigin;
+    if (t === (tr.destination ?? '').trim()) return resolvedTripDest;
+    return t;
+  }
+
   function applyNextLegSuggestion(opts?: { forceIntercity?: boolean }) {
-    let suggestion = suggestNextFlightLeg(intel.flights, tr);
+    let suggestion = suggestNextFlightLeg(intel.flights, {
+      departure: resolvedTripOrigin || tr.departure,
+      destination: resolvedTripDest || '',
+      date_end: tr.date_end,
+    });
 
     if (opts?.forceIntercity) {
       if (intel.flights.length === 0) {
         suggestion = {
           role: 'intercity',
-          origin: (tr.destination ?? '').trim(),
+          origin: resolvedTripDest,
           destination: '',
           clearReturnDate: true,
           hint: '模板：城际 · 请填写下一段到达',
@@ -433,8 +477,8 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
       }
     }
 
-    if (suggestion.origin) setOrigin(suggestion.origin);
-    setDestination(suggestion.destination);
+    if (suggestion.origin) setOrigin(placeForForm(suggestion.origin) || suggestion.origin);
+    setDestination(placeForForm(suggestion.destination));
     setRole(suggestion.role);
     if (suggestion.clearReturnDate) commitReturnDate('');
     setTemplateHint(suggestion.hint);
@@ -448,8 +492,8 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
 
   function applyTemplate(kind: 'roundtrip' | 'multicity' | 'intercity') {
     if (kind === 'roundtrip') {
-      setOrigin(tr.departure ?? origin);
-      setDestination(tr.destination ?? destination);
+      setOrigin(resolvedTripOrigin || origin);
+      setDestination(resolvedTripDest);
       const normalized = normalizeTripDates(
         tr.date_start ?? date,
         tr.date_end ?? returnDate,
@@ -467,8 +511,8 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
       if (intel.flights.length === 0) {
         commitReturnDate('');
         setRole('outbound');
-        setOrigin(tr.departure ?? '');
-        setDestination(tr.destination ?? '');
+        setOrigin(resolvedTripOrigin);
+        setDestination(resolvedTripDest);
         setTemplateHint('模板：多城 · 先确认去程，再逐段添加城际');
       } else {
         applyNextLegSuggestion();
@@ -500,10 +544,22 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
     setLoading(true);
     setError(null);
     setCacheHint(null);
-    const requestKey = `${origin}-${destination}-${date}${ret ? `-rt-${ret}` : ''}`;
+
+    const resolved = await resolveAirportPlacePair(origin.trim(), destination.trim());
+    if (!resolved.origin || !resolved.destination) {
+      setLoading(false);
+      setError('出发/到达无法识别为机场，请从下拉选择城市、国家或 IATA 后再搜。');
+      return;
+    }
+    const originIata = resolved.origin.iata;
+    const destIata = resolved.destination.iata;
+    if (originIata !== origin.trim()) setOrigin(originIata);
+    if (destIata !== destination.trim()) setDestination(destIata);
+
+    const requestKey = `${originIata}-${destIata}-${date}${ret ? `-rt-${ret}` : ''}`;
     const cacheKey = flightCacheKey({
-      origin,
-      destination,
+      origin: originIata,
+      destination: destIata,
       date,
       returnDate: ret || undefined,
       adults,
@@ -527,8 +583,8 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
           cacheInvalidate('flight', cacheKey);
         }
         res = await searchFlights({
-          origin: origin.trim(),
-          destination: destination.trim(),
+          origin: originIata,
+          destination: destIata,
           date: date.trim(),
           return_date: ret || undefined,
           adults,

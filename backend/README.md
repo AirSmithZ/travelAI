@@ -138,6 +138,8 @@ VITE_API_BASE=https://api.example.com npm run build
 | 行程 | POST | `/api/v1/itineraries/generate/stream` | 流式生成 |
 | 地理 | GET | `/api/v1/geocode/autocomplete` | 地点联想 |
 | 地理 | POST | `/api/v1/geocode/search` | 正向地理编码 |
+| 通勤 | POST | `/api/v1/commute/lookup` | 按需 Directions + 提示词路线兜底（TRN-01） |
+| 行程 | POST | `/api/v1/itineraries/geocode-nodes` | 补坐标；完成后 TRN-02 可疑边自动补算（可传 free_text） |
 | 航班 | POST | `/api/v1/flights/search` | Ignav 查价 + Trip.com CTA |
 | 航班 | POST | `/api/v1/flights/verify-from-text` | 自然语言 → 解析 + 查价 |
 

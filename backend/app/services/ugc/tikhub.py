@@ -14,8 +14,15 @@ from app.config import Settings, get_settings
 logger = logging.getLogger(__name__)
 
 SEARCH_NOTES_PATH = "/api/v1/xiaohongshu/app_v2/search_notes"
+GET_IMAGE_NOTE_PATH = "/api/v1/xiaohongshu/app_v2/get_image_note_detail"
+GET_VIDEO_NOTE_PATH = "/api/v1/xiaohongshu/app_v2/get_video_note_detail"
 XHS_NOTE_URL = "https://www.xiaohongshu.com/explore/{note_id}"
 SOURCE_TIKHUB_XHS = "tikhub_xhs"
+SOURCE_USER_PASTE_XHS = "user_paste_xhs"
+DEFAULT_SNIPPET_MAX = 400
+# Full note body for UI / paste; LLM inject still caps separately
+PASTE_SNIPPET_MAX = 4000
+
 
 _HIGHLIGHT_RE = re.compile(r"</?em>", re.IGNORECASE)
 _WAN_RE = re.compile(r"^([\d.]+)\s*万$")
@@ -29,6 +36,11 @@ class EvidenceItem(BaseModel):
     source: str = SOURCE_TIKHUB_XHS
     query: str | None = None
     note_id: str | None = None
+    author: str | None = None
+    comments_count: int | None = None
+    collected_count: int | None = None
+    shared_count: int | None = None
+    note_type: str | None = None
 
 
 def parse_likes(value: Any) -> int | None:
@@ -84,8 +96,14 @@ def _dig_items(payload: Any) -> list[Any]:
     return []
 
 
-def normalize_note_item(raw: dict[str, Any], *, query: str | None = None) -> EvidenceItem | None:
-    """Normalize one search hit (item or bare note) to EvidenceItem."""
+def normalize_note_item(
+    raw: dict[str, Any],
+    *,
+    query: str | None = None,
+    source: str = SOURCE_TIKHUB_XHS,
+    snippet_max: int = DEFAULT_SNIPPET_MAX,
+) -> EvidenceItem | None:
+    """Normalize one search hit or note-detail payload to EvidenceItem."""
     if not isinstance(raw, dict):
         return None
 
@@ -104,7 +122,17 @@ def normalize_note_item(raw: dict[str, Any], *, query: str | None = None) -> Evi
     title = _strip_highlight(
         str(note.get("display_title") or note.get("title") or note.get("desc") or "")
     )
-    snippet = _strip_highlight(str(note.get("desc") or note.get("content") or ""))
+    # Prefer longer body fields; share_info.content is often truncated share copy
+    share_info = note.get("share_info") if isinstance(note.get("share_info"), dict) else {}
+    snippet = _strip_highlight(
+        str(
+            note.get("desc")
+            or note.get("content")
+            or share_info.get("content")
+            or note.get("share_text")
+            or ""
+        )
+    )
     if not title and snippet:
         title = snippet[:80]
     if not title and not note_id:
@@ -112,7 +140,7 @@ def normalize_note_item(raw: dict[str, Any], *, query: str | None = None) -> Evi
     if not title:
         title = f"小红书笔记 {note_id[:8]}"
 
-    url = str(note.get("share_url") or note.get("url") or "").strip()
+    url = str(note.get("share_url") or note.get("url") or share_info.get("link") or "").strip()
     if not url and note_id:
         url = XHS_NOTE_URL.format(note_id=note_id)
     if not url:
@@ -124,16 +152,75 @@ def normalize_note_item(raw: dict[str, Any], *, query: str | None = None) -> Evi
         if interact
         else note.get("liked_count") or note.get("likes")
     )
+    comments = parse_likes(
+        interact.get("comment_count")
+        if interact
+        else note.get("comments_count") or note.get("comment_count")
+    )
+    collected = parse_likes(
+        interact.get("collected_count")
+        if interact
+        else note.get("collected_count")
+    )
+    shared = parse_likes(note.get("shared_count") or note.get("share_count"))
+    user = note.get("user") if isinstance(note.get("user"), dict) else {}
+    author = str(user.get("nickname") or user.get("name") or "").strip() or None
+    note_type = str(note.get("type") or note.get("model_type") or "").strip() or None
+    cap = max(80, int(snippet_max))
 
     return EvidenceItem(
         title=title,
         url=url,
-        snippet=snippet[:400],
+        snippet=snippet[:cap],
         likes=likes,
-        source=SOURCE_TIKHUB_XHS,
+        source=source or SOURCE_TIKHUB_XHS,
         query=query,
         note_id=note_id or None,
+        author=author,
+        comments_count=comments,
+        collected_count=collected,
+        shared_count=shared,
+        note_type=note_type,
     )
+
+
+def _first_from_note_list(obj: Any) -> dict[str, Any] | None:
+    """App V2 detail: data.data[].note_list[0] or bare note dict."""
+    if isinstance(obj, dict):
+        if isinstance(obj.get("note_list"), list):
+            for n in obj["note_list"]:
+                if isinstance(n, dict) and (n.get("id") or n.get("note_id") or n.get("title")):
+                    return n
+        if obj.get("note_id") or obj.get("id") or obj.get("title") or obj.get("desc"):
+            return obj
+        if isinstance(obj.get("note"), dict):
+            return obj["note"]
+        return None
+    if isinstance(obj, list):
+        for row in obj:
+            hit = _first_from_note_list(row)
+            if hit is not None:
+                return hit
+    return None
+
+
+def _dig_note_detail(payload: Any) -> dict[str, Any] | None:
+    """Unwrap TikHub note-detail envelopes to a note dict (incl. App V2 note_list)."""
+    if not isinstance(payload, dict):
+        return None
+    # Prefer nested note_list before treating outer envelope as the note
+    data = payload.get("data") if "data" in payload else payload
+    hit = _first_from_note_list(data)
+    if hit is not None:
+        return hit
+    if isinstance(data, dict):
+        nested = data.get("data")
+        hit = _first_from_note_list(nested)
+        if hit is not None:
+            return hit
+        if isinstance(nested, dict):
+            return _dig_note_detail({"data": nested})
+    return None
 
 
 def normalize_search_response(
@@ -280,6 +367,178 @@ class TikHubClient:
         limit = max_results if max_results is not None else self.settings.tikhub_max_results
         return normalize_search_response(raw, query=keyword, max_results=limit)
 
+    def _get_note_detail_raw(
+        self,
+        path: str,
+        *,
+        note_id: str | None = None,
+        share_text: str | None = None,
+        timeout: float | None = None,
+        operation: str = "get_note_detail",
+    ) -> tuple[dict[str, Any], str | None]:
+        """Returns (payload, error_code). error_code e.g. tikhub_402 / timeout."""
+        if not self.configured:
+            logger.debug("TikHub not configured; skip %s", operation)
+            return {}, "unconfigured"
+        nid = (note_id or "").strip()
+        share = (share_text or "").strip()
+        if not nid and not share:
+            return {}, "empty_params"
+
+        params: dict[str, Any] = {}
+        if nid:
+            params["note_id"] = nid
+        if share:
+            params["share_text"] = share
+
+        url = f"{self._base()}{path}"
+        to = timeout if timeout is not None else float(self.settings.tikhub_timeout_sec)
+        import time
+
+        from app.services.api_usage import record_usage
+
+        t0 = time.perf_counter()
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            try:
+                with httpx.Client(timeout=to) as client:
+                    resp = client.get(url, headers=self._headers(), params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    ms = int((time.perf_counter() - t0) * 1000)
+                    ok_payload = data if isinstance(data, dict) else {}
+                    record_usage("tikhub", operation, ok=bool(ok_payload), latency_ms=ms)
+                    return ok_payload, None
+            except httpx.TimeoutException:
+                record_usage(
+                    "tikhub",
+                    operation,
+                    ok=False,
+                    latency_ms=int((time.perf_counter() - t0) * 1000),
+                    error="timeout",
+                )
+                logger.warning("TikHub %s timeout", operation)
+                return {}, "timeout"
+            except httpx.HTTPStatusError as e:
+                code = e.response.status_code
+                record_usage(
+                    "tikhub",
+                    operation,
+                    ok=False,
+                    latency_ms=int((time.perf_counter() - t0) * 1000),
+                    error=f"http_{code}",
+                )
+                logger.warning("TikHub %s HTTP %s", operation, code)
+                if code == 402:
+                    return {}, "tikhub_402"
+                return {}, f"http_{code}"
+            except Exception as e:
+                last_exc = e
+                # Transient SSL / connection blips — one retry
+                if attempt == 0 and "SSL" in str(e):
+                    logger.warning("TikHub %s SSL blip, retrying: %s", operation, e)
+                    continue
+                record_usage(
+                    "tikhub",
+                    operation,
+                    ok=False,
+                    latency_ms=int((time.perf_counter() - t0) * 1000),
+                    error=str(e)[:200],
+                )
+                logger.warning("TikHub %s failed: %s", operation, e)
+                return {}, "error"
+        if last_exc is not None:
+            record_usage(
+                "tikhub",
+                operation,
+                ok=False,
+                latency_ms=int((time.perf_counter() - t0) * 1000),
+                error=str(last_exc)[:200],
+            )
+            logger.warning("TikHub %s failed: %s", operation, last_exc)
+        return {}, "error"
+
+    def get_note_by_share_or_id(
+        self,
+        *,
+        note_id: str | None = None,
+        share_text: str | None = None,
+        timeout: float | None = None,
+        source: str = SOURCE_USER_PASTE_XHS,
+        snippet_max: int = PASTE_SNIPPET_MAX,
+    ) -> tuple[EvidenceItem | None, str | None]:
+        """
+        Fetch note detail via App V2 image then video endpoints.
+        Returns (item, error_code). error_code set when item is None.
+        """
+        last_err: str | None = None
+        for path, op in (
+            (GET_IMAGE_NOTE_PATH, "get_image_note_detail"),
+            (GET_VIDEO_NOTE_PATH, "get_video_note_detail"),
+        ):
+            raw, err = self._get_note_detail_raw(
+                path,
+                note_id=note_id,
+                share_text=share_text,
+                timeout=timeout,
+                operation=op,
+            )
+            if err:
+                last_err = err
+            if not raw:
+                continue
+            note = _dig_note_detail(raw)
+            if not note:
+                last_err = last_err or "empty"
+                continue
+            item = normalize_note_item(
+                note,
+                source=source,
+                snippet_max=snippet_max,
+            )
+            if item is not None:
+                return item, None
+            last_err = last_err or "empty"
+        return None, last_err or "empty"
+
+    def enrich_search_hits_with_detail(
+        self,
+        items: list[EvidenceItem],
+        *,
+        max_enrich: int | None = None,
+    ) -> list[EvidenceItem]:
+        """
+        search_notes only returns feed-card snippets. Pull App V2 detail for each
+        note_id so title/desc/likes reflect the real post body.
+        """
+        limit = max_enrich if max_enrich is not None else self.settings.tikhub_max_results
+        out: list[EvidenceItem] = []
+        for item in items:
+            if len(out) >= limit:
+                break
+            nid = (item.note_id or "").strip()
+            if not nid:
+                out.append(item)
+                continue
+            detailed, err = self.get_note_by_share_or_id(
+                note_id=nid,
+                source=SOURCE_TIKHUB_XHS,
+                snippet_max=PASTE_SNIPPET_MAX,
+            )
+            if detailed is None:
+                logger.debug("detail enrich skip note_id=%s err=%s", nid, err)
+                out.append(item)
+                continue
+            out.append(
+                detailed.model_copy(
+                    update={
+                        "query": item.query,
+                        "source": SOURCE_TIKHUB_XHS,
+                    }
+                )
+            )
+        return out
+
 
 def evidence_queries(
     destination: str,
@@ -365,6 +624,9 @@ def build_evidence_pack(
                 break
         if len(merged) >= limit:
             break
+
+    # search_notes = feed cards only; detail API supplies real title/desc
+    merged = hub.enrich_search_hits_with_detail(merged, max_enrich=limit)
 
     from app.services.ugc.filter_evidence import filter_evidence_items
 

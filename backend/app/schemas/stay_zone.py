@@ -83,3 +83,5 @@ class StayZoneLodgingResponse(BaseModel):
     zone_id: str
     candidates: list[StayZoneLodgingCandidate] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    status: Literal["ok", "empty", "rate_limited", "provider_error", "unconfigured"] = "ok"
+    query: str = ""

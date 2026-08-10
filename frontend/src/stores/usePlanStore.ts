@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { Itinerary, ItineraryNode, GraphViewMode, ViewTab, DayPlan, DayWeather } from '../types/itinerary';
-import type { FormPatch, TravelPlan, ChatMode } from '../types/travelPlan';
+import type {
+  FormPatch,
+  TravelPlan,
+  ChatMode,
+  EvidenceLinkModule,
+} from '../types/travelPlan';
+import { fetchEvidenceFromLink } from '../api/evidence';
+import { validateEvidenceUrl } from '../utils/evidenceLinkUrl';
 import type { TripRequest } from '../types/tripRequest';
 import type { FlightLegRole, FlightSearchSession, ManualFlightLegInput } from '../types/travelIntel';
 import {
@@ -201,6 +208,11 @@ interface PlanState {
     mode?: import('../api/itinerary').GenerateMode,
   ) => Promise<'api' | 'error' | 'blocked'>;
   maybeAutoGenerateItinerary: () => Promise<'api' | 'error' | 'skipped' | 'blocked'>;
+  /** doc 23: 玩法印证贴链模块 */
+  addEvidenceLink: (url?: string) => string | null;
+  removeEvidenceLink: (moduleId: string) => void;
+  updateEvidenceLinkUrl: (moduleId: string, url: string) => void;
+  fetchEvidenceLink: (moduleId: string) => Promise<boolean>;
   setFlightSearchResult: (session: FlightSearchSession) => void;
   mergeFlightSearchResult: (patch: Partial<FlightSearchSession>) => void;
   confirmFlightQuote: (quoteId: string, role?: FlightLegRole) => void;
@@ -386,25 +398,31 @@ function runBackgroundGeocode(
         ? patchActivityStep(s.chatActivity, 'geocode', { status: 'running' })
         : s.chatActivity,
   }));
-  void geocodeItineraryNodesStream(itinerary, dest, {
-    onProgress: ({ done, total }) => {
-      set((s) => ({
-        generationProgress: {
-          phase: 'geocode',
-          llmLatencyMs: s.generationProgress.llmLatencyMs ?? llmLatencyMs,
-          geocodeDone: done,
-          geocodeTotal: total,
-        },
-        chatActivity:
-          s.chatActivity?.op === 'generate'
-            ? patchActivityStep(s.chatActivity, 'geocode', {
-                status: 'running',
-                detail: total > 0 ? `${done}/${total}` : undefined,
-              })
-            : s.chatActivity,
-      }));
+  const tr = get().getActivePlan().trip_request;
+  void geocodeItineraryNodesStream(
+    itinerary,
+    dest,
+    {
+      onProgress: ({ done, total }) => {
+        set((s) => ({
+          generationProgress: {
+            phase: 'geocode',
+            llmLatencyMs: s.generationProgress.llmLatencyMs ?? llmLatencyMs,
+            geocodeDone: done,
+            geocodeTotal: total,
+          },
+          chatActivity:
+            s.chatActivity?.op === 'generate'
+              ? patchActivityStep(s.chatActivity, 'geocode', {
+                  status: 'running',
+                  detail: total > 0 ? `${done}/${total}` : undefined,
+                })
+              : s.chatActivity,
+        }));
+      },
     },
-  })
+    { free_text: tr.free_text ?? '', notes: tr.notes ?? '' },
+  )
     .then((geocoded) => {
       set((s) =>
         updateActivePlan(s, (p) => {
@@ -735,12 +753,17 @@ export const usePlanStore = create<PlanState>()(
         leftPanelMode: 'chat',
       });
       try {
+        const userEvidence = (p.evidence_link_modules ?? [])
+          .filter((m) => m.status === 'ok' && m.result)
+          .map((m) => m.result!)
+          .slice(0, 5);
         const { itinerary, llmLatencyMs } = await generateItineraryStream(p.trip_request, {
           geocode: false,
           travel_intel: p.travel_intel,
           mode,
           current_itinerary:
             mode === 'optimize' || mode === 'regenerate' ? p.itinerary : null,
+          user_evidence: userEvidence.length ? userEvidence : null,
           onDelta: (preview) => {
             set((s) => {
               let activity = s.chatActivity;
@@ -919,6 +942,146 @@ export const usePlanStore = create<PlanState>()(
         set({ isGeneratingItinerary: false, generationProgress: idleProgress });
         useToastStore.getState().show(short, 'error');
         return 'error';
+      }
+    },
+
+    addEvidenceLink: (url) => {
+      const MAX = 5;
+      const plan = get().getActivePlan();
+      const modules = plan.evidence_link_modules ?? [];
+      if (modules.length >= MAX) {
+        useToastStore.getState().show(`最多添加 ${MAX} 条印证链接`, 'warning');
+        return null;
+      }
+      const id = crypto.randomUUID();
+      const mod: EvidenceLinkModule = {
+        id,
+        url: (url ?? '').trim(),
+        status: 'idle',
+      };
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          evidence_link_modules: [...(p.evidence_link_modules ?? []), mod],
+        })),
+      );
+      return id;
+    },
+
+    removeEvidenceLink: (moduleId) => {
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          evidence_link_modules: (p.evidence_link_modules ?? []).filter((m) => m.id !== moduleId),
+        })),
+      );
+    },
+
+    updateEvidenceLinkUrl: (moduleId, url) => {
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          evidence_link_modules: (p.evidence_link_modules ?? []).map((m) =>
+            m.id === moduleId
+              ? {
+                  ...m,
+                  url,
+                  status: m.status === 'ok' || m.status === 'error' ? 'idle' : m.status,
+                  error: undefined,
+                  result: undefined,
+                  fetchedAt: undefined,
+                }
+              : m,
+          ),
+        })),
+      );
+    },
+
+    fetchEvidenceLink: async (moduleId) => {
+      const plan = get().getActivePlan();
+      const mod = (plan.evidence_link_modules ?? []).find((m) => m.id === moduleId);
+      if (!mod) return false;
+      const checked = validateEvidenceUrl(mod.url);
+      if (!checked.ok) {
+        useToastStore.getState().show(checked.error, 'warning');
+        set((s) =>
+          updateActivePlan(s, (p) => ({
+            ...p,
+            evidence_link_modules: (p.evidence_link_modules ?? []).map((m) =>
+              m.id === moduleId
+                ? { ...m, status: 'error' as const, error: checked.error, result: undefined }
+                : m,
+            ),
+          })),
+        );
+        return false;
+      }
+      const url = checked.url;
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          evidence_link_modules: (p.evidence_link_modules ?? []).map((m) =>
+            m.id === moduleId
+              ? { ...m, url, status: 'loading' as const, error: undefined }
+              : m,
+          ),
+        })),
+      );
+      try {
+        const res = await fetchEvidenceFromLink(url, {
+          destination: plan.trip_request.destination || null,
+        });
+        if (!res.ok || !res.item) {
+          const err = res.error || '检索失败';
+          set((s) =>
+            updateActivePlan(s, (p) => ({
+              ...p,
+              evidence_link_modules: (p.evidence_link_modules ?? []).map((m) =>
+                m.id === moduleId
+                  ? { ...m, status: 'error' as const, error: err, result: undefined }
+                  : m,
+              ),
+            })),
+          );
+          return false;
+        }
+        set((s) =>
+          updateActivePlan(s, (p) => ({
+            ...p,
+            evidence_link_modules: (p.evidence_link_modules ?? []).map((m) =>
+              m.id === moduleId
+                ? {
+                    ...m,
+                    status: 'ok' as const,
+                    error: undefined,
+                    result: res.item!,
+                    fetchedAt: new Date().toISOString(),
+                    url: res.item!.url || m.url,
+                  }
+                : m,
+            ),
+          })),
+        );
+        if (res.fromCache) {
+          useToastStore.getState().show('已用本地缓存（相同链接不重复请求）', 'info');
+        }
+        return true;
+      } catch (err) {
+        const msg =
+          err instanceof Error && err.message.trim()
+            ? err.message.trim()
+            : '检索失败，请稍后重试';
+        set((s) =>
+          updateActivePlan(s, (p) => ({
+            ...p,
+            evidence_link_modules: (p.evidence_link_modules ?? []).map((m) =>
+              m.id === moduleId
+                ? { ...m, status: 'error' as const, error: msg, result: undefined }
+                : m,
+            ),
+          })),
+        );
+        return false;
       }
     },
 

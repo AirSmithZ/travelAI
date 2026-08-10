@@ -206,10 +206,12 @@ L-price 多少钱          → Ignav / OTA / 深链（禁止网页摘要当价�
 | API 文档 | [api.tikhub.io](https://api.tikhub.io) · [docs.tikhub.io](https://docs.tikhub.io) |
 | Base | `https://api.tikhub.io` |
 | 认证 | `Authorization: Bearer $TIKHUB_API_KEY` |
-| 搜笔记（推荐 App V2） | `GET /api/v1/xiaohongshu/app_v2/search_notes`（`sort_type=popularity_descending` ≈ 高赞） |
+| 搜笔记（推荐 App V2） | `GET .../app_v2/search_notes`（仅卡片摘要）→ **再** `get_*_note_detail` 拉正文（WS-10 enrich） |
+| 笔记详情（贴链） | `get_image_note_detail` / `get_video_note_detail`（`share_text` 或 `note_id`） |
 | 配置 | 根目录 `.env`：`TIKHUB_API_KEY` / `TIKHUB_API_BASE`（**已 gitignore**）；模板见 `.env.example` |
-| 代码 | ✅ `backend/app/services/ugc/tikhub.py` · `evidence_pack.py` · generate 注入 · `POST /api/v1/ugc/evidence/preview` |
-| 联调 | `python backend/scripts/test_tikhub_evidence.py`；preview 若 **402** 则为 TikHub 余额/套餐问题 |
+| 代码 | ✅ `tikhub.py` · `evidence_pack.py` · `link_providers.py` · generate 注入 · `POST /ugc/evidence/preview` · **`POST /ugc/evidence/from-link`** |
+| 贴链 MVP | ✅ 见 [23-玩法印证贴链MVP实施.md](./23-玩法印证贴链MVP实施.md)（多模块检索 · `user_evidence` 优先于 free_text） |
+| 联调 | `python backend/scripts/test_tikhub_evidence.py` · `test_evidence_from_link.py`；402 多为余额/套餐问题 |
 
 **安全**：登录密码**禁止**写入 `.env` / 文档 / git。若 Key 曾出现在聊天记录，请在控制台**轮换 API Key** 并改密。
 

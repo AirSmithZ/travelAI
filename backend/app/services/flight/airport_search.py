@@ -22,6 +22,7 @@ _COUNTRY_HUBS: dict[str, tuple[str, ...]] = {
     "United Kingdom": ("LHR", "LGW", "STN", "MAN", "EDI"),
     "France": ("CDG", "ORY", "NCE", "LYS"),
     "Australia": ("SYD", "MEL", "BNE", "PER"),
+    "New Zealand": ("AKL", "CHC", "ZQN", "WLG"),
     "Indonesia": ("CGK", "DPS", "SUB", "JOG"),
     "Vietnam": ("SGN", "HAN", "DAD"),
     "Singapore": ("SIN",),
@@ -102,6 +103,23 @@ def _city_zh_map() -> dict[str, str]:
 
 def _airports() -> list[dict]:
     return list(_load().get("airports") or [])
+
+
+@lru_cache
+def _airport_by_iata() -> dict[str, dict]:
+    return {
+        str(a.get("iata") or "").strip().upper(): a
+        for a in _airports()
+        if str(a.get("iata") or "").strip()
+    }
+
+
+def get_airport_by_iata(iata: str) -> dict | None:
+    """Return raw airport row (incl. lat/lon) for a 3-letter IATA, or None."""
+    key = (iata or "").strip().upper()
+    if len(key) != 3 or not key.isalpha():
+        return None
+    return _airport_by_iata().get(key)
 
 
 def _score_text(query: str, text: str, *, exact: float, prefix: float, contains: float) -> float:

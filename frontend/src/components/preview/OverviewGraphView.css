@@ -423,13 +423,49 @@
 }
 
 [data-export-overview][data-exporting] {
+  /* 脱出预览区 flex 压缩，否则 offsetHeight≈视口，PNG 纵向截断 */
+  flex: 0 0 auto !important;
+  min-height: auto !important;
   max-height: none !important;
   max-width: none !important;
+  height: auto !important;
 }
 
 [data-export-overview][data-exporting] .overview-shell__body {
   max-height: none !important;
-  min-height: 0;
+  min-height: auto !important;
+  flex: none !important;
+}
+
+/* P121：导出态节点卡片 — foreignObject 不还原 color-mix / 入场动画 / button UA */
+[data-export-overview][data-exporting] .trip-node,
+[data-export-overview][data-exporting] .overview-trip-node {
+  animation: none !important;
+  transition: none !important;
+  transform: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui,
+    sans-serif !important;
+  background: linear-gradient(145deg, #182230 0%, #131b24 100%) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-export-overview][data-exporting] .trip-node__desc {
+  display: block !important;
+  -webkit-line-clamp: unset !important;
+  overflow: hidden !important;
+  max-height: 2.9em;
+}
+
+[data-export-overview][data-exporting] .overview-route-chain__node {
+  animation: none !important;
+  transition: none !important;
 }
 
 [data-export-overview] .overview-cell__scroll {

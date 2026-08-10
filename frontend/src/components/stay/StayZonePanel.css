@@ -421,6 +421,12 @@
   border-radius: var(--radius-sm);
 }
 
+.stay-zone__cache-hint {
+  margin: 0.25rem 0 0;
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+}
+
 .stay-zone__module-lock {
   display: flex;
   justify-content: flex-end;

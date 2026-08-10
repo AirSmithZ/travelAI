@@ -20,7 +20,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: var(--commute-width, 56px);
+  width: var(--commute-width, 136px);
   min-height: 32px;
   padding: 0 2px;
   border: none;
@@ -31,7 +31,7 @@
 }
 
 .overview-trip-edge--compact {
-  width: var(--commute-width, 44px);
+  width: var(--commute-width, 112px);
 }
 
 .overview-trip-edge__line {

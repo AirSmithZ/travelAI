@@ -23,6 +23,10 @@ CITY_ALIASES: dict[str, str] = {
     "伦敦": "London, United Kingdom",
     "纽约": "New York, United States",
     "悉尼": "Sydney, Australia",
+    "奥克兰": "Auckland, New Zealand",
+    "新西兰": "New Zealand",
+    "基督城": "Christchurch, New Zealand",
+    "皇后镇": "Queenstown, New Zealand",
 }
 
 # ISO 3166-1 alpha-2（Nominatim countrycodes / Photon 过滤）
@@ -49,6 +53,10 @@ CITY_COUNTRY_CODES: dict[str, str] = {
     "伦敦": "gb",
     "纽约": "us",
     "悉尼": "au",
+    "奥克兰": "nz",
+    "新西兰": "nz",
+    "基督城": "nz",
+    "皇后镇": "nz",
 }
 
 

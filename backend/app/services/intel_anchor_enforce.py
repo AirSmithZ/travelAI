@@ -966,6 +966,41 @@ def enforce_confirmed_hotels(
     return out
 
 
+def pinned_ids_from_itinerary(itinerary: dict[str, Any]) -> set[str]:
+    """Recover flight-pinned node ids from meta.flight_bindings (post-geocode re-align)."""
+    pinned: set[str] = set()
+    meta = itinerary.get("meta") or {}
+    for b in meta.get("flight_bindings") or []:
+        if not isinstance(b, dict):
+            continue
+        nid = str(b.get("node_id") or "").strip()
+        if nid:
+            pinned.add(nid)
+    return pinned
+
+
+def realign_schedules_after_commute(
+    itinerary: dict[str, Any],
+    *,
+    note: bool = True,
+) -> dict[str, Any]:
+    """Re-cascade same-day clocks using current edge duration_minutes (TRN-02b).
+
+    Call after commute enrich / manual edge duration updates so verified gaps
+    actually shift POI start/end (flight/hotel anchors stay pinned).
+    """
+    pinned = pinned_ids_from_itinerary(itinerary)
+    out = align_day_schedules(itinerary, None, pinned_ids=pinned)
+    if note:
+        meta = out.setdefault("meta", {})
+        warnings = list(meta.get("warnings") or [])
+        msg = "已按通勤边时长重排当日节点时刻"
+        if msg not in warnings:
+            warnings.append(msg)
+        meta["warnings"] = warnings
+    return out
+
+
 def enforce_travel_intel_anchors(
     itinerary: dict[str, Any],
     travel_intel: dict[str, Any] | None,

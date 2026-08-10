@@ -184,27 +184,31 @@ def fetch_tikhub_user(settings: Settings, *, timeout: float = 8.0) -> dict[str, 
 
 def fetch_qweather_finance(settings: Settings, *, timeout: float = 8.0) -> dict[str, Any]:
     """Requires Console API permission on credential; soft-fails otherwise."""
+    from app.services.qweather_client import qweather_get_json
+
     key = (settings.qweather_api_key or "").strip()
     if not key:
         return {"provider": "qweather", "ok": False, "error": "QWEATHER_API_KEY not set"}
-    host = (settings.qweather_api_host or "https://devapi.qweather.com").rstrip("/")
-    url = f"{host}/finance/v1/summary"
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            # Prefer header auth; also try query key (legacy)
-            resp = client.get(url, headers={"X-QW-Api-Key": key}, params={"key": key})
-            if resp.status_code >= 400:
-                resp = client.get(url, params={"key": key})
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as e:
-        logger.info("qweather finance fetch failed: %s", e)
+    if not (settings.qweather_api_host or "").strip():
         return {
             "provider": "qweather",
             "ok": False,
-            "error": str(e)[:200],
+            "error": "QWEATHER_API_HOST not set",
+            "hint": "控制台 → 设置 复制专属 API Host（*.qweatherapi.com）",
+        }
+    data, _ms, err = qweather_get_json(
+        "/finance/v1/summary",
+        settings=settings,
+        timeout=timeout,
+    )
+    if err or not data:
+        logger.info("qweather finance fetch failed: %s", err)
+        return {
+            "provider": "qweather",
+            "ok": False,
+            "error": (err or "empty")[:200],
             "source": "GET /finance/v1/summary",
-            "hint": "需在和风控制台凭据中开启「财务汇总」控制台权限",
+            "hint": "需专属 API Host + 控制台凭据开启「财务汇总」权限",
         }
 
     if not isinstance(data, dict):

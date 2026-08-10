@@ -75,6 +75,10 @@ class GenerateItineraryRequest(BaseModel):
     travel_intel: TravelIntelIn | None = None
     mode: GenerateMode = "generate"
     current_itinerary: dict[str, Any] | None = None
+    user_evidence: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="User-pasted links already fetched (doc 23); only ok modules",
+    )
 
 
 class GenerateItineraryResponse(BaseModel):
@@ -86,6 +90,11 @@ class GenerateItineraryResponse(BaseModel):
 class GeocodeItineraryRequest(BaseModel):
     itinerary: dict[str, Any]
     destination: str = Field(..., min_length=1)
+    free_text: str = Field(
+        default="",
+        description="User prompt for TRN-02 ferry/trail hint matching during auto-enrich",
+    )
+    notes: str = ""
 
 
 class GeocodeItineraryResponse(BaseModel):

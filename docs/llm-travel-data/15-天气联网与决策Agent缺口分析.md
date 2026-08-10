@@ -71,8 +71,8 @@ flowchart TB
 |----|-------------|
 | **Provider** | 和风天气开发者服务 |
 | **凭据** | 控制台「项目 → 凭据」；**Credential ID** 与 **API KEY** 分离；请求用 Key（或 JWT） |
-| **Host** | 免费订阅常用 `https://devapi.qweather.com`；正式 `https://api.qweather.com` |
-| **认证** | Phase 1：**API KEY**（Header `X-QW-Api-Key` 或 query，以[身份认证](https://dev.qweather.com/docs/configuration/authentication/)为准）；长期建议 **JWT**（2027-02 起 API KEY 将限流） |
+| **Host** | **控制台 → 设置** 专属 Host（`https://xxxx.yy.qweatherapi.com`）；共享 `devapi`/`api.qweather.com` 已淘汰（403 Invalid Host） |
+| **认证** | Phase 1：**API KEY**（推荐 Header `X-QW-Api-Key`，见[身份认证](https://dev.qweather.com/docs/configuration/authentication/)）；长期建议 **JWT**（2027-01 起 API KEY 将限流） |
 | **本项目必用接口** | ① [GeoAPI 城市搜索](https://dev.qweather.com/docs/api/geoapi/) → `Location ID`；② [每日天气预报](https://dev.qweather.com/docs/api/weather/weather-daily-forecast/)（3d/7d/10d/30d 按行程跨度选） |
 | **可选增强** | 天气指数（穿衣/紫外线）、预警、分钟降水（中国）→ tips / rain_plan |
 | **Fallback** | Open-Meteo（免 Key）→ LLM `source:llm` |
@@ -265,7 +265,7 @@ curl -s https://api.tavily.com/search \
 | 订哪家酒店价 | Hotel OTA | Partner API | Trip deep link | `hotels[]` / 节点 | ⏸ P5b |
 | 今天室外还是室内？ | Weather | **和风天气**（QWeather） | LLM | `days[].weather` | ✅ WX-01（Chat UI 仍缺） |
 | 景点是否开放 / 需预约 | Activity | Places / 官方 / **Tavily** | KB YAML | `activity_detail` / tips | ⚠️ Places hours soft（WS-08b） |
-| A→B 几分钟？ | Transit | OSRM / Directions / LTA | LLM 估 + warning | `edges.duration_minutes` | ⚠️ 通勤粗审计 warning |
+| A→B 几分钟？ | Transit | OSRM / Directions / LTA | LLM 估 + warning | `edges.duration_minutes` | ✅ **TRN-01** 按需 + **TRN-02** 可疑边自动补算（非全量） |
 | 要不要办交通卡？ | Compliance/Transit | **目的地 YAML KB** | web_search 核验 | `meta.transit_cards[]` | ❌ 文档 |
 | 签证 / 入境 | Compliance | KB + 官方 URL | web_search | `pre_trip_checklist[]` | ❌ |
 | POI 坐标 | resolve_place | **Geocode** | Wikidata；地图点选 | `nodes.lat/lng` | ✅ |

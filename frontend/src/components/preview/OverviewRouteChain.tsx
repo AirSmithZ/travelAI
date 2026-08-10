@@ -16,6 +16,7 @@ interface OverviewRouteChainProps {
   nodes: ItineraryNode[];
   cellLayout: CellLayoutResult;
   compact?: boolean;
+  exportMode?: boolean;
   selectedNodeId: string | null;
   dragPreview?: DragPreview | null;
   regionEnter?: { nodeId: string; direction: 'up' | 'down' } | null;
@@ -35,6 +36,7 @@ export function OverviewRouteChain({
   nodes,
   cellLayout,
   compact,
+  exportMode,
   selectedNodeId,
   dragPreview,
   regionEnter,
@@ -168,6 +170,7 @@ export function OverviewRouteChain({
             <OverviewNodeCard
               node={node}
               compact={compact}
+              exportMode={exportMode}
               selected={node.id === selectedNodeId}
               primaryHotel={primaryHotelIds?.has(node.id)}
               onSelect={() => onSelectNode(node.id)}

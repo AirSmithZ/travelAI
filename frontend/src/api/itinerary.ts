@@ -23,6 +23,8 @@ export interface GenerateItineraryOptions {
   /** FLOW-02 */
   mode?: GenerateMode;
   current_itinerary?: Itinerary | null;
+  /** doc 23: 已检索成功的用户贴链（仅 ok 模块） */
+  user_evidence?: import('../types/itinerary').ItineraryEvidenceItem[] | null;
 }
 
 export interface GenerateItineraryResult {
@@ -83,6 +85,7 @@ export async function generateItineraryStream(
     travel_intel,
     mode = 'generate',
     current_itinerary,
+    user_evidence,
     onProgress,
     onDelta,
   } = options ?? {};
@@ -96,6 +99,7 @@ export async function generateItineraryStream(
       mode,
       ...(travel_intel ? { travel_intel } : {}),
       ...(current_itinerary ? { current_itinerary } : {}),
+      ...(user_evidence?.length ? { user_evidence } : {}),
     },
     {
       onEvent: (event, data) => {
@@ -137,6 +141,9 @@ export async function generateItinerary(
       ...(options?.current_itinerary
         ? { current_itinerary: options.current_itinerary }
         : {}),
+      ...(options?.user_evidence?.length
+        ? { user_evidence: options.user_evidence }
+        : {}),
     }),
   });
 
@@ -168,12 +175,18 @@ export async function geocodeItineraryNodesStream(
   itinerary: Itinerary,
   destination: string,
   handlers?: GeocodeStreamHandlers,
+  options?: { free_text?: string; notes?: string },
 ): Promise<Itinerary> {
   let result: Itinerary | null = null;
 
   await consumeSsePost(
     `${apiBase()}/api/v1/itineraries/geocode-nodes/stream`,
-    { itinerary, destination },
+    {
+      itinerary,
+      destination,
+      free_text: options?.free_text ?? '',
+      notes: options?.notes ?? '',
+    },
     {
       onEvent: (event, data) => {
         if (event === 'progress' && data.step === 'geocoding') {
@@ -197,12 +210,18 @@ export async function geocodeItineraryNodesStream(
 export async function geocodeItineraryNodes(
   itinerary: Itinerary,
   destination: string,
+  options?: { free_text?: string; notes?: string },
 ): Promise<Itinerary> {
   const base = apiBase();
   const res = await fetch(`${base}/api/v1/itineraries/geocode-nodes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ itinerary, destination }),
+    body: JSON.stringify({
+      itinerary,
+      destination,
+      free_text: options?.free_text ?? '',
+      notes: options?.notes ?? '',
+    }),
   });
 
   if (!res.ok) {

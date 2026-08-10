@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import logging
-import time
 from datetime import date, timedelta
 from typing import Any
 
-import httpx
-
 from app.config import Settings
 from app.services.api_usage import record_usage
+from app.services.qweather_client import qweather_api_key, qweather_get_json
 from app.services.qweather_geo import lookup_city_center
 from app.services.weather_tool import WEATHER_ICONS
 
@@ -58,8 +56,16 @@ def map_qweather_icon(icon_code: str | int | None, text: str = "") -> str:
     return "cloudy"
 
 
-def _pick_days_span(day_count: int) -> str:
-    n = max(1, min(int(day_count or 3), 30))
+def _pick_days_span(*, date_start: date, day_count: int, today: date | None = None) -> str:
+    """Choose 3d/7d/10d/15d/30d so the window covers trip end from *today*."""
+    today = today or date.today()
+    n_days = max(1, min(int(day_count or 3), 30))
+    trip_end = date_start + timedelta(days=n_days - 1)
+    # API daily series starts from "today"; need enough days to reach trip_end.
+    needed = (trip_end - today).days + 1
+    if needed < n_days:
+        needed = n_days
+    n = max(1, min(needed, 30))
     if n <= 3:
         return "3d"
     if n <= 7:
@@ -111,7 +117,7 @@ def fetch_trip_forecast(
     Returns list of {date, temp_min, temp_max, icon, description, source}.
     Dates outside API window are omitted (caller keeps LLM weather).
     """
-    key = (settings.qweather_api_key or "").strip()
+    key = qweather_api_key(settings)
     dest = (destination or "").strip()
     if not key or not dest:
         return []
@@ -127,31 +133,27 @@ def fetch_trip_forecast(
     if not loc:
         return []
 
-    host = (settings.qweather_api_host or "https://devapi.qweather.com").rstrip("/")
-    span = _pick_days_span(day_count)
-    url = f"{host}/v7/weather/{span}"
-    params = {"location": loc, "key": key, "lang": "zh"}
-
-    t0 = time.perf_counter()
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        ms = int((time.perf_counter() - t0) * 1000)
-    except Exception as e:
+    span = _pick_days_span(date_start=date_start, day_count=day_count)
+    data, ms, err = qweather_get_json(
+        f"/v7/weather/{span}",
+        settings=settings,
+        params={"location": loc, "lang": "zh"},
+        timeout=timeout,
+    )
+    if err or not data:
         record_usage(
             "qweather",
             "forecast",
             ok=False,
-            latency_ms=int((time.perf_counter() - t0) * 1000),
-            error=str(e)[:200],
+            latency_ms=ms,
+            error=(err or "empty")[:200],
         )
-        logger.warning("QWeather forecast failed for %s: %s", dest, e)
+        if err and err != "unconfigured":
+            logger.warning("QWeather forecast failed for %s: %s", dest, err)
         return []
 
-    if not isinstance(data, dict) or str(data.get("code") or "") != "200":
-        code = data.get("code") if isinstance(data, dict) else "?"
+    if str(data.get("code") or "") != "200":
+        code = data.get("code")
         record_usage("qweather", "forecast", ok=False, latency_ms=ms, error=f"code_{code}")
         logger.info("QWeather forecast code=%s for %s", code, dest)
         return []

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -19,7 +20,10 @@ from app.services.itinerary_credibility import (  # noqa: E402
     format_weather_constraints_block,
 )
 from app.services.itinerary_llm import _build_generate_user  # noqa: E402
-from app.services.qweather_forecast import map_qweather_icon  # noqa: E402
+from app.services.qweather_forecast import (  # noqa: E402
+    _pick_days_span,
+    map_qweather_icon,
+)
 
 
 def test_map_qweather_icon():
@@ -30,6 +34,19 @@ def test_map_qweather_icon():
     assert map_qweather_icon(400, "小雪") == "snow"
     assert map_qweather_icon(None, "阴") == "overcast"
     print("map_qweather_icon OK")
+
+
+def test_pick_days_span_covers_future_trip():
+    """Span must cover trip end from today, not only day_count."""
+    today = date(2026, 8, 9)
+    assert (
+        _pick_days_span(date_start=date(2026, 8, 30), day_count=4, today=today) == "30d"
+    )
+    assert _pick_days_span(date_start=today, day_count=3, today=today) == "3d"
+    assert (
+        _pick_days_span(date_start=date(2026, 8, 10), day_count=4, today=today) == "7d"
+    )
+    print("pick_days_span OK")
 
 
 def test_apply_forecast_overlay():
@@ -196,6 +213,7 @@ def test_enrich_pipeline():
 
 if __name__ == "__main__":
     test_map_qweather_icon()
+    test_pick_days_span_covers_future_trip()
     test_apply_forecast_overlay()
     test_rain_outdoor_warning()
     test_commute_warning()

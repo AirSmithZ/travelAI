@@ -177,18 +177,38 @@ def _bias_for_destination(
     destination: str,
     *,
     settings: Settings | None = None,
+    center_lat: float | None = None,
+    center_lng: float | None = None,
+    country_code: str | None = None,
 ) -> tuple[GeocodeBias | None, float | None, list[str]]:
-    """构建 bias + fence；返回 (bias, fence_km, setup_warnings)。"""
+    """构建 bias + fence；返回 (bias, fence_km, setup_warnings)。
+
+    Optional ``center_lat`` / ``center_lng`` pin the fence (e.g. arrival airport)
+    so ambiguous city names like 「奥克兰」 cannot resolve to the wrong country.
+    """
     cfg = settings or get_settings()
     warnings: list[str] = []
     dest = destination.strip()
+    alias_cc = (country_code or country_code_for_destination(dest) or "").strip().lower() or None
+    fence_km = float(cfg.geocode_fence_km)
+
+    if center_lat is not None and center_lng is not None:
+        bbox = bbox_from_center(float(center_lat), float(center_lng), fence_km)
+        return (
+            GeocodeBias(
+                lat=float(center_lat),
+                lng=float(center_lng),
+                country_code=alias_cc,
+                bbox=bbox,
+            ),
+            fence_km,
+            warnings,
+        )
+
     if not dest:
         return None, None, warnings
 
     center = resolve_destination_center(dest, settings=cfg)
-    alias_cc = country_code_for_destination(dest)
-    fence_km = float(cfg.geocode_fence_km)
-
     if center is None:
         # 复检 P1：中心失败时仍保留 countrycodes，禁止完全放开裸名全球 Top1
         if alias_cc:
@@ -219,16 +239,25 @@ def geocode_autocomplete(
     *,
     settings: Settings | None = None,
     name_en: str | None = None,
+    center_lat: float | None = None,
+    center_lng: float | None = None,
+    country_code: str | None = None,
 ) -> AutocompleteResult:
     queries = build_query_variants(name, destination, name_en=name_en)
     if not queries:
         return AutocompleteResult(results=[], warnings=["搜索关键词为空"])
 
     cfg = settings or get_settings()
-    bias, fence_km, setup_warnings = _bias_for_destination(destination, settings=cfg)
+    bias, fence_km, setup_warnings = _bias_for_destination(
+        destination,
+        settings=cfg,
+        center_lat=center_lat,
+        center_lng=center_lng,
+        country_code=country_code,
+    )
     dest = destination.strip()
     # 有目的地时永不允许「无围栏裸名全球 Top1」；仅无 destination 时才放开
-    allow_bare = not dest and fence_km is None
+    allow_bare = not dest and fence_km is None and center_lat is None
     bare = (name_en or "").strip() or name.strip()
     outcome = run_autocomplete(
         queries,
@@ -244,11 +273,22 @@ def geocode_autocomplete(
     return outcome
 
 
-def _cache_key(name: str, destination: str, name_en: str = "") -> tuple[str, str, str]:
+def _cache_key(
+    name: str,
+    destination: str,
+    name_en: str = "",
+    *,
+    center_lat: float | None = None,
+    center_lng: float | None = None,
+    country_code: str | None = None,
+) -> tuple:
     return (
         name.strip().lower(),
         destination.strip().lower(),
         (name_en or "").strip().lower(),
+        round(float(center_lat), 4) if center_lat is not None else None,
+        round(float(center_lng), 4) if center_lng is not None else None,
+        (country_code or "").strip().lower() or None,
     )
 
 
@@ -436,6 +476,9 @@ def _wikidata_fallback(
     name_en: str | None,
     destination: str,
     settings: Settings | None = None,
+    center_lat: float | None = None,
+    center_lng: float | None = None,
+    country_code: str | None = None,
 ) -> dict[str, Any] | None:
     """P82: SerpApi/Photon/Nominatim 失败时用 Wikidata P625 补坐标。"""
     from app.services.wikidata_geo import resolve_wikidata_place
@@ -445,7 +488,13 @@ def _wikidata_fallback(
     if not hit:
         return None
     # Fence check against destination center when available
-    bias, fence_km, _ = _bias_for_destination(destination, settings=cfg)
+    bias, fence_km, _ = _bias_for_destination(
+        destination,
+        settings=cfg,
+        center_lat=center_lat,
+        center_lng=center_lng,
+        country_code=country_code,
+    )
     if bias and bias.lat is not None and bias.lng is not None and fence_km:
         dist = haversine_km(bias.lat, bias.lng, float(hit["lat"]), float(hit["lng"]))
         if dist > float(fence_km):
@@ -465,25 +514,49 @@ def geocode_place(
     *,
     raise_on_provider_error: bool = False,
     name_en: str | None = None,
+    center_lat: float | None = None,
+    center_lng: float | None = None,
+    country_code: str | None = None,
 ) -> dict[str, Any] | None:
     """批量编码用：失败默认返回 None。
 
     HTTP `/geocode/search` 应传 ``raise_on_provider_error=True``，
     避免上游全挂时被误报成 404。
+
+    Optional ``center_lat`` / ``center_lng`` / ``country_code`` pin the geocode
+    fence (stay-zone middle layer: arrival airport anchor).
     """
     en = (name_en or "").strip()
-    key = _cache_key(name, destination, en)
+    key = _cache_key(
+        name,
+        destination,
+        en,
+        center_lat=center_lat,
+        center_lng=center_lng,
+        country_code=country_code,
+    )
     if key in _GEOCODE_CACHE:
         return _GEOCODE_CACHE[key]
 
     aliases = _query_aliases(name, en)
+    bias_kwargs = {
+        "center_lat": center_lat,
+        "center_lng": center_lng,
+        "country_code": country_code,
+    }
     try:
         # 多候选 + 名称/距离融合，减轻围栏内同名错点
-        result = geocode_autocomplete(name, destination, limit=5, name_en=en or None)
+        result = geocode_autocomplete(
+            name,
+            destination,
+            limit=5,
+            name_en=en or None,
+            **bias_kwargs,
+        )
         if not result.results:
             hit: dict[str, Any] | None = None
         else:
-            bias, fence_km, _ = _bias_for_destination(destination)
+            bias, fence_km, _ = _bias_for_destination(destination, **bias_kwargs)
             best, ambiguous = _pick_best_hit(
                 name,
                 result.results,
@@ -503,12 +576,22 @@ def geocode_place(
                 else None
             )
         if hit is None:
-            hit = _wikidata_fallback(name, name_en=en or None, destination=destination)
+            hit = _wikidata_fallback(
+                name,
+                name_en=en or None,
+                destination=destination,
+                **bias_kwargs,
+            )
     except GeocodeProviderError as e:
         if raise_on_provider_error:
             raise
         logger.warning("geocode_place failed for %s: %s", name, e)
-        hit = _wikidata_fallback(name, name_en=en or None, destination=destination)
+        hit = _wikidata_fallback(
+            name,
+            name_en=en or None,
+            destination=destination,
+            **bias_kwargs,
+        )
 
     if len(_GEOCODE_CACHE) >= _GEOCODE_CACHE_MAX:
         _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))

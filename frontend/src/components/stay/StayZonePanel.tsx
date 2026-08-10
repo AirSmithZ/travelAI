@@ -8,7 +8,9 @@ import {
   getStayZonePanelPhase,
   stayZonePanelBadgeLabel,
 } from '../../types/stayZone';
+import { cityLabelFromOutboundFlight } from '../../utils/flightArrivalCity';
 import { validateHotelStays } from '../../utils/hotelStayValidate';
+import { resolveAirportPlace } from '../../utils/resolveAirportPlace';
 import type { StayHotelMapPin } from '../../utils/stayHotelMapPins';
 import { isValidMapCoord } from '../../utils/mapCoordGuards';
 import { ZoneAreaLodgingModule } from './ZoneAreaLodgingModule';
@@ -96,6 +98,57 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   const canRecommend = Boolean(plan.trip_request.destination?.trim());
   const displayWarnings = useMemo(() => dedupeMessages(warnings), [warnings]);
   const standaloneLocked = intel.hotels.find((h) => !h.zone_id);
+
+  /** Country-level destination (e.g. 新西兰) → hub city via /flights/airports before geocode bias. */
+  const [resolvedDestCity, setResolvedDestCity] = useState('');
+  const [flightArrivalCity, setFlightArrivalCity] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    const dest = (plan.trip_request.destination || '').trim();
+    if (!dest) {
+      setResolvedDestCity('');
+      return;
+    }
+    void resolveAirportPlace(dest).then((r) => {
+      if (cancelled) return;
+      setResolvedDestCity(r?.cityLabel ?? '');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [plan.trip_request.destination]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void cityLabelFromOutboundFlight(intel.flights).then((city) => {
+      if (!cancelled) setFlightArrivalCity(city);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [intel.flights]);
+
+  /** P113/P117: geocode bias — zone.city → flight arrival city → resolved city (never raw country). */
+  const hotelGeocodeCity = useMemo(() => {
+    const dest = (plan.trip_request.destination || '').trim();
+    const fallback = resolvedDestCity || '';
+    const selected = zones.find((z) => z.id === selectedStayZoneId);
+    const selectedCity = (selected?.city || '').trim();
+    if (selectedCity && selectedCity !== dest) return selectedCity;
+    const otherCity = zones
+      .map((z) => (z.city || '').trim())
+      .find((c) => c && c !== dest);
+    if (otherCity) return otherCity;
+    if (selectedCity) return selectedCity;
+    if (flightArrivalCity && flightArrivalCity !== dest) return flightArrivalCity;
+    return flightArrivalCity || fallback;
+  }, [
+    zones,
+    selectedStayZoneId,
+    plan.trip_request.destination,
+    flightArrivalCity,
+    resolvedDestCity,
+  ]);
 
   function openMapPreview() {
     setActiveView('map');
@@ -291,7 +344,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
         lng: candidate.lng,
         address: candidate.address ?? undefined,
         coord_source: candidate.coord_source ?? 'geocode',
-        city: plan.trip_request.destination,
+        city: hotelGeocodeCity || resolvedDestCity || plan.trip_request.destination,
       });
       if (hotelId) {
         setNameDraft(null);
@@ -383,7 +436,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
       <div className="stay-zone__section">
         <p className="stay-zone__label">店名搜索</p>
         <ZoneHotelNameSearchModule
-          destination={plan.trip_request.destination || ''}
+          destination={hotelGeocodeCity}
           draft={nameDraft}
           lockedName={standaloneLocked?.name}
           locking={addLoading === 'name'}

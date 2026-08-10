@@ -289,7 +289,7 @@ poi_tally
 
 | 项 | 说明 |
 |----|------|
-| 用户粘贴 1～3 条笔记/链接 | TripPick 模式：人选题，系统结构化（[19 §8](./19-玩法印证与UGC数据源分析.md)） |
+| 用户粘贴 1～3 条笔记/链接 | ✅ **WS-10 MVP**（最多 5；每链独立检索）；见 [23](./23-玩法印证贴链MVP实施.md) |
 | 高频目的地弱缓存玩法卡 | 非完整 KB；仅缓存 `poi_tally` 人审过的版本 |
 | Reddit 英文向 | 有稳定 API/合规路径再加 provider |
 | Agent-Reach Skill | 仅开发者本机调研用，不进 CI/生产 |
@@ -412,7 +412,7 @@ Hit 规则：`gold` 是否作为子串出现在任一 item 的 `title+snippet`�
 1. **采纳**：多 provider 扩展现有 EvidencePack；**不**整包引入 Agent-Reach；**不**另写印证系统。  
 2. **成本**：**保留 TikHub** 作生产 pattern 主源；TTL 缓存 + 软降级控费；Reach 仅 bench（§0.1）。  
 3. ~~**先做 Phase 0 bench**~~ ✅；Tavily authority 已 soft-merge。  
-4. ~~**WS-08a/b**~~ ✅；下一步按需：**完整网页桶 WS-01** · KB skill · Phase 3 飞轮（用户粘贴笔记）。  
+4. ~~**WS-08a/b**~~ ✅；~~**Phase 3 贴链 WS-10**~~ ✅（[23](./23-玩法印证贴链MVP实施.md)）；下一步按需：**完整网页桶 WS-01** · 其它平台 Provider · KB skill。  
 5. **Exa / Agent-Reach**：默认仅评测；无显著增益则永久不做生产依赖。  
 6. **与 16/18 优先级关系**：机酒与坐标仍优先；本方案是玩法层增强，不回退「先天气/大 Agent」。
 

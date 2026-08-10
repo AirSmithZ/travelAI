@@ -34,7 +34,12 @@ def _validate_https_allowlisted_url(value: str) -> str:
     if parsed.scheme != "https":
         raise ValueError(f"SEC-04: URL must use https (got {parsed.scheme or 'empty'}): {raw}")
     host = (parsed.hostname or "").lower()
-    if host not in _ALLOWED_API_HOSTS and not host.endswith(".qweather.com"):
+    # QWeather Console V4: dedicated hosts are *.qweatherapi.com (not *.qweather.com).
+    if (
+        host not in _ALLOWED_API_HOSTS
+        and not host.endswith(".qweather.com")
+        and not host.endswith(".qweatherapi.com")
+    ):
         raise ValueError(f"SEC-04: host not allowlisted: {host}")
     return raw
 
@@ -154,8 +159,10 @@ class Settings(BaseSettings):
         validation_alias="QWEATHER_CREDENTIAL_ID",
     )
     qweather_api_key: str = Field(default="", validation_alias="QWEATHER_API_KEY")
+    # Console → Settings dedicated host, e.g. https://xxxx.yy.qweatherapi.com
+    # Legacy shared hosts (devapi/api.qweather.com) return 403 Invalid Host.
     qweather_api_host: str = Field(
-        default="https://devapi.qweather.com",
+        default="",
         validation_alias="QWEATHER_API_HOST",
     )
 
@@ -197,6 +204,32 @@ class Settings(BaseSettings):
         validation_alias="EVIDENCE_POI_VALIDATE_MAX",
     )
 
+    # 通勤 TRN-02：geocode 后仅对可疑边自动补算（默认开；无 Key 时仍可走提示词/估算）
+    commute_auto_enrich: bool = Field(
+        default=True,
+        validation_alias="COMMUTE_AUTO_ENRICH",
+    )
+    commute_auto_use_directions: bool = Field(
+        default=True,
+        validation_alias="COMMUTE_AUTO_USE_DIRECTIONS",
+    )
+    commute_auto_max_edges: int = Field(
+        default=8,
+        validation_alias="COMMUTE_AUTO_MAX_EDGES",
+    )
+    commute_cache_ttl_sec: int = Field(
+        default=604800,  # 7 days; 0 = disable
+        validation_alias="COMMUTE_CACHE_TTL_SEC",
+    )
+    commute_suspicious_walk_m: float = Field(
+        default=900.0,
+        validation_alias="COMMUTE_SUSPICIOUS_WALK_M",
+    )
+    commute_suspicious_long_m: float = Field(
+        default=3000.0,
+        validation_alias="COMMUTE_SUSPICIOUS_LONG_M",
+    )
+
     @field_validator(
         "deepseek_api_base",
         "serpapi_base_url",
@@ -217,7 +250,16 @@ class Settings(BaseSettings):
 
     @property
     def weather_configured(self) -> bool:
-        return bool(self.qweather_api_key.strip())
+        """Key + dedicated API Host (legacy shared hosts alone are not enough)."""
+        if not self.qweather_api_key.strip():
+            return False
+        raw = (self.qweather_api_host or "").strip()
+        if not raw:
+            return False
+        host = (urlparse(raw).hostname or "").lower()
+        if host in {"devapi.qweather.com", "api.qweather.com", "geoapi.qweather.com"}:
+            return False
+        return host.endswith(".qweatherapi.com")
 
     @property
     def web_search_configured(self) -> bool:

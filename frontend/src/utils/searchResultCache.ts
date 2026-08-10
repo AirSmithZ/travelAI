@@ -1,4 +1,6 @@
-/** UX-FLT-CACHE: in-memory TTL cache for flight / lodging search results. */
+/** UX-FLT-CACHE: in-memory TTL cache for flight search results.
+ * Lodging persists via lodgingSearchCache.ts (localStorage L2).
+ */
 
 export type CacheEntry<T> = {
   value: T;

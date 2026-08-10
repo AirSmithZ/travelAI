@@ -2,8 +2,8 @@
 
 ← [总索引](../TODO.md) · [README](./README.md) · [06-机酒流程](./06-机酒确认与行程生成流程方案.md)
 
-> **更新**：2026-08-09（+ **GEN-TOKEN / P90** generate token 与空 JSON 防护）  
-> **ID 前缀**：`SEC-` / `DATA-` / `B-` / `GEO-` / `WX-` / `WS-` / `AG-` · 状态：🔲 开放 · ⏸ 暂停 · ✅ 完成 · 🔧 进行中
+> **更新**：2026-08-09（+ **COST-01** Viator 账号审核阻塞）  
+> **ID 前缀**：`SEC-` / `DATA-` / `B-` / `GEO-` / `WX-` / `WS-` / `AG-` / `TRN-` / `COST-` · 状态：🔲 开放 · ⏸ 暂停 · ✅ 完成 · 🔧 进行中
 
 ---
 
@@ -31,6 +31,8 @@
 | **GEO-05** | ✅ | P1 | NodeCoordEditor 400ms debounce | `NodeCoordEditor.tsx` |
 | **GEO-09** | ✅ | P2 | 和风 GeoAPI 城市中心优先 + 英译 query 变体 | `qweather_geo.py` · `geocoding.py` |
 | **GEO-10** | ✅ | P1 | LLM `name_en` + 英文优先检索/评分 + Wikidata 补查（P82） | `itinerary_llm.py` · `geocoding.py` · `wikidata_geo.py` |
+| **GEO-11** | ✅ | P0 | 片区几何 geocode bias：`zone.city` / 航班抵达城优先于模糊 destination（P113） | `stay_zone/geocode_bias.py` · `enrich.py` · [问题日志 P113](../问题日志.md) |
+| **GEO-12** | ✅ | P0 | 国家级 destination + 歧义城名：航班 IATA 坐标钉 fence + country_code（P117） | `GeocodePlaceContext` · `geocoding.py` center_* · [问题日志 P117](../问题日志.md) |
 
 ### 酒店 / 流程 / 排序
 
@@ -38,6 +40,9 @@
 |----|------|--------|------|----------|
 | **HOT-01** | 🔲 | P1 | 验证 Hotelbeds / Trip Partner 是否可申请沙箱（**商务，非代码**） | [17 §2](./17-用户决策回应与Geocode机酒重排.md) |
 | **HOT-02** | ✅ | P2 | 片区内 lodging（SerpApi Maps）+ Trip 深链价 | `POST /stay-zones/lodging` · StayZonePanel |
+| **HOT-02b** | ✅ | P0 | lodging EN query + 429/status 可感知；半径放宽；禁中文 slogan q（P118） | `lodging_search.py` · [问题日志 P118](../问题日志.md) |
+| **HOT-02c** | ✅ | P0 | 坐标 reverse→EN 城名；SSL/超时瞬时重试且停烧劣 q（P119） | `city_en_from_coords` · [问题日志 P119](../问题日志.md) |
+| **HOT-02d** | ✅ | P1 | lodging localStorage L2 缓存；hub+radius key；429 降级展示（P120） | `lodgingSearchCache.ts` · [问题日志 P120](../问题日志.md) |
 | **HOT-03** | ✅ | P1 | 每晚预算字段/UI；Trip 深链 `highPrice`；prompt 软约束 | [18](./18-机酒优先与迭代行程产品决策.md) · StayZonePanel |
 | **FLT-RANK-01/02** | ✅ | — | 5:2:2:1 + 参考价文案 | `rank.py` · FlightIntelPanel |
 | **FLOW-01/01b** | ✅ | — | 无航班阻断前后端 | [18](./18-机酒优先与迭代行程产品决策.md) |
@@ -97,6 +102,29 @@
 
 ---
 
+## 3b. 通勤 `TRN-*`
+
+| ID | 状态 | 优先级 | 待办 | 关联文档 |
+|----|------|--------|------|----------|
+| **TRN-01** | ✅ | P1 | 按需 `POST /commute/lookup`（SerpApi Directions）+ EdgeEditor 查询；提示词海路/山路兜底；`route_source` | [04](./04-通勤与交通卡.md) · [问题日志 P114](../问题日志.md) |
+| **TRN-02** | ✅ | P1 | geocode 后可疑边自动补算 + Directions TTL 缓存；`COMMUTE_AUTO_*`；全量 Directions 仍关 | [04 §5.2](./04-通勤与交通卡.md) · [问题日志 P115](../问题日志.md) |
+| **TRN-02b** | ✅ | P1 | 通勤核实后按边时长重排当日时刻（后端 realign + EdgeEditor cascade） | [04 §5.3](./04-通勤与交通卡.md) · [问题日志 P116](../问题日志.md) |
+| **TRN-03** | ⏸ | P3 | 交通卡 YAML KB（产品暂不做） | [04 §3](./04-通勤与交通卡.md) |
+
+---
+
+## 3c. 节点开销补价 `COST-*`
+
+> 品类分流：门票 → Viator（优先）/ GYG；餐饮 → Places 价位带 + 城市人均表；机酒/通勤走既有链路。Expense 须标 `quote` / `partner` / `price_band` / `estimate`。
+
+| ID | 状态 | 优先级 | 待办 | 关联文档 |
+|----|------|--------|------|----------|
+| **COST-01** | ⏸ | P2 | **Viator Affiliate API**：账号已注册（Partner `P00313968`），**审核中**；后台 Tools 仅见 Widgets，待开通后从 `partners.viator.com/developer-api` 取 `exp-api-key` → 生成后对 `attraction`/`landmark` 名称匹配补 `cost` + 预订深链 | [03 §4 Phase 2](./03-游玩项目.md) · ExpensePanel |
+| **COST-02** | 🔲 | P2 | 餐饮价位：优先复用 SerpAPI Maps 价位字段；不足再 Places `priceLevel`/`priceRange` + 城市人均表 → `restaurant`/`snack` 区间价 | [03 §2](./03-游玩项目.md) |
+| **COST-03** | 🔲 | P3 | schema：生成路径保留结构化 `cost`（现多丢，仅 `cost_label`）；来源字段写入 meta | `itinerary_llm.py` · FE `NodeCost` |
+
+---
+
 ## 4. 天气 / 联网 / Agent（多数 ⏸）
 
 | ID | 状态 | 说明 |
@@ -106,6 +134,7 @@
 | **WX-03/04** | 🔲 | Chat `fetch_weather` / rain_plan UI（等产品排期） | [15](./15-天气联网与决策Agent缺口分析.md) · OV-04 |
 | **WS-01/02/03/05** | 🔲 | Tavily 完整网页桶（authority soft-merge 已随 WS-09） |
 | **WS-04/06/07** | ✅ | EvidencePack + 侧栏 + TikHub（**成本决策：保留 TikHub 主源**，见 [21 §0.1](./21-Agent-Reach与玩法印证多源实施调研.md)） |
+| **WS-10** | ✅ | **贴链 MVP**：多链接模块 + `from-link` + `user_evidence` 优先注入（[23](./23-玩法印证贴链MVP实施.md)） |
 | **WS-CACHE** | ✅ | EvidencePack TTL 缓存降本（`EVIDENCE_CACHE_TTL_SEC`） |
 | **WS-08a** | ✅ | 轻量 POI 抽取 + geocode 围栏校验 → `meta.poi_candidates` |
 | **WS-08b** | ✅ | SerpAPI Maps 类型/评分 enrich（soft-fail；`places_enrich.py`） |
@@ -127,12 +156,12 @@
 **建议实施顺序**：
 
 1. ~~对话编排 Wave A/B/C~~ ✅ · ~~WS-09 / WS-08a/b / CACHE~~ ✅ · ~~WX-01 玩法可信度~~ ✅  
-2. **运维 / 商务**：`SEC-01b` · `HOT-01` · 部署前 `SEC-02`（~~`OPS-01`~~ ✅）  
-3. **扩张（按需）**：完整 Tavily 网页桶 `WS-01…` · `AG-02…` · KB skill（**保持 TikHub**；Reach 仅对照）  
-4. （⏸ 移动端 · WX-02/03 · Exa/Agent-Reach 生产依赖 · P5b）  
+2. **运维 / 商务**：`SEC-01b` · `HOT-01` · 部署前 `SEC-02`（~~`OPS-01`~~ ✅）· **`COST-01` 等 Viator 审核通过拿 Key**  
+3. **扩张（按需）**：`COST-02` 餐饮价位 · 完整 Tavily 网页桶 `WS-01…` · `AG-02…` · KB skill（**保持 TikHub**；Reach 仅对照）  
+4. （⏸ 移动端 · WX-02/03 · Exa/Agent-Reach 生产依赖 · P5b · **COST-01 账号审核**）  
 
 > 对话为主 / 只读摘要见 [22](./22-对话编排与玩法印证UX调研.md)。印证多源见 [21](./21-Agent-Reach与玩法印证多源实施调研.md)。偏离复核见 [20 §6](./20-L1L2运行验证记录.md)。
 
 ---
 
-*清单版本：v1.19 · 2026-08-09 · FLOW-01d/P92 · GEN-THINK/P93 · 变更请同步 [总索引](../TODO.md)*
+*清单版本：v1.24 · 2026-08-09 · +WS-10 贴链 MVP · 变更请同步 [总索引](../TODO.md)*

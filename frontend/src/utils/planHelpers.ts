@@ -39,6 +39,7 @@ export function createEmptyPlan(title = '新旅行计划'): TravelPlan {
     chat_messages: [],
     pending_patches: [],
     form_layout: DEFAULT_FORM_LAYOUT,
+    evidence_link_modules: [],
   };
 }
 

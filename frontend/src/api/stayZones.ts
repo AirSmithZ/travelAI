@@ -55,6 +55,13 @@ export interface StayZoneLodgingCandidate {
   coord_source?: string;
 }
 
+export type StayZoneLodgingStatus =
+  | 'ok'
+  | 'empty'
+  | 'rate_limited'
+  | 'provider_error'
+  | 'unconfigured';
+
 export async function searchStayZoneLodging(body: {
   zone_id: string;
   city: string;
@@ -63,7 +70,12 @@ export async function searchStayZoneLodging(body: {
   lng: number;
   radius_m?: number;
   limit?: number;
-}): Promise<{ candidates: StayZoneLodgingCandidate[]; warnings: string[] }> {
+}): Promise<{
+  candidates: StayZoneLodgingCandidate[];
+  warnings: string[];
+  status: StayZoneLodgingStatus;
+  query: string;
+}> {
   const res = await fetch(`${apiBase()}/api/v1/stay-zones/lodging`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -74,6 +86,13 @@ export async function searchStayZoneLodging(body: {
   const data = (await res.json()) as {
     candidates: StayZoneLodgingCandidate[];
     warnings?: string[];
+    status?: StayZoneLodgingStatus;
+    query?: string;
   };
-  return { candidates: data.candidates ?? [], warnings: data.warnings ?? [] };
+  return {
+    candidates: data.candidates ?? [],
+    warnings: data.warnings ?? [],
+    status: data.status ?? (data.candidates?.length ? 'ok' : 'empty'),
+    query: data.query ?? '',
+  };
 }

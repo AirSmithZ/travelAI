@@ -1,6 +1,19 @@
-import type { Itinerary } from './itinerary';
+import type { Itinerary, ItineraryEvidenceItem } from './itinerary';
 import type { TripRequest } from './tripRequest';
 import type { TravelIntel } from './travelIntel';
+
+/** doc 23: 玩法印证面板每条粘贴链接模块 */
+export type EvidenceLinkStatus = 'idle' | 'loading' | 'ok' | 'error';
+
+export interface EvidenceLinkModule {
+  id: string;
+  url: string;
+  status: EvidenceLinkStatus;
+  error?: string;
+  fetchedAt?: string;
+  /** 检索成功后的核心内容；展示与 generate 注入以此为准 */
+  result?: ItineraryEvidenceItem;
+}
 
 export type PlanPhase = 'empty' | 'planning' | 'detailed';
 
@@ -92,4 +105,6 @@ export interface TravelPlan {
   form_layout?: FormLayoutState;
   /** 服务端最近一次 parse 使用的 chat_mode（P81） */
   last_chat_mode?: ChatMode;
+  /** doc 23: 用户粘贴印证链接模块（持久化） */
+  evidence_link_modules?: EvidenceLinkModule[];
 }

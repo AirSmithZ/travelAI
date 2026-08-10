@@ -26,6 +26,10 @@ def test_validate_accepts_allowlisted_https():
         _validate_https_allowlisted_url("https://abc.qweather.com")
         == "https://abc.qweather.com"
     )
+    assert (
+        _validate_https_allowlisted_url("https://abc1234xyz.def.qweatherapi.com")
+        == "https://abc1234xyz.def.qweatherapi.com"
+    )
     assert _validate_https_allowlisted_url("") == ""
 
 

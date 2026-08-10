@@ -50,6 +50,12 @@
   min-height: 72px;
 }
 
+/* 导出态由 OverviewNodeCard inline + [data-exporting] 覆盖；关掉入场动画避免截图像素错位 */
+.trip-node--export,
+.overview-trip-node.trip-node--export {
+  animation: none !important;
+}
+
 .trip-node__header {
   display: flex;
   align-items: center;

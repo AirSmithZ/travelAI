@@ -2,12 +2,12 @@
 
 ← [总索引](./TODO.md) · [开发进度](./开发进度.md)
 
-> **更新**：2026-08-09（P112 店名搜索顶层独立 ✅；见 [问题日志](./问题日志.md)）  
+> **更新**：2026-08-10（P120 lodging localStorage 缓存 ✅；见 [问题日志](./问题日志.md)）  
 > **ID 前缀**：`UX-` · 状态：🔲 开放 · ⏸ 暂停 · ✅ 完成
 
 ---
 
-## 0b3. P107–P112 住宿搜索与地图钉（2026-08-09）
+## 0b3. P107–P113 / P117–P118 住宿搜索与地图钉（2026-08-09）
 
 | ID | 状态 | 优先级 | 待办 | 关联 |
 |----|------|--------|------|------|
@@ -17,6 +17,11 @@
 | **UX-P110** | ✅ | P0 | 店名搜索与片区 lodging 拆分；仅按钮触发 | [问题日志 P110](./问题日志.md) |
 | **UX-P111** | ✅ | P0 | 独立组件 + 共享锁定 | [问题日志 P111](./问题日志.md) |
 | **UX-P112** | ✅ | P0 | 店名搜索顶层；不绑 zone_id；切换片区保留店名钉 | [问题日志 P112](./问题日志.md) · `addStandaloneHotel` |
+| **UX-P113** | ✅ | P0 | 片区/店名 geocode 优先 zone.city（防模糊目的地错圆心） | [问题日志 P113](./问题日志.md) · `geocode_bias.py` |
+| **UX-P117** | ✅ | P0 | 国家级 destination：店名 bias 用航班抵达城；后端 IATA 钉 fence | [问题日志 P117](./问题日志.md) · `flightArrivalCity.ts` |
+| **UX-P118** | ✅ | P0 | 片区 lodging 限流可感知；EN query；空结果不缓存 | [问题日志 P118](./问题日志.md) · `ZoneAreaLodgingModule` |
+| **UX-P119** | ✅ | P0 | 非枢纽城 reverse EN；SSL 提示「连接中断」可重试 | [问题日志 P119](./问题日志.md) |
+| **UX-P120** | ✅ | P1 | 片区 lodging LS 缓存；命中提示；重新检索才打网 | [问题日志 P120](./问题日志.md) · `lodgingSearchCache.ts` |
 
 ---
 
@@ -78,6 +83,7 @@
 | **UX-CHAT-07** | ✅ | P3 | 可选 reasoning 折叠（有则显示） | [22 §3b.5](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
 | **UX-EVD-01** | ✅ | P2 | 非官方文案 · 已定位/仅网友 · 摘要条数 · StatusBar evidence | [22 §3](./llm-travel-data/22-对话编排与玩法印证UX调研.md) · [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) |
 | **UX-EVD-02** | ✅ | P2 | 空印证可发现性：`evidence_status` + 入口不消失 | [Round8 §五](./现存问题复查报告-travelAI-drag_dev2-round8-2026-08-06.md) |
+| **UX-EVD-03** | ✅ | P1 | 贴链多模块 + 每链「检索」+ 卡内展示核心内容（WS-10） | [23](./llm-travel-data/23-玩法印证贴链MVP实施.md) · `EvidencePanel` |
 
 ---
 

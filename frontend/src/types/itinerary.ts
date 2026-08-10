@@ -44,11 +44,17 @@ export interface DayWeather {
 export interface ItineraryEvidenceItem {
   title: string;
   url: string;
+  /** Full note body text when detail-enriched (not a separate LLM summary). */
   snippet?: string;
   likes?: number | null;
   source?: string;
   query?: string;
   note_id?: string;
+  author?: string | null;
+  comments_count?: number | null;
+  collected_count?: number | null;
+  shared_count?: number | null;
+  note_type?: string | null;
   /** WS-08a: note mentions a geocode-fenced POI */
   verified?: boolean;
   poi_hits?: string[];
@@ -127,6 +133,9 @@ export interface ItineraryNode {
   overview_offset?: { x: number; y: number };
 }
 
+/** How commute on this edge was determined (TRN-01). */
+export type RouteSource = 'directions' | 'user_hint' | 'estimate';
+
 export interface ItineraryEdge {
   id: string;
   from: string;
@@ -138,6 +147,8 @@ export interface ItineraryEdge {
   depart_time?: string;
   arrive_time?: string;
   label?: string;
+  /** directions | user_hint | estimate — set by commute lookup / generate defaults */
+  route_source?: RouteSource;
 }
 
 export interface DayPlan {

@@ -70,8 +70,14 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
   const evidenceStatus = plan.itinerary?.meta?.evidence_status;
   const dayCount = plan.itinerary?.days?.length ?? 0;
 
-  let evidenceDetail = '生成时检索 · 点此了解用法';
-  if (evidenceCount > 0) {
+  const pasteOk = (plan.evidence_link_modules ?? []).filter((m) => m.status === 'ok').length;
+  const pasteTotal = (plan.evidence_link_modules ?? []).length;
+  let evidenceDetail = '可粘贴链接检索 · 或生成时自动搜';
+  if (pasteOk > 0) {
+    evidenceDetail = `已检索 ${pasteOk}/${pasteTotal || pasteOk} 条用户链接`;
+  } else if (pasteTotal > 0) {
+    evidenceDetail = `${pasteTotal} 条链接待检索 · 点开面板`;
+  } else if (evidenceCount > 0) {
     evidenceDetail =
       evidenceVerified > 0
         ? `${evidenceCount} 条参考 · ${evidenceVerified} 条含已定位`
@@ -79,7 +85,7 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
   } else if (evidenceStatus === 'unconfigured') {
     evidenceDetail = '未配置数据源 · 点此查看说明';
   } else if (evidenceStatus === 'empty' || dayCount > 0) {
-    evidenceDetail = '本次无印证链接 · 点此查看说明';
+    evidenceDetail = '可粘贴链接或生成时自动检索';
   }
 
   const items: ReadinessItem[] = [
@@ -153,7 +159,7 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
       id: 'evidence',
       label: '玩法印证',
       detail: evidenceDetail,
-      done: evidenceCount > 0,
+      done: evidenceCount > 0 || pasteOk > 0,
       hard: false,
       soft: true,
       hint: '打开玩法印证说明面板',

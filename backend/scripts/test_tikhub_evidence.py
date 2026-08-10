@@ -95,7 +95,9 @@ def test_normalize_search_response_dedupe():
 
 def test_evidence_queries():
     qs = evidence_queries("新加坡", 4)
-    assert qs == ["新加坡 自由行 4天", "新加坡 itinerary"]
+    assert qs[0] == "新加坡 自由行 4天 行程"
+    assert "新加坡 避坑" in qs
+    assert len(qs) <= 4
     assert evidence_queries("  ", None) == []
 
 
@@ -120,7 +122,8 @@ def test_build_evidence_pack_with_mock_httpx():
 
     assert 1 <= len(pack) <= 5
     assert all(i.source == "tikhub_xhs" for i in pack)
-    assert mock_client.get.call_count == 2  # two queries
+    # slotted search_notes + optional per-hit detail enrich
+    assert mock_client.get.call_count >= 1
     first_call = mock_client.get.call_args_list[0]
     assert "/api/v1/xiaohongshu/app_v2/search_notes" in first_call.args[0]
     assert first_call.kwargs["headers"]["Authorization"] == "Bearer test-key-not-real"

@@ -24,9 +24,9 @@ import {
 import { mergeLivePlacementsWithDomAnchors } from '../../utils/overviewEdgeGeometry';
 import { getCellLongNote, getCrossRegionEdges } from '../../utils/overviewRoute';
 import {
-  EXPORT_SHELL_LIGHT,
-  REGION_EXPORT_CELL_BG_LIGHT,
-  REGION_EXPORT_RAIL_BG_LIGHT,
+  EXPORT_SHELL,
+  REGION_EXPORT_CELL_BG,
+  REGION_EXPORT_RAIL_BG,
 } from '../../utils/overviewExportTokens';
 import { OverviewRouteChain } from './OverviewRouteChain';
 import { OverviewEdgeLayer } from './OverviewEdgeLayer';
@@ -381,7 +381,7 @@ export function OverviewGraphView() {
           {hotelAlignWarnings.length > 1 ? `（+${hotelAlignWarnings.length - 1}）` : ''}
         </p>
       )}
-      <div className="overview-shell" data-export-overview data-export-theme="light">
+      <div className="overview-shell" data-export-overview>
         <div className="overview-shell__corner" aria-hidden>
           <span className="overview-corner__label">区域</span>
         </div>
@@ -390,7 +390,7 @@ export function OverviewGraphView() {
           className="overview-shell__header"
           onWheel={forwardWheelToBody}
           style={
-            isExporting ? { background: EXPORT_SHELL_LIGHT.headerBg } : undefined
+            isExporting ? { background: EXPORT_SHELL.headerBg } : undefined
           }
         >
           <div
@@ -476,7 +476,7 @@ export function OverviewGraphView() {
           className="overview-shell__rail"
           onWheel={forwardWheelToBody}
           style={
-            isExporting ? { background: EXPORT_SHELL_LIGHT.railBg } : undefined
+            isExporting ? { background: EXPORT_SHELL.railBg } : undefined
           }
         >
           <div
@@ -508,8 +508,8 @@ export function OverviewGraphView() {
                     top,
                     height: rowH,
                     background: isExporting
-                      ? REGION_EXPORT_RAIL_BG_LIGHT[
-                          regionIndex % REGION_EXPORT_RAIL_BG_LIGHT.length
+                      ? REGION_EXPORT_RAIL_BG[
+                          regionIndex % REGION_EXPORT_RAIL_BG.length
                         ]
                       : `color-mix(in srgb, var(${tintVar}) 100%, transparent)`,
                   }}
@@ -570,8 +570,8 @@ export function OverviewGraphView() {
                       width: colW,
                       height: rowH,
                       background: isExporting
-                        ? REGION_EXPORT_CELL_BG_LIGHT[
-                            regionIndex % REGION_EXPORT_CELL_BG_LIGHT.length
+                        ? REGION_EXPORT_CELL_BG[
+                            regionIndex % REGION_EXPORT_CELL_BG.length
                           ]
                         : `color-mix(in srgb, var(${tintVar}) 10%, var(--bg-base))`,
                     }}
@@ -637,6 +637,7 @@ export function OverviewGraphView() {
                           nodes={nodes}
                           cellLayout={cellLayout}
                           compact={metrics.compact}
+                          exportMode={isExporting}
                           selectedNodeId={isExporting ? null : selectedNodeId}
                           dragPreview={dragPreview}
                           regionEnter={regionEnter}

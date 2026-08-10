@@ -10,12 +10,12 @@ import { getNodeConnection, type OverviewEdgeSide } from './overviewEdgeGeometry
 import {
   COMPACT_NODE_HEIGHT,
   COMPACT_NODE_WIDTH,
-  COMPACT_RANK_SEP,
+  OVERVIEW_COMPACT_MIN_NODE_H_GAP,
   OVERVIEW_COMPACT_NODE_GAP,
+  OVERVIEW_MIN_NODE_H_GAP,
   OVERVIEW_NODE_GAP,
   TRIP_NODE_HEIGHT,
   TRIP_NODE_WIDTH,
-  TRIP_RANK_SEP,
 } from './graphLayoutConstants';
 
 export const REGION_RAIL_WIDTH = 96;
@@ -31,8 +31,9 @@ export const OVERVIEW_NODE_WIDTH = TRIP_NODE_WIDTH;
 export const COMPACT_NODE_WIDTH_LEGACY = COMPACT_NODE_WIDTH;
 export const OVERVIEW_NODE_HEIGHT = TRIP_NODE_HEIGHT;
 export const COMPACT_NODE_HEIGHT_LEGACY = COMPACT_NODE_HEIGHT;
-export const OVERVIEW_COMMUTE_WIDTH = TRIP_RANK_SEP;
-export const COMPACT_COMMUTE_WIDTH = COMPACT_RANK_SEP;
+/** 总览通勤通道宽度（= 最小左右净空） */
+export const OVERVIEW_COMMUTE_WIDTH = OVERVIEW_MIN_NODE_H_GAP;
+export const COMPACT_COMMUTE_WIDTH = OVERVIEW_COMPACT_MIN_NODE_H_GAP;
 export const OVERVIEW_COMPACT_THRESHOLD = 5;
 export const COLUMN_HEADER_HEIGHT = 40;
 export const CROSS_DAY_CHANNEL_HEIGHT = 20;
@@ -134,6 +135,11 @@ export interface OverviewMetrics {
   columnWidth: number;
 }
 
+/** 相邻节点卡片边到边的水平净空（通勤信息通道） */
+export function overviewNodeHGap(metrics: OverviewMetrics): number {
+  return metrics.commuteWidth + metrics.nodeGap;
+}
+
 export function getOverviewMetrics(dayCount: number): OverviewMetrics {
   const compact = dayCount > OVERVIEW_COMPACT_THRESHOLD;
   const minColumnWidth = compact ? COMPACT_COLUMN_MIN_WIDTH : COLUMN_MIN_WIDTH;
@@ -142,7 +148,7 @@ export function getOverviewMetrics(dayCount: number): OverviewMetrics {
     columnWidth: minColumnWidth,
     nodeWidth: compact ? COMPACT_NODE_WIDTH : TRIP_NODE_WIDTH,
     nodeHeight: compact ? COMPACT_NODE_HEIGHT : TRIP_NODE_HEIGHT,
-    commuteWidth: compact ? COMPACT_RANK_SEP : TRIP_RANK_SEP,
+    commuteWidth: compact ? OVERVIEW_COMPACT_MIN_NODE_H_GAP : OVERVIEW_MIN_NODE_H_GAP,
     nodeGap: compact ? OVERVIEW_COMPACT_NODE_GAP : OVERVIEW_NODE_GAP,
     compact,
     virtualize: compact,
@@ -191,6 +197,7 @@ export function computeCellLayout(
   const segments = buildCellRouteSegments(day, nodes);
   const blocks = groupRouteSegments(segments);
   const placements = new Map<string, CellNodePlacement>();
+  const hGap = overviewNodeHGap(metrics);
 
   let cursorX = 0;
 
@@ -202,17 +209,23 @@ export function computeCellLayout(
     for (let i = 0; i < block.segments.length; i += 1) {
       const seg = block.segments[i];
       const offset = nodeOffset(seg.node);
+      // offset 为偏好位移；与前序节点之间仍强制保留最小左右净空，避免通勤标签被挡住
+      let x = bx + offset.x;
+      if (i > 0) {
+        const prev = placements.get(block.segments[i - 1].node.id);
+        if (prev) x = Math.max(x, prev.x + prev.width + hGap);
+      }
       const placement = {
         nodeId: seg.node.id,
-        x: bx + offset.x,
+        x,
         y: padTop + offset.y,
         width: metrics.nodeWidth,
         height: metrics.nodeHeight,
       };
       placements.set(seg.node.id, placement);
 
-      bx += metrics.nodeWidth;
-      if (i < block.segments.length - 1) bx += metrics.commuteWidth + metrics.nodeGap;
+      const hasNext = i < block.segments.length - 1;
+      bx = x + metrics.nodeWidth + (hasNext ? hGap : 0);
     }
 
     cursorX = bx + (block.label ? SCENE_GROUP_TAIL : 0) + 4;

@@ -29,3 +29,9 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.export-graph-btn--error:not(:disabled) {
+  color: #fca5a5;
+  border-color: color-mix(in srgb, #f87171 40%, var(--border));
+  background: color-mix(in srgb, #f87171 10%, var(--bg-elevated));
+}

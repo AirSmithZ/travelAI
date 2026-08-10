@@ -51,3 +51,77 @@
 .edge-editor__footer .form-btn {
   width: 100%;
 }
+
+.edge-editor__lookup-btn {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.edge-editor__meta {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.edge-editor__error {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #f87171;
+}
+
+.edge-editor__warn {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: color-mix(in srgb, #fbbf24 85%, var(--text-muted));
+}
+
+.edge-editor__candidates {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edge-editor__candidate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.edge-editor__candidate:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.edge-editor__candidate--rec {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.edge-editor__candidate-main {
+  font-weight: 600;
+}
+
+.edge-editor__candidate-sub,
+.edge-editor__candidate-sum {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}

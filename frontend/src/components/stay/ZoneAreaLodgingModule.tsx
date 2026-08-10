@@ -4,12 +4,11 @@ import {
   type StayZoneLodgingCandidate,
 } from '../../api/stayZones';
 import {
-  LODGING_CACHE_TTL_MS,
-  cacheGet,
-  cacheInvalidate,
-  cacheSet,
-  lodgingCacheKey,
-} from '../../utils/searchResultCache';
+  formatLodgingCacheAge,
+  getLodgingSearchCache,
+  lodgingPersistCacheKey,
+  setLodgingSearchCache,
+} from '../../utils/lodgingSearchCache';
 import type { RecommendedStayZone } from '../../types/stayZone';
 import { HotelCandidateList } from './HotelCandidateList';
 import type { ZoneHotelCandidate } from './zoneHotelShared';
@@ -28,6 +27,7 @@ type Props = {
 /**
  * Per-zone module: search lodging near zone hub.
  * Map pins for this list only show when the zone is selected.
+ * P120: localStorage cache by hub+radius (survives refresh).
  */
 export function ZoneAreaLodgingModule({
   zone,
@@ -43,6 +43,7 @@ export function ZoneAreaLodgingModule({
   const [loading, setLoading] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [cacheHint, setCacheHint] = useState<string | null>(null);
 
   const canLock =
     Boolean(draft) &&
@@ -57,30 +58,27 @@ export function ZoneAreaLodgingModule({
     }
     setLoading(true);
     setLocalError(null);
+    setCacheHint(null);
     setAttempted(true);
     onDraftChange(null);
     onActivateMap();
     const radius = zone.geometry.radius_m ?? 1200;
-    const key = lodgingCacheKey({
-      zoneId: zone.id,
+    const key = lodgingPersistCacheKey({
       lat: zone.geometry.center.lat,
       lng: zone.geometry.center.lng,
       radiusM: radius,
+      city: zone.city,
     });
     try {
-      const cached = forceRefresh
-        ? null
-        : cacheGet<{ candidates: StayZoneLodgingCandidate[]; warnings: string[] }>(
-            'lodging',
-            key,
-            LODGING_CACHE_TTL_MS,
-          );
-      if (cached && cached.value.candidates.length > 0) {
-        setItems(cached.value.candidates);
-        onResultsChange(cached.value.candidates);
-        return;
+      if (!forceRefresh) {
+        const cached = getLodgingSearchCache(key);
+        if (cached && cached.value.candidates.length > 0) {
+          setItems(cached.value.candidates);
+          onResultsChange(cached.value.candidates);
+          setCacheHint(`缓存命中（${formatLodgingCacheAge(cached.fetchedAt)}）· 可重新检索`);
+          return;
+        }
       }
-      if (cached) cacheInvalidate('lodging', key);
 
       const res = await searchStayZoneLodging({
         zone_id: zone.id,
@@ -90,18 +88,57 @@ export function ZoneAreaLodgingModule({
         lng: zone.geometry.center.lng,
         radius_m: radius,
       });
+
       if (res.candidates.length > 0) {
-        cacheSet('lodging', key, { candidates: res.candidates, warnings: res.warnings });
+        setLodgingSearchCache(key, {
+          candidates: res.candidates,
+          warnings: res.warnings,
+          query: res.query,
+        });
+        setItems(res.candidates);
+        onResultsChange(res.candidates);
+        return;
       }
-      setItems(res.candidates);
-      onResultsChange(res.candidates);
-      if (res.candidates.length === 0) {
+
+      // 429 / provider error: fall back to stale LS if present (better than empty)
+      if (res.status === 'rate_limited' || res.status === 'provider_error') {
+        const stale = getLodgingSearchCache(key);
+        if (stale && stale.value.candidates.length > 0) {
+          setItems(stale.value.candidates);
+          onResultsChange(stale.value.candidates);
+          setCacheHint(
+            `上游暂不可用，已显示缓存（${formatLodgingCacheAge(stale.fetchedAt)}）`,
+          );
+          setLocalError(res.warnings[0] ?? null);
+          return;
+        }
+      }
+
+      setItems([]);
+      onResultsChange([]);
+      if (res.status === 'rate_limited') {
+        setLocalError(
+          res.warnings[0] ?? '地图检索限流，请稍等再点「重新检索」（不是附近没酒店）',
+        );
+      } else if (res.status === 'provider_error' || res.status === 'unconfigured') {
+        setLocalError(res.warnings[0] ?? '片区酒店检索失败，请稍后重试');
+      } else {
         setLocalError(res.warnings[0] ?? '片区附近暂无候选');
       }
     } catch (e) {
-      setItems([]);
-      onResultsChange([]);
-      setLocalError(e instanceof Error ? e.message : '片区酒店检索失败');
+      const stale = getLodgingSearchCache(key);
+      if (stale && stale.value.candidates.length > 0) {
+        setItems(stale.value.candidates);
+        onResultsChange(stale.value.candidates);
+        setCacheHint(
+          `请求失败，已显示缓存（${formatLodgingCacheAge(stale.fetchedAt)}）`,
+        );
+        setLocalError(e instanceof Error ? e.message : '片区酒店检索失败');
+      } else {
+        setItems([]);
+        onResultsChange([]);
+        setLocalError(e instanceof Error ? e.message : '片区酒店检索失败');
+      }
     } finally {
       setLoading(false);
     }
@@ -112,7 +149,9 @@ export function ZoneAreaLodgingModule({
       <header className="stay-zone__module-head">
         <div>
           <h5 className="stay-zone__module-title">片区附近</h5>
-          <p className="stay-zone__module-desc">仅当前选中片区的候选会上图；与顶层「店名搜索」互不干扰</p>
+          <p className="stay-zone__module-desc">
+            仅当前选中片区的候选会上图；与顶层「店名搜索」互不干扰。同圆心结果会写入本地缓存，刷新后可复用。
+          </p>
         </div>
         <div className="stay-zone__module-actions">
           <button
@@ -125,6 +164,8 @@ export function ZoneAreaLodgingModule({
           </button>
         </div>
       </header>
+
+      {cacheHint ? <p className="stay-zone__cache-hint">{cacheHint}</p> : null}
 
       {lockedName ? (
         <p className="stay-zone__shared-lock">当前锁定：{lockedName}</p>
@@ -144,7 +185,11 @@ export function ZoneAreaLodgingModule({
         />
       ) : attempted ? (
         <div className="stay-zone__empty-lodging" role="status">
-          <p className="stay-zone__empty-lodging-title">片区附近暂无候选</p>
+          <p className="stay-zone__empty-lodging-title">
+            {localError?.includes('限流') || localError?.includes('连接中断')
+              ? '检索暂时不可用'
+              : '片区附近暂无候选'}
+          </p>
           <p className="stay-zone__empty-lodging-body">
             {localError ?? '可改用上方「店名搜索」，两个入口互不影响。'}
           </p>
