@@ -9,6 +9,10 @@ import type {
 } from '../types/travelPlan';
 import { fetchEvidenceFromLink } from '../api/evidence';
 import { validateEvidenceUrl } from '../utils/evidenceLinkUrl';
+import {
+  buildAdoptedUserEvidence,
+  defaultAdoptSeed,
+} from '../utils/evidenceAdopt';
 import type { TripRequest } from '../types/tripRequest';
 import type { FlightLegRole, FlightSearchSession, ManualFlightLegInput } from '../types/travelIntel';
 import {
@@ -213,12 +217,26 @@ interface PlanState {
   removeEvidenceLink: (moduleId: string) => void;
   updateEvidenceLinkUrl: (moduleId: string, url: string) => void;
   fetchEvidenceLink: (moduleId: string) => Promise<boolean>;
+  /** doc 34: toggle adopted POI on a paste module */
+  toggleEvidenceAdoptPoi: (moduleId: string, name: string) => void;
+  /** doc 34 L3: set must|nice (null = un-adopt) */
+  setEvidenceAdoptPoiLevel: (
+    moduleId: string,
+    name: string,
+    level: import('../types/travelPlan').AdoptPoiLevel | null,
+  ) => void;
+  setEvidenceAdoptRhythm: (moduleId: string, on: boolean) => void;
+  addEvidenceManualPoi: (moduleId: string, name: string) => void;
   setFlightSearchResult: (session: FlightSearchSession) => void;
   mergeFlightSearchResult: (patch: Partial<FlightSearchSession>) => void;
   confirmFlightQuote: (quoteId: string, role?: FlightLegRole) => void;
   addManualFlightLeg: (input: ManualFlightLegInput) => void;
   removeFlightLeg: (legId: string) => void;
-  recommendStayZones: (zones: RecommendedStayZone[], fetchedAt: string) => void;
+  recommendStayZones: (
+    zones: RecommendedStayZone[],
+    fetchedAt: string,
+    promptThemes?: import('../types/stayZone').PromptThemeTag[],
+  ) => void;
   setStayZonePreferences: (prefs: StayZonePreferences) => void;
   confirmStayZone: (zoneId: string) => void;
   rejectStayZone: (zoneId: string) => void;
@@ -399,6 +417,7 @@ function runBackgroundGeocode(
         : s.chatActivity,
   }));
   const tr = get().getActivePlan().trip_request;
+  const intel = get().getActivePlan().travel_intel;
   void geocodeItineraryNodesStream(
     itinerary,
     dest,
@@ -421,7 +440,11 @@ function runBackgroundGeocode(
         }));
       },
     },
-    { free_text: tr.free_text ?? '', notes: tr.notes ?? '' },
+    {
+      free_text: tr.free_text ?? '',
+      notes: tr.notes ?? '',
+      travel_intel: intel,
+    },
   )
     .then((geocoded) => {
       set((s) =>
@@ -753,10 +776,7 @@ export const usePlanStore = create<PlanState>()(
         leftPanelMode: 'chat',
       });
       try {
-        const userEvidence = (p.evidence_link_modules ?? [])
-          .filter((m) => m.status === 'ok' && m.result)
-          .map((m) => m.result!)
-          .slice(0, 5);
+        const userEvidence = buildAdoptedUserEvidence(p.evidence_link_modules);
         const { itinerary, llmLatencyMs } = await generateItineraryStream(p.trip_request, {
           geocode: false,
           travel_intel: p.travel_intel,
@@ -990,9 +1010,107 @@ export const usePlanStore = create<PlanState>()(
                   error: undefined,
                   result: undefined,
                   fetchedAt: undefined,
+                  candidatePois: undefined,
+                  adoptedPois: undefined,
+                  adoptLevels: undefined,
+                  adoptRhythm: undefined,
                 }
               : m,
           ),
+        })),
+      );
+    },
+
+    toggleEvidenceAdoptPoi: (moduleId, name) => {
+      const n = name.trim();
+      if (!n) return;
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          evidence_link_modules: (p.evidence_link_modules ?? []).map((m) => {
+            if (m.id !== moduleId) return m;
+            const cur = m.adoptedPois ?? [];
+            const has = cur.some((x) => x.toLowerCase() === n.toLowerCase());
+            const levels = { ...(m.adoptLevels ?? {}) };
+            if (has) {
+              const adoptedPois = cur.filter((x) => x.toLowerCase() !== n.toLowerCase());
+              for (const k of Object.keys(levels)) {
+                if (k.toLowerCase() === n.toLowerCase()) delete levels[k];
+              }
+              return { ...m, adoptedPois, adoptLevels: levels };
+            }
+            levels[n] = 'nice';
+            return { ...m, adoptedPois: [...cur, n], adoptLevels: levels };
+          }),
+        })),
+      );
+    },
+
+    setEvidenceAdoptPoiLevel: (moduleId, name, level) => {
+      const n = name.trim();
+      if (!n) return;
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          evidence_link_modules: (p.evidence_link_modules ?? []).map((m) => {
+            if (m.id !== moduleId) return m;
+            const cur = m.adoptedPois ?? [];
+            const levels = { ...(m.adoptLevels ?? {}) };
+            if (level == null) {
+              const adoptedPois = cur.filter((x) => x.toLowerCase() !== n.toLowerCase());
+              for (const k of Object.keys(levels)) {
+                if (k.toLowerCase() === n.toLowerCase()) delete levels[k];
+              }
+              return { ...m, adoptedPois, adoptLevels: levels };
+            }
+            const adoptedPois = cur.some((x) => x.toLowerCase() === n.toLowerCase())
+              ? cur
+              : [...cur, n];
+            // normalize key to existing adopted spelling if present
+            const key =
+              adoptedPois.find((x) => x.toLowerCase() === n.toLowerCase()) ?? n;
+            for (const k of Object.keys(levels)) {
+              if (k.toLowerCase() === n.toLowerCase() && k !== key) delete levels[k];
+            }
+            levels[key] = level;
+            return { ...m, adoptedPois, adoptLevels: levels };
+          }),
+        })),
+      );
+    },
+
+    setEvidenceAdoptRhythm: (moduleId, on) => {
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          evidence_link_modules: (p.evidence_link_modules ?? []).map((m) =>
+            m.id === moduleId ? { ...m, adoptRhythm: on } : m,
+          ),
+        })),
+      );
+    },
+
+    addEvidenceManualPoi: (moduleId, name) => {
+      const n = name.trim();
+      if (!n) return;
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          evidence_link_modules: (p.evidence_link_modules ?? []).map((m) => {
+            if (m.id !== moduleId) return m;
+            const candidates = m.candidatePois ?? [];
+            const exists = candidates.some((x) => x.toLowerCase() === n.toLowerCase());
+            const candidatePois = exists ? candidates : [...candidates, n];
+            const adopted = m.adoptedPois ?? [];
+            const adoptedPois = adopted.some((x) => x.toLowerCase() === n.toLowerCase())
+              ? adopted
+              : [...adopted, n];
+            const levels = { ...(m.adoptLevels ?? {}) };
+            if (!Object.keys(levels).some((k) => k.toLowerCase() === n.toLowerCase())) {
+              levels[n] = 'nice';
+            }
+            return { ...m, candidatePois, adoptedPois, adoptLevels: levels };
+          }),
         })),
       );
     },
@@ -1038,13 +1156,23 @@ export const usePlanStore = create<PlanState>()(
               ...p,
               evidence_link_modules: (p.evidence_link_modules ?? []).map((m) =>
                 m.id === moduleId
-                  ? { ...m, status: 'error' as const, error: err, result: undefined }
+                  ? {
+                      ...m,
+                      status: 'error' as const,
+                      error: err,
+                      result: undefined,
+                      candidatePois: undefined,
+                      adoptedPois: undefined,
+                      adoptLevels: undefined,
+                      adoptRhythm: undefined,
+                    }
                   : m,
               ),
             })),
           );
           return false;
         }
+        const seed = defaultAdoptSeed(res.item);
         set((s) =>
           updateActivePlan(s, (p) => ({
             ...p,
@@ -1057,6 +1185,10 @@ export const usePlanStore = create<PlanState>()(
                     result: res.item!,
                     fetchedAt: new Date().toISOString(),
                     url: res.item!.url || m.url,
+                    candidatePois: seed.candidatePois,
+                    adoptedPois: seed.adoptedPois,
+                    adoptLevels: seed.adoptLevels,
+                    adoptRhythm: seed.adoptRhythm,
                   }
                 : m,
             ),
@@ -1229,7 +1361,7 @@ export const usePlanStore = create<PlanState>()(
       );
     },
 
-    recommendStayZones: (zones, fetchedAt) => {
+    recommendStayZones: (zones, fetchedAt, promptThemes) => {
       const hasGeometry = zones.some((z) => Boolean(z.geometry));
       set((s) => {
         const next = updateActivePlan(s, (p) => ({
@@ -1238,6 +1370,7 @@ export const usePlanStore = create<PlanState>()(
             ...p.travel_intel,
             recommended_stay_zones: zones,
             stay_zones_fetched_at: fetchedAt,
+            stay_prompt_themes: promptThemes ?? [],
           }),
         }));
         const hasItinerary = Boolean(selectActiveItinerary(s)?.days?.length);
@@ -1263,6 +1396,14 @@ export const usePlanStore = create<PlanState>()(
     },
 
     confirmStayZone: (zoneId) => {
+      const plan = get().getActivePlan();
+      const zone = (plan.travel_intel.recommended_stay_zones ?? []).find(
+        (z) => z.id === zoneId,
+      );
+      if (zone && (zone.bookable === false || zone.fit_tag === 'needs_city_change')) {
+        useToastStore.getState().show('该片区需先换城/改航班，不能直接确认锁店', 'warning');
+        return;
+      }
       set((s) =>
         updateActivePlan(s, (p) => ({
           ...p,

@@ -58,6 +58,12 @@ export interface ItineraryEvidenceItem {
   /** WS-08a: note mentions a geocode-fenced POI */
   verified?: boolean;
   poi_hits?: string[];
+  /** doc 34: places the user adopted on the evidence card */
+  adopted_pois?: string[];
+  /** doc 34 L3: must | nice per adopted name */
+  adopt_levels?: Record<string, 'must' | 'nice'>;
+  /** doc 34: use note body as pacing reference */
+  adopt_rhythm?: boolean;
 }
 
 export interface ItineraryPoiCandidate {
@@ -131,6 +137,16 @@ export interface ItineraryNode {
   position?: { x: number; y: number };
   /** 总览模式拖拽偏移（相对 layoutOverview 基准位置） */
   overview_offset?: { x: number; y: number };
+  /** doc 34: which adopted evidence posts this node borrowed from */
+  evidence_refs?: EvidenceRef[];
+}
+
+/** Link from a play node back to an adopted UGC note (L11). */
+export interface EvidenceRef {
+  url: string;
+  title?: string;
+  note_id?: string;
+  role?: 'adopted' | string;
 }
 
 /** How commute on this edge was determined (TRN-01). */

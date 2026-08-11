@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "rollinggo-hotel": {
+      "url": "https://mcp.rollinggo.cn/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:ROLLINGGO_MCP_API_KEY}"
+      }
+    }
+  }
+}

@@ -111,6 +111,29 @@
   font-size: 9px;
 }
 
+.trip-node__evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.trip-node__evidence-link {
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+a.trip-node__evidence-link:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
 .trip-node__tags {
   display: flex;
   flex-wrap: wrap;

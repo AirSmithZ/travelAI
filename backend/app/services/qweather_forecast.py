@@ -29,6 +29,14 @@ _ICON_CODE_MAP_PREFIX: list[tuple[tuple[int, int], str]] = [
     ((900, 901), "sunny"),
 ]
 
+# WX-CACHE-01: (expires_mono, days)
+_WX_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_WX_CACHE_MAX = 64
+
+
+def clear_weather_cache() -> None:
+    _WX_CACHE.clear()
+
 
 def map_qweather_icon(icon_code: str | int | None, text: str = "") -> str:
     """Map QWeather iconDay / textDay to sunny|cloudy|overcast|rain|storm|snow."""
@@ -117,6 +125,8 @@ def fetch_trip_forecast(
     Returns list of {date, temp_min, temp_max, icon, description, source}.
     Dates outside API window are omitted (caller keeps LLM weather).
     """
+    import time
+
     key = qweather_api_key(settings)
     dest = (destination or "").strip()
     if not key or not dest:
@@ -134,6 +144,17 @@ def fetch_trip_forecast(
         return []
 
     span = _pick_days_span(date_start=date_start, day_count=day_count)
+    n = max(1, min(int(day_count or 3), 30))
+    cache_key = f"{loc}|{span}|{date_start.isoformat()}|{n}"
+    ttl = int(getattr(settings, "weather_cache_ttl_sec", 0) or 0)
+    if ttl > 0:
+        row = _WX_CACHE.get(cache_key)
+        if row and time.monotonic() < row[0]:
+            logger.info("weather cache hit loc=%s span=%s n=%s", loc, span, n)
+            return [dict(x) for x in row[1]]
+        if row:
+            _WX_CACHE.pop(cache_key, None)
+
     data, ms, err = qweather_get_json(
         f"/v7/weather/{span}",
         settings=settings,
@@ -172,9 +193,13 @@ def fetch_trip_forecast(
             by_date[parsed["date"]] = parsed
 
     out: list[dict[str, Any]] = []
-    n = max(1, min(int(day_count or 3), 30))
     for i in range(n):
         d = (date_start + timedelta(days=i)).isoformat()
         if d in by_date:
             out.append(by_date[d])
+
+    if ttl > 0 and out:
+        if len(_WX_CACHE) >= _WX_CACHE_MAX and cache_key not in _WX_CACHE:
+            _WX_CACHE.pop(next(iter(_WX_CACHE)), None)
+        _WX_CACHE[cache_key] = (time.monotonic() + float(ttl), [dict(x) for x in out])
     return out

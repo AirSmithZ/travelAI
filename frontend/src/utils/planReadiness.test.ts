@@ -52,6 +52,14 @@ plan.travel_intel.hotels = [
 ];
 assert(derivePlanReadiness(plan).canGenerate, 'dest+flight+hotel can generate');
 assert(getPlanningNextStep(plan)?.kind === 'generate', 'next step generate');
+
+plan.trip_request.planning_strategy = 'activity_first';
+assert(!derivePlanReadiness(plan).canGenerate, 'activity_first needs skeleton');
+assert(getPlanningNextStep(plan)?.action === 'open_evidence', 'activity_first next evidence');
+plan.trip_request.preference_tags = ['美食'];
+assert(derivePlanReadiness(plan).canGenerate, 'activity_first with tags ok');
+plan.trip_request.planning_strategy = 'flight_hotel_first';
+plan.trip_request.preference_tags = [];
 const itineraryItem = derivePlanReadiness(plan).items.find((i) => i.id === 'itinerary');
 assert(itineraryItem?.action === 'none', 'no preview until itinerary days');
 

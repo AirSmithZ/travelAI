@@ -188,6 +188,16 @@ def _fetch_one(
         if cached is not None:
             return cached
 
+    from app.services.serp_circuit import (
+        record_serp_rate_limit,
+        serp_backoff_from_settings,
+        serp_circuit_open,
+    )
+
+    if serp_circuit_open():
+        logger.info("serpapi directions skipped: circuit open")
+        return []
+
     key = (settings.serpapi_api_key or "").strip()
     if not key:
         return []
@@ -205,17 +215,24 @@ def _fetch_one(
         with httpx.Client(timeout=float(settings.serpapi_timeout_sec or 20)) as client:
             resp = client.get(f"{base}/search", params=params)
             ms = int((time.perf_counter() - t0) * 1000)
+            if resp.status_code == 429:
+                record_serp_rate_limit(serp_backoff_from_settings(settings))
+                record_usage("serpapi", "directions", ok=False, latency_ms=ms, error="429")
+                return []
             data = resp.json()
             if not isinstance(data, dict):
                 record_usage("serpapi", "directions", ok=False, latency_ms=ms, error="bad_json")
                 return []
             if data.get("error"):
+                err_s = str(data.get("error") or "")
+                if "429" in err_s or "rate" in err_s.lower():
+                    record_serp_rate_limit(serp_backoff_from_settings(settings))
                 record_usage(
                     "serpapi",
                     "directions",
                     ok=False,
                     latency_ms=ms,
-                    error=str(data.get("error"))[:200],
+                    error=err_s[:200],
                 )
                 logger.info("serpapi directions error: %s", data.get("error"))
                 return []
@@ -226,6 +243,8 @@ def _fetch_one(
             return legs
     except Exception as e:
         ms = int((time.perf_counter() - t0) * 1000)
+        if "429" in str(e):
+            record_serp_rate_limit(serp_backoff_from_settings(settings))
         record_usage("serpapi", "directions", ok=False, latency_ms=ms, error=str(e)[:200])
         logger.info("serpapi directions failed: %s", e)
         return []

@@ -16,6 +16,10 @@ class TripRequestIn(BaseModel):
     hotel_budget_per_night: Optional[float] = Field(default=None, ge=0)
     preference_tags: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
+    # STRAT-UI · doc 25
+    planning_strategy: Optional[
+        Literal["flight_hotel_first", "interest_then_anchors", "activity_first"]
+    ] = "flight_hotel_first"
 
 
 class ChatMessageIn(BaseModel):
@@ -65,6 +69,7 @@ FIELD_LABELS: dict[str, str] = {
     "hotel_budget_per_night": "每晚酒店预算",
     "preference_tags": "偏好标签",
     "notes": "备注",
+    "planning_strategy": "规划策略",
 }
 
 

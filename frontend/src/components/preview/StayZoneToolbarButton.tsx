@@ -2,6 +2,7 @@ import { usePlanStore, selectActivePlan } from '../../stores/usePlanStore';
 import { getStayZonePanelPhase, stayZonePanelBadgeLabel } from '../../types/stayZone';
 import './StayZoneToolbarButton.css';
 
+/** doc 36: stay toolbar remains after generate so map users can reopen search/replace. */
 export function StayZoneToolbarButton() {
   const plan = usePlanStore(selectActivePlan);
   const activeView = usePlanStore((s) => s.activeView);
@@ -9,11 +10,11 @@ export function StayZoneToolbarButton() {
   const setActiveView = usePlanStore((s) => s.setActiveView);
 
   const hasItinerary = Boolean(plan.itinerary?.days.length);
-  const showPhaseB = plan.phase !== 'detailed';
   const phase = getStayZonePanelPhase(plan.travel_intel);
   const hint = stayZonePanelBadgeLabel(phase);
+  const detailed = plan.phase === 'detailed';
 
-  if (!hasItinerary || activeView !== 'map' || !showPhaseB) return null;
+  if (!hasItinerary || activeView !== 'map') return null;
 
   return (
     <button
@@ -23,9 +24,13 @@ export function StayZoneToolbarButton() {
         setLeftPanelMode('stay');
         setActiveView('map');
       }}
-      title="推荐适合居住的区域并在地图查看"
+      title={
+        detailed
+          ? '打开住宿面板：搜索或替换酒店'
+          : '推荐适合居住的区域并在地图查看'
+      }
     >
-      住宿片区
+      {detailed ? '换酒店' : '住宿片区'}
       <span className="stay-zone-toolbar-btn__hint">{hint}</span>
     </button>
   );

@@ -257,6 +257,7 @@ class SerpApiMapsProvider(GeocodeProvider):
         self._api_key = (settings.serpapi_api_key or "").strip()
         self._base = (settings.serpapi_base_url or "https://serpapi.com").rstrip("/")
         self._timeout = float(settings.serpapi_timeout_sec)
+        self._settings = settings
 
     def autocomplete(
         self,
@@ -293,8 +294,31 @@ class SerpApiMapsProvider(GeocodeProvider):
 
         t0 = time.perf_counter()
         try:
+            from app.services.serp_circuit import (
+                record_serp_rate_limit,
+                serp_backoff_from_settings,
+                serp_circuit_open,
+                serp_circuit_remaining_sec,
+            )
+
+            if serp_circuit_open():
+                rem = int(serp_circuit_remaining_sec())
+                record_usage(
+                    "serpapi",
+                    "geocode",
+                    ok=False,
+                    latency_ms=0,
+                    error=f"circuit_open_{rem}s",
+                )
+                raise httpx.HTTPError(f"serpapi circuit open ({rem}s)")
+
             with httpx.Client(timeout=self._timeout) as client:
                 resp = client.get(url, params=params)
+                if resp.status_code == 429:
+                    record_serp_rate_limit(serp_backoff_from_settings(self._settings))
+                    ms = int((time.perf_counter() - t0) * 1000)
+                    record_usage("serpapi", "geocode", ok=False, latency_ms=ms, error="429")
+                    raise httpx.HTTPError("serpapi rate limited (429)")
                 resp.raise_for_status()
                 data = resp.json()
             ms = int((time.perf_counter() - t0) * 1000)
@@ -302,12 +326,15 @@ class SerpApiMapsProvider(GeocodeProvider):
                 record_usage("serpapi", "geocode", ok=False, latency_ms=ms, error="bad_json")
                 return []
             if data.get("error"):
+                err_s = str(data.get("error") or "")
+                if "429" in err_s or "rate" in err_s.lower():
+                    record_serp_rate_limit(serp_backoff_from_settings(self._settings))
                 record_usage(
                     "serpapi",
                     "geocode",
                     ok=False,
                     latency_ms=ms,
-                    error=str(data.get("error"))[:200],
+                    error=err_s[:200],
                 )
                 raise httpx.HTTPError(f"serpapi error: {data.get('error')}")
             hits = _parse_serpapi_maps(data, limit=limit, bias=bias)
@@ -316,6 +343,8 @@ class SerpApiMapsProvider(GeocodeProvider):
         except Exception as e:
             ms = int((time.perf_counter() - t0) * 1000)
             if not isinstance(e, httpx.HTTPError) or "serpapi error" not in str(e):
+                if "429" in str(e):
+                    record_serp_rate_limit(serp_backoff_from_settings(self._settings))
                 record_usage("serpapi", "geocode", ok=False, latency_ms=ms, error=str(e)[:200])
             raise
 

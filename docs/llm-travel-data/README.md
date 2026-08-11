@@ -1,8 +1,8 @@
 # LLM 境外旅行数据智能获取 — 文档索引
 
-> 分析日期：2026-06-30 · 文档版本：**v1.4**  
+> 分析日期：2026-06-30 · 文档版本：**v1.5**  
 > 范围：**境外旅行**（境内旅行留空）  
-> 参考 Skill：`find-skills`、`llm-api-engineering`  
+> 参考 Skill：`find-skills`、`llm-api-engineering`、`ai-chat-ui`、`ui-ux-pro-max`（见 [25](./25-GitHub能力借鉴与规划策略三档分析.md)）  
 > 对齐项目：[`项目分析与设计文档.md`](../项目分析与设计文档.md) §3.2、`frontend/src/types/itinerary.ts`、`mockSingapore.ts`
 
 原 monolithic 文档已按大类拆分至本目录。历史路径 [`LLM境外旅行数据智能获取功能分析.md`](../LLM境外旅行数据智能获取功能分析.md) 保留为跳转页。
@@ -16,7 +16,7 @@
 | [00-概述与架构.md](./00-概述与架构.md) | Skill 调研、多 Agent 架构、LLM 实现模式、Schema 映射 |
 | [01-航班信息.md](./01-航班信息.md) | 数据源、Spike 方案、**[验证报告](./01-航班信息-Spike验证报告.md)**、**[Ignav 验证](./01-航班信息-Ignav验证方案.md)**、**[Trip.com 实施方案](./01-航班信息-Trip.com实施方案.md)** |
 | [02-酒店信息.md](./02-酒店信息.md) | 数据源、比价 Schema、**Trip.com / Apify 豆包核验（主文档）** |
-| [03-游玩项目.md](./03-游玩项目.md) | 品类矩阵、票务 API、Trip.com 景点核验摘要 |
+| [03-游玩项目.md](./03-游玩项目.md) | 品类矩阵、节点补价（门票 Partner ❌）、Trip.com 景点核验摘要 |
 | [04-通勤与交通卡.md](./04-通勤与交通卡.md) | 三层通勤、GTFS、Trip.com 火车核验摘要 |
 | [05-行前细节清单.md](./05-行前细节清单.md) | 签证、支付、通讯、应急等行前 Intel |
 | [06-机酒确认与行程生成流程方案.md](./06-机酒确认与行程生成流程方案.md) | **Ignav 接入位置**、TravelIntel、多段机酒、generate 门槛 |
@@ -30,6 +30,19 @@
 | [**21-Agent-Reach与玩法印证多源实施调研.md**](./21-Agent-Reach与玩法印证多源实施调研.md) | Agent-Reach 调研 · 为何不替代/不重写 · EvidencePack 多源 · 提高玩法可行性实施路径 |
 | [**22-对话编排与玩法印证UX调研.md**](./22-对话编排与玩法印证UX调研.md) | **对话为主** · 只读摘要卡 · **运行过程可见（§3b）** · Wave A/B/C ✅ |
 | [**23-玩法印证贴链MVP实施.md**](./23-玩法印证贴链MVP实施.md) | **WS-10**：多链接模块 · TikHub 详情 · `user_evidence` 优先注入 ✅ |
+| [**24-GitHub旅行Agent调研与机酒玩法顺序讨论.md**](./24-GitHub旅行Agent调研与机酒玩法顺序讨论.md) | **外部调研**：高星旅行 Agent 架构对照 · 先机酒 vs 先玩法复核 · 封闭 POI 池借鉴 |
+| [**25-GitHub能力借鉴与规划策略三档分析.md**](./25-GitHub能力借鉴与规划策略三档分析.md) | **选型**：可借/不借能力矩阵 · UI 规划策略 A/B/C · Skill 约束下交互契约 |
+| [**26-SerpAPI额度不足与Trip片区优先降级分析.md**](./26-SerpAPI额度不足与Trip片区优先降级分析.md) | **降级**：Serp lodging→Trip 深链+片区排列 · 地图轮廓硬需求 · 不爬库存 |
+| [**27-外部API缓存现状与优化分析.md**](./27-外部API缓存现状与优化分析.md) | **横切**：机酒/天气/geocode/通勤/印证缓存盘点 · 问题 · 优化优先级 |
+| [**28-外部API缓存与GEO锚实施计划.md**](./28-外部API缓存与GEO锚实施计划.md) | **实施**：GEO-CACHE/GEO-13/WX-CACHE/SERP 熔断 · ✅ 本波完成 |
+| [**29-RollingGo-MCP接入与Trip并存.md**](./29-RollingGo-MCP接入与Trip并存.md) | **探通**：MCP vs Skill · 与 Trip/Serp 分层 · Cursor 配置 · `HOT-RG-01` |
+| [**30-STRAT-UI与HOT-TRIP与ACT-POOL实施.md**](./30-STRAT-UI与HOT-TRIP与ACT-POOL实施.md) | **实施**：规划策略三档 · Trip-first lodging · 封闭 POI 池 · ✅（不含 RollingGo） |
+| [**31-RollingGo-lodging接入与地图钉实施.md**](./31-RollingGo-lodging接入与地图钉实施.md) | **实施**：MCP `searchHotels` → 片区候选钉 · `HOT-RG-02` ✅ |
+| [**32-住宿粗推多片区与偏好Tag实施.md**](./32-住宿粗推多片区与偏好Tag实施.md) | **实施**：多候选片区 + **机酒状态** fit_tag · 需换城门禁 · ✅（主题 tag 见 33） |
+| [**33-提示词主题Tag分析.md**](./33-提示词主题Tag分析.md) | **分析+实施**：提示词→主题 tag · ThemeExtract/ZoneAlign · 卡顶主展示 · `HOT-THEME-TAG` ✅ |
+| [**34-玩法印证与节点借鉴分析结论.md**](./34-玩法印证与节点借鉴分析结论.md) | **结论**：采纳 · 封闭池 · must/nice · evidence_refs ✅ |
+| [**35-旅行Skill与Agent效率分析.md**](./35-旅行Skill与Agent效率分析.md) | **分析**：开发用 skill 提效 · GitHub 旅行 skill 对照 · 不替代封闭池 |
+| [**36-住宿搜索UX与换店困难分析.md**](./36-住宿搜索UX与换店困难分析.md) | **分析**：双入口混乱 · 单槽替换 · 生成后禁面板 · 换店/地图搜店缺口 |
 | [**TODO.md**（机酒域）](./TODO.md) | **开放待办索引** |
 | [附录-示例与占位.md](./附录-示例与占位.md) | 新加坡示例、境内旅行占位 |
 
@@ -75,7 +88,7 @@
 | 阶段 | 航班 | 酒店 | 其他 | 产出 |
 |------|------|------|------|------|
 | **Phase 1**（1～2 周） | deep link，不比价 | Booking/Agoda 搜索链接 | 行程编排不变 | 诚实型 MVP |
-| **Phase 2**（1～2 月） | LetsFG / AWeirdDev/flights 实测 | Google Places | Directions、**和风天气**、Tavily、Klook/Viator | 半结构化 Intel |
+| **Phase 2**（1～2 月） | LetsFG / AWeirdDev/flights 实测 | Google Places | Directions、**和风天气**、Tavily（~~Klook/Viator 门票~~ ❌ 已取消） | 半结构化 Intel |
 | **Phase 3**（3～6 月+） | Duffel / Amadeus Enterprise | Expedia EPS / Hotelbeds | 交通卡/签证 YAML | 可展示参考价 |
 | **Phase 4** | 弹性日期、延误重排 | 多 OTA 归一（若合规） | 境内旅行专项 | 智能优化 |
 

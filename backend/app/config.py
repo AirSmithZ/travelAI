@@ -78,6 +78,31 @@ class Settings(BaseSettings):
         validation_alias="NOMINATIM_TIMEOUT_SEC",
     )
     geocode_fence_km: float = Field(default=150.0, validation_alias="GEOCODE_FENCE_KM")
+    # GEO-CACHE-01：成功长 TTL / 失败短 TTL；0 = 不写缓存
+    geocode_cache_ttl_sec: int = Field(
+        default=86400,
+        validation_alias="GEOCODE_CACHE_TTL_SEC",
+    )
+    geocode_cache_miss_ttl_sec: int = Field(
+        default=600,
+        validation_alias="GEOCODE_CACHE_MISS_TTL_SEC",
+    )
+    dest_center_cache_ttl_sec: int = Field(
+        default=86400,
+        validation_alias="DEST_CENTER_CACHE_TTL_SEC",
+    )
+    dest_center_cache_miss_ttl_sec: int = Field(
+        default=600,
+        validation_alias="DEST_CENTER_CACHE_MISS_TTL_SEC",
+    )
+    weather_cache_ttl_sec: int = Field(
+        default=14400,
+        validation_alias="WEATHER_CACHE_TTL_SEC",
+    )
+    serp_circuit_backoff_sec: float = Field(
+        default=120.0,
+        validation_alias="SERP_CIRCUIT_BACKOFF_SEC",
+    )
     cors_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
         validation_alias="CORS_ORIGINS",
@@ -97,6 +122,24 @@ class Settings(BaseSettings):
     serpapi_timeout_sec: float = Field(
         default=20.0,
         validation_alias="SERPAPI_TIMEOUT_SEC",
+    )
+    # HOT-RG-02: RollingGo MCP 搜店（Bearer；与 Cursor MCP 同 Key）
+    rollinggo_mcp_api_key: str = Field(
+        default="",
+        validation_alias="ROLLINGGO_MCP_API_KEY",
+    )
+    rollinggo_mcp_url: str = Field(
+        default="https://mcp.rollinggo.cn/mcp",
+        validation_alias="ROLLINGGO_MCP_URL",
+    )
+    rollinggo_mcp_timeout_sec: float = Field(
+        default=45.0,
+        validation_alias="ROLLINGGO_MCP_TIMEOUT_SEC",
+    )
+    # Serp lodging 默认关（额度不充时用 RollingGo + Trip）；显式 true 才回退 Maps
+    lodging_enable_serp: bool = Field(
+        default=False,
+        validation_alias="LODGING_ENABLE_SERP",
     )
     geocode_user_agent: str = Field(
         default="TravelPlanner/0.2 (https://github.com/travel-planner)",
@@ -202,6 +245,40 @@ class Settings(BaseSettings):
     evidence_poi_validate_max: int = Field(
         default=5,
         validation_alias="EVIDENCE_POI_VALIDATE_MAX",
+    )
+
+    # ACT-POOL / doc 34：地图封闭池 + 出池代码执法
+    closed_poi_enforce: bool = Field(
+        default=True,
+        validation_alias="CLOSED_POI_ENFORCE",
+    )
+    closed_poi_maps_enable: bool = Field(
+        default=True,
+        validation_alias="CLOSED_POI_MAPS_ENABLE",
+    )
+    closed_poi_maps_min_seed: int = Field(
+        default=4,
+        validation_alias="CLOSED_POI_MAPS_MIN_SEED",
+    )
+    closed_poi_maps_limit: int = Field(
+        default=16,
+        validation_alias="CLOSED_POI_MAPS_LIMIT",
+    )
+    closed_poi_pool_max: int = Field(
+        default=24,
+        validation_alias="CLOSED_POI_POOL_MAX",
+    )
+    closed_poi_max_km: float = Field(
+        default=35.0,
+        validation_alias="CLOSED_POI_MAX_KM",
+    )
+    closed_poi_match_threshold: float = Field(
+        default=0.72,
+        validation_alias="CLOSED_POI_MATCH_THRESHOLD",
+    )
+    closed_poi_adopt_geocode_max: int = Field(
+        default=8,
+        validation_alias="CLOSED_POI_ADOPT_GEOCODE_MAX",
     )
 
     # 通勤 TRN-02：geocode 后仅对可疑边自动补算（默认开；无 Key 时仍可走提示词/估算）

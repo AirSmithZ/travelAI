@@ -246,6 +246,17 @@ def _serpapi_maps_get(
     settings: Settings,
 ) -> tuple[dict[str, Any] | None, LodgingStatus | None, str | None]:
     """Returns (data, error_status, error_message). error_status None means HTTP OK body."""
+    from app.services.serp_circuit import (
+        record_serp_rate_limit,
+        serp_backoff_from_settings,
+        serp_circuit_open,
+        serp_circuit_remaining_sec,
+    )
+
+    if serp_circuit_open():
+        rem = int(serp_circuit_remaining_sec())
+        return None, "rate_limited", f"SerpApi 熔断中（约 {rem}s），请稍后或改用 Trip 深链"
+
     key = (settings.serpapi_api_key or "").strip()
     if not key:
         return None, "unconfigured", "SERPAPI_API_KEY 未配置"
@@ -262,12 +273,14 @@ def _serpapi_maps_get(
         with httpx.Client(timeout=25.0) as client:
             resp = client.get(f"{base}/search.json", params=params)
             if resp.status_code == 429:
+                record_serp_rate_limit(serp_backoff_from_settings(settings))
                 return None, "rate_limited", "SerpApi 限流（429），请稍后重试"
             resp.raise_for_status()
             data = resp.json()
     except httpx.HTTPStatusError as e:
         code = e.response.status_code if e.response is not None else 0
         if code == 429:
+            record_serp_rate_limit(serp_backoff_from_settings(settings))
             return None, "rate_limited", "SerpApi 限流（429），请稍后重试"
         return None, "provider_error", f"SerpApi HTTP {code}"
     except Exception as e:
@@ -279,6 +292,7 @@ def _serpapi_maps_get(
     if data.get("error"):
         err = str(data.get("error"))
         if "429" in err or "rate" in err.lower():
+            record_serp_rate_limit(serp_backoff_from_settings(settings))
             return None, "rate_limited", "SerpApi 限流，请稍后重试"
         return None, "provider_error", err[:160]
     return data, None, None

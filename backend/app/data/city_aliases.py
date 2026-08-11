@@ -27,6 +27,12 @@ CITY_ALIASES: dict[str, str] = {
     "新西兰": "New Zealand",
     "基督城": "Christchurch, New Zealand",
     "皇后镇": "Queenstown, New Zealand",
+    "越南": "Vietnam",
+    "胡志明": "Ho Chi Minh City, Vietnam",
+    "胡志明市": "Ho Chi Minh City, Vietnam",
+    "西贡": "Ho Chi Minh City, Vietnam",
+    "河内": "Hanoi, Vietnam",
+    "岘港": "Da Nang, Vietnam",
 }
 
 # ISO 3166-1 alpha-2（Nominatim countrycodes / Photon 过滤）
@@ -57,6 +63,17 @@ CITY_COUNTRY_CODES: dict[str, str] = {
     "新西兰": "nz",
     "基督城": "nz",
     "皇后镇": "nz",
+    "越南": "vn",
+    "胡志明": "vn",
+    "胡志明市": "vn",
+    "西贡": "vn",
+    "河内": "vn",
+    "岘港": "vn",
+    "vietnam": "vn",
+    "ho chi minh": "vn",
+    "saigon": "vn",
+    "hanoi": "vn",
+    "da nang": "vn",
 }
 
 
@@ -80,7 +97,14 @@ def country_code_for_destination(destination: str) -> str | None:
         return None
     if raw in CITY_COUNTRY_CODES:
         return CITY_COUNTRY_CODES[raw]
+    low = raw.lower()
+    if low in CITY_COUNTRY_CODES:
+        return CITY_COUNTRY_CODES[low]
     for key, code in CITY_COUNTRY_CODES.items():
-        if key in raw and len(key) >= 2:
+        if len(key) < 2:
+            continue
+        if key in raw:
+            return code
+        if key.lower() in low:
             return code
     return None

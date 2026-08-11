@@ -50,6 +50,7 @@ ls -la ~/.cursor/skills/ 2>/dev/null
 | Vercel AI SDK / useChat | `vercel-ai-sdk-fullstack` |
 | 界面好看 / 去 AI 味 | `frontend-design`、`design-taste-frontend` |
 | 对话面板 / Patch 确认 | `ai-chat-ui` |
+| 机酒门禁 / 印证采纳 / 住宿换店 / generate | `travel-product-flow` |
 | 创建新 skill | `create-skill`（`~/.cursor/skills-cursor/`） |
 
 ### 4. 外部 skill 源（可选）

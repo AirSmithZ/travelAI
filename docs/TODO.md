@@ -1,6 +1,6 @@
 # 项目待办总索引
 
-> **更新**：2026-08-09（+ **WS-10** 玩法印证贴链 MVP · [23](./llm-travel-data/23-玩法印证贴链MVP实施.md)）  
+> **更新**：2026-08-11（**WS-EVID-REFS / must-nice** · ACT-POOL-ENFORCE · [34](./llm-travel-data/34-玩法印证与节点借鉴分析结论.md)）  
 > **用途**：从各分析/方案文档汇总的 **开放待办**；实施完成后在本索引与子清单中勾选，并在源文档同步状态。  
 > **原则**：每条待办必须有 **TODO ID** 与 **关联文档** 链接，便于后续 PR / 实施计划引用。
 
@@ -15,7 +15,7 @@
 | **路线图 / 总览 / 导出** | [TODO-路线图与总览.md](./TODO-路线图与总览.md) | 总览抛光、导出主题、表单债务、`fetch_weather` UI |
 
 **进度快照**：[开发进度.md](./开发进度.md) · **问题跟踪**：[问题日志.md](./问题日志.md)  
-**能力缺口分析**：[15](./llm-travel-data/15-天气联网与决策Agent缺口分析.md) · **运行/偏离复核**：[20](./llm-travel-data/20-L1L2运行验证记录.md)
+**能力缺口分析**：[15](./llm-travel-data/15-天气联网与决策Agent缺口分析.md) · **运行/偏离复核**：[20](./llm-travel-data/20-L1L2运行验证记录.md) · **GitHub Agent 调研**：[24](./llm-travel-data/24-GitHub旅行Agent调研与机酒玩法顺序讨论.md) · **能力借鉴与三档策略**：[25](./llm-travel-data/25-GitHub能力借鉴与规划策略三档分析.md) · **印证采纳**：[34](./llm-travel-data/34-玩法印证与节点借鉴分析结论.md) · **旅行 Skill**：[35](./llm-travel-data/35-旅行Skill与Agent效率分析.md) · **住宿换店 UX**：[36](./llm-travel-data/36-住宿搜索UX与换店困难分析.md) · **Trip 片区降级**：[26](./llm-travel-data/26-SerpAPI额度不足与Trip片区优先降级分析.md) · **API 缓存**：[27](./llm-travel-data/27-外部API缓存现状与优化分析.md) · **缓存/GEO 实施**：[28](./llm-travel-data/28-外部API缓存与GEO锚实施计划.md) ✅ · **RollingGo MCP**：[29](./llm-travel-data/29-RollingGo-MCP接入与Trip并存.md) · **P122**：[问题日志](./问题日志.md)
 
 ---
 
@@ -27,7 +27,7 @@
 | **P1** | `HOT-01` | 酒店源探路（**商务**） | [llm TODO](./llm-travel-data/TODO.md) |
 | **P2** | `SEC-02` | 部署鉴权限流（部署前置） | [llm TODO](./llm-travel-data/TODO.md) |
 | **扩张 / ⏸** | `WS-01/05` · `AG-*` · 移动端 · P5b · OV-03/04 · FM-* | 完整网页桶 / Agent / 天气 UI | [21](./llm-travel-data/21-Agent-Reach与玩法印证多源实施调研.md) · [22](./llm-travel-data/22-对话编排与玩法印证UX调研.md) |
-| **P2 / ⏸ 商务** | **`COST-01`** | Viator Affiliate 账号审核中；通过后补门票 `cost` + 深链（餐饮见 `COST-02`） | [llm TODO §3c](./llm-travel-data/TODO.md) · [03](./llm-travel-data/03-游玩项目.md) |
+| **P2 扩张** | **`COST-02`** / **`COST-03`** | 餐饮价位 · 结构化 `cost`（~~`COST-01` Viator~~ ❌ 已取消） | [llm TODO §3c](./llm-travel-data/TODO.md) · [03](./llm-travel-data/03-游玩项目.md) |
 | **P3/P4 债** | `OV-03/04` · `WX-03/04` | 故事条 / weather 对话 UI | [TODO-路线图](./TODO-路线图与总览.md) |
 
 ---
@@ -76,4 +76,4 @@
 
 ---
 
-*索引版本：v1.20 · 2026-08-09（+ COST-01 审核阻塞）*
+*索引版本：v1.21 · 2026-08-11（COST-01/Viator ❌ 取消）*

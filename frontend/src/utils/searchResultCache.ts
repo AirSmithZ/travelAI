@@ -12,7 +12,6 @@ const store = new Map<string, CacheEntry<unknown>>();
 
 /** Default TTL: fares stale quickly */
 export const FLIGHT_CACHE_TTL_MS = 10 * 60 * 1000;
-export const LODGING_CACHE_TTL_MS = 30 * 60 * 1000;
 
 export function cacheGet<T>(
   namespace: string,
@@ -62,19 +61,5 @@ export function flightCacheKey(parts: {
     ret,
     String(parts.adults),
     parts.preference,
-  ].join('|');
-}
-
-export function lodgingCacheKey(parts: {
-  zoneId: string;
-  lat: number;
-  lng: number;
-  radiusM: number;
-}): string {
-  return [
-    parts.zoneId,
-    parts.lat.toFixed(4),
-    parts.lng.toFixed(4),
-    String(Math.round(parts.radiusM)),
   ].join('|');
 }

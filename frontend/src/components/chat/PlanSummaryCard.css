@@ -50,6 +50,94 @@
   min-width: 0;
 }
 
+.plan-summary__strategy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.plan-summary__strategy-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.plan-summary__strategy-seg {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.plan-summary__strategy-btn {
+  flex: 1 1 auto;
+  min-width: 4.5rem;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.plan-summary__strategy-btn:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.plan-summary__strategy-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.plan-summary__strategy-btn--active {
+  color: var(--text);
+  font-weight: 600;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+}
+
+.plan-summary__strategy-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+
+.plan-summary__strategy-confirm {
+  margin: 0 10px 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-elevated));
+}
+
+.plan-summary__strategy-confirm-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.plan-summary__strategy-confirm-body {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.plan-summary__strategy-confirm-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* Narrow hub: checklist then next-step (stacked) */
 .plan-summary__body--split .planning-next--embedded {
   border-top: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));

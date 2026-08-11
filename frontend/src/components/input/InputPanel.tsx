@@ -59,7 +59,9 @@ export function InputPanel() {
   }, [selectedNodeId]);
 
   useEffect(() => {
-    if (plan.phase === 'detailed' && (leftPanelMode === 'flight' || leftPanelMode === 'stay')) {
+    // doc 36 HOT-UX-01: keep stay editable after generate (replace hotel / search).
+    // Flight panel may still close to avoid crowding; stay must remain reachable.
+    if (plan.phase === 'detailed' && leftPanelMode === 'flight') {
       setLeftPanelMode('chat');
     }
   }, [plan.phase, leftPanelMode, setLeftPanelMode]);
@@ -69,10 +71,12 @@ export function InputPanel() {
   const evidenceStatus = itinerary?.meta?.evidence_status;
   const showChat = leftPanelMode === 'chat';
   const showFlight = leftPanelMode === 'flight' && plan.phase !== 'detailed';
-  const showStay = leftPanelMode === 'stay' && plan.phase !== 'detailed';
+  const showStay = leftPanelMode === 'stay';
   const showEvidence = leftPanelMode === 'evidence';
   const showForm = leftPanelMode === 'form';
-  const showPhaseBEntry = plan.phase !== 'detailed';
+  /** Stay/evidence after generate (doc 36); flight entry stays pre-generate. */
+  const showPhaseBFlightEntry = plan.phase !== 'detailed';
+  const showPhaseBStayEntry = true;
 
   const purchaseUrl = plan.travel_intel.last_flight_search?.purchase_url;
 
@@ -201,22 +205,34 @@ export function InputPanel() {
             <StayZonePanel layout="full" />
           </div>
           <footer className="input-panel__flight-foot">
-            <button
-              type="button"
-              className="input-panel__flight-btn"
-              onClick={() => setLeftPanelMode('flight')}
-            >
-              航班确认
-            </button>
+            {showPhaseBFlightEntry ? (
+              <button
+                type="button"
+                className="input-panel__flight-btn"
+                onClick={() => setLeftPanelMode('flight')}
+              >
+                航班确认
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="input-panel__flight-btn"
+                onClick={() => setLeftPanelMode('chat')}
+              >
+                返回对话
+              </button>
+            )}
             {hasItineraryDays ? (
               <>
-                <button
-                  type="button"
-                  className="input-panel__flight-btn"
-                  onClick={() => setLeftPanelMode('chat')}
-                >
-                  返回对话
-                </button>
+                {showPhaseBFlightEntry && (
+                  <button
+                    type="button"
+                    className="input-panel__flight-btn"
+                    onClick={() => setLeftPanelMode('chat')}
+                  >
+                    返回对话
+                  </button>
+                )}
                 <button
                   type="button"
                   className="input-panel__flight-btn input-panel__flight-btn--primary"
@@ -243,7 +259,7 @@ export function InputPanel() {
           <div className="input-panel__editor-head">
             <h2 className="input-panel__heading">{heading}</h2>
             <div className="input-panel__editor-actions">
-              {showPhaseBEntry && (
+              {showPhaseBFlightEntry && (
                 <button
                   type="button"
                   className="input-panel__expand-chat"
@@ -252,13 +268,13 @@ export function InputPanel() {
                   航班确认
                 </button>
               )}
-              {showPhaseBEntry && (
+              {showPhaseBStayEntry && (
                 <button
                   type="button"
                   className="input-panel__expand-chat"
                   onClick={() => setLeftPanelMode('stay')}
                 >
-                  住宿片区
+                  {hasItineraryDays ? '换酒店 / 住宿' : '住宿片区'}
                 </button>
               )}
               {hasItineraryDays && (

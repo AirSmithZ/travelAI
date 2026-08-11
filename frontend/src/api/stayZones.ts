@@ -53,6 +53,9 @@ export interface StayZoneLodgingCandidate {
   rating?: number | null;
   distance_m: number;
   coord_source?: string;
+  ref_price?: number | null;
+  currency?: string | null;
+  booking_url?: string | null;
 }
 
 export type StayZoneLodgingStatus =
@@ -60,7 +63,10 @@ export type StayZoneLodgingStatus =
   | 'empty'
   | 'rate_limited'
   | 'provider_error'
-  | 'unconfigured';
+  | 'unconfigured'
+  | 'trip_first';
+
+export type StayZoneLodgingMode = 'rollinggo' | 'serp' | 'trip_first';
 
 export async function searchStayZoneLodging(body: {
   zone_id: string;
@@ -70,16 +76,22 @@ export async function searchStayZoneLodging(body: {
   lng: number;
   radius_m?: number;
   limit?: number;
+  check_in?: string;
+  check_out?: string;
+  adults?: number;
+  max_price?: number | null;
 }): Promise<{
   candidates: StayZoneLodgingCandidate[];
   warnings: string[];
   status: StayZoneLodgingStatus;
   query: string;
+  trip_url: string;
+  mode: StayZoneLodgingMode;
 }> {
   const res = await fetch(`${apiBase()}/api/v1/stay-zones/lodging`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout?.(40_000),
+    signal: AbortSignal.timeout?.(60_000),
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -88,11 +100,21 @@ export async function searchStayZoneLodging(body: {
     warnings?: string[];
     status?: StayZoneLodgingStatus;
     query?: string;
+    trip_url?: string;
+    mode?: StayZoneLodgingMode;
   };
   return {
     candidates: data.candidates ?? [],
     warnings: data.warnings ?? [],
     status: data.status ?? (data.candidates?.length ? 'ok' : 'empty'),
     query: data.query ?? '',
+    trip_url: data.trip_url ?? '',
+    mode:
+      data.mode ??
+      (data.status === 'trip_first'
+        ? 'trip_first'
+        : data.candidates?.some((c) => c.coord_source === 'rollinggo')
+          ? 'rollinggo'
+          : 'serp'),
   };
 }

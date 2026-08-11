@@ -20,6 +20,10 @@ TRIP_REQUEST_FIELDS: frozenset[str] = frozenset(FIELD_LABELS.keys())
 
 BUDGET_LEVELS: frozenset[str] = frozenset({"economy", "comfort", "luxury"})
 
+PLANNING_STRATEGIES: frozenset[str] = frozenset(
+    {"flight_hotel_first", "interest_then_anchors", "activity_first"}
+)
+
 NODE_CATEGORIES: frozenset[str] = frozenset(
     {"airport", "hotel", "restaurant", "snack", "attraction", "landmark", "transit"}
 )
@@ -183,6 +187,12 @@ def coerce_trip_request_value(field: str, action: str, value: Any) -> Any | None
             return None
         level = str(value).strip().lower()
         return level if level in BUDGET_LEVELS else None
+
+    if field == "planning_strategy":
+        if value is None:
+            return None
+        s = str(value).strip().lower()
+        return s if s in PLANNING_STRATEGIES else None
 
     if field in ("date_start", "date_end"):
         s = _coerce_string(value)

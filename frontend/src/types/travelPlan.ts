@@ -2,8 +2,11 @@ import type { Itinerary, ItineraryEvidenceItem } from './itinerary';
 import type { TripRequest } from './tripRequest';
 import type { TravelIntel } from './travelIntel';
 
-/** doc 23: 玩法印证面板每条粘贴链接模块 */
+/** doc 34: 玩法印证面板每条粘贴链接模块 */
 export type EvidenceLinkStatus = 'idle' | 'loading' | 'ok' | 'error';
+
+/** doc 34 L3: adopted POI priority */
+export type AdoptPoiLevel = 'must' | 'nice';
 
 export interface EvidenceLinkModule {
   id: string;
@@ -13,6 +16,14 @@ export interface EvidenceLinkModule {
   fetchedAt?: string;
   /** 检索成功后的核心内容；展示与 generate 注入以此为准 */
   result?: ItineraryEvidenceItem;
+  /** doc 34: POI names offered after fetch (from poi_hits + manual) */
+  candidatePois?: string[];
+  /** doc 34: user-checked places to inject into generate */
+  adoptedPois?: string[];
+  /** doc 34 L3: must=必去 / nice=想去（仅对 adoptedPois） */
+  adoptLevels?: Record<string, AdoptPoiLevel>;
+  /** doc 34: inject truncated body as pacing reference */
+  adoptRhythm?: boolean;
 }
 
 export type PlanPhase = 'empty' | 'planning' | 'detailed';

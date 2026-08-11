@@ -171,7 +171,7 @@ def test_bare_name_skipped_without_fence_when_dest_known():
 
 def test_resolve_destination_center_cached():
     clear_geocode_caches()
-    settings = Settings(GEOCODE_PROVIDERS="photon")
+    settings = Settings(geocode_providers="photon")
     calls = {"n": 0}
 
     class FakePhoton:
@@ -179,11 +179,14 @@ def test_resolve_destination_center_cached():
 
         def autocomplete(self, query, *, limit, bias=None):
             calls["n"] += 1
-            return [_hit("Singapore", 1.352, 103.820)]
+            return [_hit("Singapore", 1.352, 103.820, country_code="sg")]
 
-    with patch(
-        "app.services.geocode_providers._build_providers",
-        return_value=[FakePhoton()],
+    with (
+        patch("app.services.geocoding.lookup_city_center", return_value=None),
+        patch(
+            "app.services.geocode_providers._build_providers",
+            return_value=[FakePhoton()],
+        ),
     ):
         a = resolve_destination_center("新加坡", settings=settings)
         b = resolve_destination_center("新加坡", settings=settings)
@@ -198,8 +201,8 @@ def test_resolve_destination_center_cached():
 def test_geocode_itinerary_meta_warnings():
     clear_geocode_caches()
     settings = Settings(
-        GEOCODE_PROVIDERS="photon",
-        GEOCODE_FENCE_KM=150,
+        geocode_providers="photon",
+        geocode_fence_km=150,
     )
 
     class FakePhoton:
@@ -228,19 +231,18 @@ def test_geocode_itinerary_meta_warnings():
         ],
     }
 
-    with patch(
-        "app.services.geocode_providers._build_providers",
-        return_value=[FakePhoton()],
+    with (
+        patch("app.services.geocode_providers._build_providers", return_value=[FakePhoton()]),
+        patch("app.services.geocoding.get_settings", return_value=settings),
+        patch("app.services.geocoding._wikidata_fallback", return_value=None),
+        patch(
+            "app.services.geocoding.resolve_destination_center",
+            return_value=DestinationCenter(
+                lat=1.352, lng=103.820, country_code="sg", query="Singapore"
+            ),
+        ),
     ):
-        # resolve center + place geocode 都走同一 fake provider
-        with patch("app.services.geocoding.get_settings", return_value=settings):
-            with patch(
-                "app.services.geocoding.resolve_destination_center",
-                return_value=DestinationCenter(
-                    lat=1.352, lng=103.820, country_code="sg", query="Singapore"
-                ),
-            ):
-                out = geocode_itinerary(itinerary, "新加坡", max_workers=1)
+        out = geocode_itinerary(itinerary, "新加坡", max_workers=1)
 
     warnings = out["meta"]["warnings"]
     assert "LLM 生成行程" in warnings

@@ -31,3 +31,6 @@ frontend/node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# Cursor MCP 本地密钥（仓库只提交 .cursor/mcp.json.example）
+.cursor/mcp.json

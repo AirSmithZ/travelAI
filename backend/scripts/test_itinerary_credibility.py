@@ -154,6 +154,17 @@ def test_prompt_blocks():
     )
     assert "BEGIN POI_FACTS" in facts
     assert "滨海湾花园" in facts
+    assert "BEGIN CLOSED_POI_POOL" in facts
+
+    from app.services.itinerary_credibility import format_closed_poi_pool_block
+
+    pool = format_closed_poi_pool_block(
+        [{"name": "滨海湾花园", "verified": True}, {"name": "假景点", "verified": False}]
+    )
+    assert "CLOSED_POI_POOL" in pool
+    assert "滨海湾花园" in pool
+    assert "假景点" not in pool
+    print("closed_poi_pool OK")
 
     tr = TripRequestIn(destination="新加坡", date_start="2026-10-16", day_count=1)
     user = _build_generate_user(

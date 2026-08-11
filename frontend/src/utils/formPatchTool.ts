@@ -5,7 +5,7 @@
  */
 
 import type { Itinerary, NodeCategory, NodeCost, WeatherIcon } from '../types/itinerary';
-import type { BudgetLevel, TripRequest } from '../types/tripRequest';
+import type { BudgetLevel, PlanningStrategy, TripRequest } from '../types/tripRequest';
 import type { FormPatch, FormPatchAction } from '../types/travelPlan';
 import { applyItineraryPatch } from './applyItineraryPatch';
 
@@ -21,6 +21,7 @@ export const TRIP_REQUEST_FIELDS = [
   'hotel_budget_per_night',
   'preference_tags',
   'notes',
+  'planning_strategy',
 ] as const;
 
 export type TripRequestField = (typeof TRIP_REQUEST_FIELDS)[number];
@@ -71,6 +72,12 @@ const NODE_CATEGORIES = new Set<NodeCategory>([
 
 const BUDGET_LEVELS = new Set<BudgetLevel>(['economy', 'comfort', 'luxury']);
 
+const PLANNING_STRATEGIES = new Set<PlanningStrategy>([
+  'flight_hotel_first',
+  'interest_then_anchors',
+  'activity_first',
+]);
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{1,2}:\d{2}$/;
 const NODE_PATH_RE = /^days\[(\d+)\]\.nodes\[([^\]]+)\](?:\.(.+))?$/;
@@ -111,6 +118,7 @@ export const FIELD_LABELS: Record<TripRequestField, string> = {
   hotel_budget_per_night: '每晚酒店预算',
   preference_tags: '偏好标签',
   notes: '备注',
+  planning_strategy: '规划策略',
 };
 
 function isTripRequestField(field: string): field is TripRequestField {
@@ -154,6 +162,11 @@ export function coerceTripRequestValue(
   if (field === 'budget_level') {
     const level = String(value).trim().toLowerCase() as BudgetLevel;
     return BUDGET_LEVELS.has(level) ? level : null;
+  }
+
+  if (field === 'planning_strategy') {
+    const s = String(value).trim().toLowerCase() as PlanningStrategy;
+    return PLANNING_STRATEGIES.has(s) ? s : null;
   }
 
   if (field === 'date_start' || field === 'date_end') {

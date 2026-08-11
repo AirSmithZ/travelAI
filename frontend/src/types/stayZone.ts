@@ -2,6 +2,63 @@ export type StayZoneStatus = 'proposed' | 'confirmed' | 'rejected';
 
 export type StayZoneStrategy = 'compromise' | 'split' | 'main_cluster';
 
+/** HOT-ZONE-TAG：机酒状态（卡上次要） */
+export type StayZoneFitTag =
+  | 'current_anchor'
+  | 'preference_fit'
+  | 'compromise'
+  | 'needs_city_change';
+
+export const STAY_ZONE_FIT_TAG_LABELS: Record<StayZoneFitTag, string> = {
+  current_anchor: '当前锚点',
+  preference_fit: '贴合偏好',
+  compromise: '折中',
+  needs_city_change: '需换城',
+};
+
+/** HOT-THEME-TAG：提示词主题（卡顶主展示；运行时，不写回 preference_tags） */
+export interface PromptThemeTag {
+  id: string;
+  label: string;
+  polarity?: 'positive' | 'negative';
+  confidence?: number;
+  evidence?: string;
+  entity?: string;
+}
+
+export interface ThemeRef {
+  id: string;
+  label: string;
+}
+
+const THEME_CHIP_MAX = 4;
+
+/** 卡顶主题：最多 4 个，溢出返回 +N */
+export function stayZoneThemeChips(
+  matched?: ThemeRef[] | null,
+): { shown: ThemeRef[]; overflow: number } {
+  const list = matched ?? [];
+  if (list.length <= THEME_CHIP_MAX) return { shown: list, overflow: 0 };
+  return {
+    shown: list.slice(0, THEME_CHIP_MAX),
+    overflow: list.length - THEME_CHIP_MAX,
+  };
+}
+
+export function stayZoneFitTagLabel(tag?: StayZoneFitTag | null): string {
+  if (!tag) return STAY_ZONE_FIT_TAG_LABELS.current_anchor;
+  return STAY_ZONE_FIT_TAG_LABELS[tag] ?? tag;
+}
+
+export function isStayZoneBookable(zone: {
+  bookable?: boolean;
+  fit_tag?: StayZoneFitTag;
+}): boolean {
+  if (zone.bookable === false) return false;
+  if (zone.fit_tag === 'needs_city_change') return false;
+  return true;
+}
+
 export interface StayZoneCircleGeometry {
   type: 'circle';
   center: { lat: number; lng: number };
@@ -41,6 +98,11 @@ export interface RecommendedStayZone {
   status: StayZoneStatus;
   geometry?: StayZoneGeometry;
   purchase_url?: string;
+  fit_tag?: StayZoneFitTag;
+  bookable?: boolean;
+  tag_note?: string;
+  matched_themes?: ThemeRef[];
+  uncovered_themes?: ThemeRef[];
 }
 
 export interface StayZoneRecommendRequest {
@@ -55,6 +117,7 @@ export interface StayZoneRecommendResponse {
   fetched_at: string;
   source: 'llm' | 'heuristic';
   warnings: string[];
+  prompt_themes?: PromptThemeTag[];
 }
 
 export type HotelBookingStatus = 'zone_only' | 'selected' | 'booked_external';

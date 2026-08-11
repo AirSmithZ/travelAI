@@ -6,7 +6,10 @@ import type { StayZonePreferences } from '../../types/stayZone';
 import {
   formatStayZoneDays,
   getStayZonePanelPhase,
+  isStayZoneBookable,
+  stayZoneFitTagLabel,
   stayZonePanelBadgeLabel,
+  stayZoneThemeChips,
 } from '../../types/stayZone';
 import { cityLabelFromOutboundFlight } from '../../utils/flightArrivalCity';
 import { validateHotelStays } from '../../utils/hotelStayValidate';
@@ -68,6 +71,8 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   const setStayHotelMapPins = usePlanStore((s) => s.setStayHotelMapPins);
   const stayHotelMapPinPickId = usePlanStore((s) => s.stayHotelMapPinPickId);
   const clearStayHotelMapPinPick = usePlanStore((s) => s.clearStayHotelMapPinPick);
+  const setLeftPanelMode = usePlanStore((s) => s.setLeftPanelMode);
+  const addChatMessage = usePlanStore((s) => s.addChatMessage);
   const showToast = useToastStore((s) => s.show);
 
   const zones = intel.recommended_stay_zones ?? [];
@@ -89,6 +94,8 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   >({});
   const [nameDraft, setNameDraft] = useState<ZoneHotelCandidate | null>(null);
   const [nameResults, setNameResults] = useState<ZoneHotelCandidate[]>([]);
+  /** doc 36: seed name search when clicking a locked map pin */
+  const [nameSearchSeed, setNameSearchSeed] = useState<string | null>(null);
 
   const hotelStayWarnings = useMemo(
     () => validateHotelStays(intel.hotels, plan.trip_request).warnings,
@@ -98,6 +105,59 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   const canRecommend = Boolean(plan.trip_request.destination?.trim());
   const displayWarnings = useMemo(() => dedupeMessages(warnings), [warnings]);
   const standaloneLocked = intel.hotels.find((h) => !h.zone_id);
+
+  /** HOT-TRIP-02 + HOT-ZONE-TAG: confirmed first, then fit_tag order */
+  const zonesOrdered = useMemo(() => {
+    const visible = zones.filter((z) => z.status !== 'rejected');
+    const fitRank = (t?: string) => {
+      switch (t) {
+        case 'current_anchor':
+          return 0;
+        case 'preference_fit':
+          return 1;
+        case 'compromise':
+          return 2;
+        case 'needs_city_change':
+          return 3;
+        default:
+          return 4;
+      }
+    };
+    return [...visible].sort((a, b) => {
+      const statusRank = (s: string) => (s === 'confirmed' ? 0 : s === 'proposed' ? 1 : 2);
+      const d = statusRank(a.status) - statusRank(b.status);
+      if (d !== 0) return d;
+      const ft = fitRank(a.fit_tag) - fitRank(b.fit_tag);
+      if (ft !== 0) return ft;
+      return a.label.localeCompare(b.label, 'zh');
+    });
+  }, [zones]);
+
+  const hotelsByZoneId = useMemo(() => {
+    const map = new Map<string, typeof intel.hotels>();
+    for (const h of intel.hotels) {
+      const zid = h.zone_id || '__standalone__';
+      const list = map.get(zid) ?? [];
+      list.push(h);
+      map.set(zid, list);
+    }
+    return map;
+  }, [intel.hotels]);
+
+  const lodgingAdults = plan.trip_request.travelers ?? 2;
+  const lodgingMaxPrice = plan.trip_request.hotel_budget_per_night ?? null;
+
+  const visibleZoneIds = useMemo(
+    () => new Set(zonesOrdered.map((z) => z.id)),
+    [zonesOrdered],
+  );
+  const orphanZoneHotels = useMemo(
+    () =>
+      intel.hotels.filter(
+        (h) => Boolean(h.zone_id) && !visibleZoneIds.has(h.zone_id as string),
+      ),
+    [intel.hotels, visibleZoneIds],
+  );
 
   /** Country-level destination (e.g. 新西兰) → hub city via /flights/airports before geocode bias. */
   const [resolvedDestCity, setResolvedDestCity] = useState('');
@@ -242,10 +302,23 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
     return () => setStayHotelMapPins([]);
   }, [setStayHotelMapPins]);
 
-  // Map marker click → prefer name results, then selected-zone area
+  // Map marker click → name results, area results, or locked pin → replace flow (doc 36)
   useEffect(() => {
     if (!stayHotelMapPinPickId) return;
     const pick = stayHotelMapPinPickId;
+    if (pick.startsWith('locked:')) {
+      const hotelId = pick.slice('locked:'.length);
+      const hotel = intel.hotels.find((h) => h.id === hotelId);
+      if (hotel?.name) {
+        setNameSearchSeed(`${hotel.name}·${Date.now()}`);
+        setNameDraft(null);
+        showToast(`点击锁定钉：在上方店名搜索中输入新店以替换「${hotel.name}」`, 'info');
+        setActiveView('map');
+        setPreviewExpandedWithoutItinerary(true);
+      }
+      clearStayHotelMapPinPick();
+      return;
+    }
     const nameHit = nameResults.find(
       (c) =>
         `name:${candidateKey(c)}` === pick ||
@@ -278,6 +351,10 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
     selectedStayZoneId,
     areaResultsByZone,
     clearStayHotelMapPinPick,
+    intel.hotels,
+    showToast,
+    setActiveView,
+    setPreviewExpandedWithoutItinerary,
   ]);
 
   async function handleRecommend() {
@@ -292,7 +369,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
         itinerary,
         preferences: prefs,
       });
-      recommendStayZonesAction(res.zones, res.fetched_at);
+      recommendStayZonesAction(res.zones, res.fetched_at, res.prompt_themes ?? []);
       setWarnings(dedupeMessages(res.warnings ?? []));
       if (res.zones[0]) setSelectedStayZoneId(res.zones[0].id);
       if (hasItineraryDays) setActiveView('map');
@@ -368,8 +445,8 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
           <h3 className="stay-zone__title">住宿片区</h3>
           <p className="stay-zone__desc">
             {hasItineraryDays
-              ? '可先用「店名搜索」直接锁店，或确认片区后在「片区附近」选店。'
-              : '生成玩法前请锁定具体酒店。店名搜索不绑定片区；片区附近仅作用于当前选中片区。'}
+              ? '玩法已生成仍可换店：上方「店名搜索」替换锁定；地图上点已锁钉可预填店名。锁定后会重铺日闭环，可用顶部横幅优化/重构。'
+              : '生成玩法前请锁定具体酒店。店名搜索不绑定片区；片区附近仅作用于当前选中片区。检索后点「替换/锁定」。'}
           </p>
         </div>
         <span
@@ -399,16 +476,30 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
             上次更新 · {new Date(intel.stay_zones_fetched_at).toLocaleString()}
           </p>
         )}
+        {(intel.stay_prompt_themes ?? []).filter((t) => t.polarity !== 'negative').length >
+          0 && (
+          <p className="stay-zone__themes-summary" role="status">
+            已从描述识别：
+            {(intel.stay_prompt_themes ?? [])
+              .filter((t) => t.polarity !== 'negative')
+              .map((t) => t.label)
+              .slice(0, 8)
+              .join(' · ')}
+          </p>
+        )}
         {error && (
           <p className="stay-zone__error" role="alert">
             {error}
           </p>
         )}
-        {displayWarnings.slice(0, 2).map((w) => (
-          <p key={w} className="stay-zone__warning">
-            {w}
-          </p>
-        ))}
+        {displayWarnings
+          .filter((w) => !w.startsWith('已从描述识别'))
+          .slice(0, 2)
+          .map((w) => (
+            <p key={w} className="stay-zone__warning">
+              {w}
+            </p>
+          ))}
       </div>
 
       {loading && zones.length === 0 && (
@@ -438,8 +529,12 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
         <ZoneHotelNameSearchModule
           destination={hotelGeocodeCity}
           draft={nameDraft}
-          lockedName={standaloneLocked?.name}
+          lockedName={
+            standaloneLocked?.name ||
+            (intel.hotels.length === 1 ? intel.hotels[0]?.name : null)
+          }
           locking={addLoading === 'name'}
+          seedQuery={nameSearchSeed}
           onDraftChange={setNameDraft}
           onResultsChange={setNameResults}
           onActivateMap={openMapPreview}
@@ -447,32 +542,81 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
         />
       </div>
 
-      {zones.filter((z) => z.status !== 'rejected').length > 0 && (
+      {zonesOrdered.length > 0 && (
         <div className="stay-zone__section">
           <p className="stay-zone__label">推荐片区</p>
           <div className="stay-zone__cards">
-            {zones
-              .filter((z) => z.status !== 'rejected')
-              .map((zone) => {
+            {zonesOrdered.map((zone) => {
                 const locked = intel.hotels.find((h) => h.zone_id === zone.id);
+                const zoneHotels = hotelsByZoneId.get(zone.id) ?? [];
                 const areaDraft = areaDraftByZone[zone.id] ?? null;
+                const hasOutline = zone.geometry?.type === 'circle';
+                const bookable = isStayZoneBookable(zone);
+                const fitTag = zone.fit_tag ?? 'current_anchor';
+                const { shown: themeShown, overflow: themeOverflow } = stayZoneThemeChips(
+                  zone.matched_themes,
+                );
+                const uncovered = (zone.uncovered_themes ?? []).slice(0, 3);
                 return (
                   <article
                     key={zone.id}
-                    className={`stay-zone__card${selectedStayZoneId === zone.id ? ' stay-zone__card--selected' : ''}${zone.status === 'confirmed' ? ' stay-zone__card--confirmed' : ''}`}
+                    className={`stay-zone__card${selectedStayZoneId === zone.id ? ' stay-zone__card--selected' : ''}${zone.status === 'confirmed' ? ' stay-zone__card--confirmed' : ''}${!bookable ? ' stay-zone__card--unbookable' : ''}`}
                     onMouseEnter={() => setSelectedStayZoneId(zone.id)}
                   >
+                    <div className="stay-zone__card-tags" aria-label="片区标签">
+                      {themeShown.map((t) => (
+                        <span key={t.id} className="stay-zone__theme-tag">
+                          {t.label}
+                        </span>
+                      ))}
+                      {themeOverflow > 0 ? (
+                        <span className="stay-zone__theme-tag stay-zone__theme-tag--more">
+                          +{themeOverflow}
+                        </span>
+                      ) : null}
+                      {uncovered.map((t) => (
+                        <span
+                          key={`u-${t.id}`}
+                          className="stay-zone__theme-tag stay-zone__theme-tag--uncovered"
+                          title="本片区未覆盖该主题"
+                        >
+                          未覆盖 · {t.label}
+                        </span>
+                      ))}
+                      <span
+                        className={`stay-zone__fit-tag stay-zone__fit-tag--${fitTag} stay-zone__fit-tag--secondary`}
+                      >
+                        {stayZoneFitTagLabel(fitTag)}
+                      </span>
+                      {!bookable ? (
+                        <span className="stay-zone__fit-tag stay-zone__fit-tag--locked">
+                          不可锁店
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="stay-zone__card-top">
                       <h4 className="stay-zone__card-title">{zone.label}</h4>
                       <span className="stay-zone__card-city">{zone.city}</span>
                     </div>
+                    {zone.tag_note ? (
+                      <p className="stay-zone__tag-note">{zone.tag_note}</p>
+                    ) : null}
                     <p className="stay-zone__card-days">{formatStayZoneDays(zone)}</p>
                     <p className="stay-zone__card-rationale">{zone.rationale}</p>
                     {zone.transit_note && (
                       <p className="stay-zone__card-transit">{zone.transit_note}</p>
                     )}
+                    {!bookable ? (
+                      <p className="stay-zone__warning" role="status">
+                        与当前机酒目的地不同城：请先在对话中改目的地/航班，或忽略此备选
+                      </p>
+                    ) : !hasOutline ? (
+                      <p className="stay-zone__warning" role="status">
+                        尚无地图轮廓 · 不提供「附近搜店」；请用 Trip 或店名搜索
+                      </p>
+                    ) : null}
                     <div className="stay-zone__card-foot">
-                      {zone.purchase_url && (
+                      {zone.purchase_url && bookable && (
                         <a
                           href={zone.purchase_url}
                           target="_blank"
@@ -482,7 +626,31 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                           Trip.com 预订 →
                         </a>
                       )}
-                      {zone.status === 'proposed' ? (
+                      {!bookable ? (
+                        <>
+                          <button
+                            type="button"
+                            className="form-btn form-btn--sm form-btn--primary"
+                            onClick={() => {
+                              addChatMessage(
+                                'assistant',
+                                `「${zone.label}」（${zone.city}）更贴合偏好，但与当前目的地不同。可在下方输入：「把目的地改成${zone.city}」；改完后请重新确认航班并粗推片区。`,
+                              );
+                              setLeftPanelMode('chat');
+                              showToast('已切到对话 · 可改目的地', 'info');
+                            }}
+                          >
+                            去对话改目的地
+                          </button>
+                          <button
+                            type="button"
+                            className="form-btn form-btn--sm"
+                            onClick={() => rejectStayZone(zone.id)}
+                          >
+                            忽略
+                          </button>
+                        </>
+                      ) : zone.status === 'proposed' ? (
                         <>
                           <button
                             type="button"
@@ -504,13 +672,40 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                       )}
                     </div>
 
-                    {zone.status === 'confirmed' && (
+                    {zoneHotels.length > 0 ? (
+                      <ul className="stay-zone__hotel-list stay-zone__hotel-list--in-card">
+                        {zoneHotels.map((h) => (
+                          <li key={h.id} className="stay-zone__hotel">
+                            <span>
+                              已锁 · {h.name} · {h.check_in}→{h.check_out}
+                            </span>
+                            <button
+                              type="button"
+                              className="form-btn form-btn--sm form-btn--danger"
+                              onClick={() => removeHotelStay(h.id)}
+                            >
+                              移除
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+
+                    {bookable && zone.status === 'confirmed' && (
                       <div className="stay-zone__hotel-modules">
                         <ZoneAreaLodgingModule
                           zone={zone}
                           draft={areaDraft}
                           lockedName={locked?.name}
                           locking={addLoading === zone.id}
+                          checkIn={zone.check_in || plan.trip_request.date_start}
+                          checkOut={
+                            zone.check_out ||
+                            plan.trip_request.date_end ||
+                            plan.trip_request.date_start
+                          }
+                          adults={lodgingAdults}
+                          maxPrice={lodgingMaxPrice}
                           onDraftChange={(c) =>
                             setAreaDraftByZone((m) => ({ ...m, [zone.id]: c }))
                           }
@@ -529,31 +724,49 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
         </div>
       )}
 
-      {intel.hotels.length > 0 && (
+      {(standaloneLocked || hotelStayWarnings.length > 0 || orphanZoneHotels.length > 0) && (
         <div className="stay-zone__section">
-          <p className="stay-zone__label">已锁定酒店（公共）</p>
+          <p className="stay-zone__label">店名直锁 / 住宿校验</p>
           {hotelStayWarnings.map((w) => (
             <p key={w} className="stay-zone__warning">
               {w}
             </p>
           ))}
-          <ul className="stay-zone__hotel-list">
-            {intel.hotels.map((h) => (
-              <li key={h.id} className="stay-zone__hotel">
-                <span>
-                  {h.name} · {h.city} · {h.check_in}→{h.check_out}
-                  {!h.zone_id ? ' · 店名直锁' : ''}
-                </span>
-                <button
-                  type="button"
-                  className="form-btn form-btn--sm form-btn--danger"
-                  onClick={() => removeHotelStay(h.id)}
-                >
-                  移除
-                </button>
-              </li>
-            ))}
-          </ul>
+          {(standaloneLocked || orphanZoneHotels.length > 0) && (
+            <ul className="stay-zone__hotel-list">
+              {standaloneLocked ? (
+                <li key={standaloneLocked.id} className="stay-zone__hotel">
+                  <span>
+                    {standaloneLocked.name} · {standaloneLocked.city} ·{' '}
+                    {standaloneLocked.check_in}→{standaloneLocked.check_out}
+                    {' · 店名直锁'}
+                  </span>
+                  <button
+                    type="button"
+                    className="form-btn form-btn--sm form-btn--danger"
+                    onClick={() => removeHotelStay(standaloneLocked.id)}
+                  >
+                    移除
+                  </button>
+                </li>
+              ) : null}
+              {orphanZoneHotels.map((h) => (
+                <li key={h.id} className="stay-zone__hotel">
+                  <span>
+                    {h.name} · {h.city} · {h.check_in}→{h.check_out}
+                    {' · 片区已不在列表'}
+                  </span>
+                  <button
+                    type="button"
+                    className="form-btn form-btn--sm form-btn--danger"
+                    onClick={() => removeHotelStay(h.id)}
+                  >
+                    移除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>

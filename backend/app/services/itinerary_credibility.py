@@ -53,6 +53,37 @@ def format_weather_constraints_block(forecast: list[dict[str, Any]] | None) -> s
     )
 
 
+def format_closed_poi_pool_block(poi_candidates: list[dict[str, Any]] | None) -> str:
+    """ACT-POOL: HARD closed pool — LLM may only schedule attraction/landmark from these names."""
+    if not poi_candidates:
+        return ""
+    names: list[str] = []
+    seen: set[str] = set()
+    for p in poi_candidates:
+        if not isinstance(p, dict) or not p.get("verified"):
+            continue
+        name = str(p.get("name") or "").strip()
+        if not name:
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+        if len(names) >= 24:
+            break
+    if not names:
+        return ""
+    return (
+        "\n\n===== BEGIN CLOSED_POI_POOL（硬约束：玩法景点封闭池）=====\n"
+        "下列名称来自围栏内已核验候选。attraction / landmark 节点的 name 必须逐字选自本池；\n"
+        "禁止另造未在池中的景点名。餐饮/机场/酒店/transit 不受本池限制。\n"
+        "池不足以填满日程时：减少景点密度，勿编造补位；可在 tips 写「候选不足」。\n"
+        f"{json.dumps(names, ensure_ascii=False)}\n"
+        "===== END CLOSED_POI_POOL ====="
+    )
+
+
 def format_poi_fact_block(poi_candidates: list[dict[str, Any]] | None) -> str:
     """Soft fact signals from Places enrich (types / rating / hours)."""
     if not poi_candidates:
@@ -74,11 +105,13 @@ def format_poi_fact_block(poi_candidates: list[dict[str, Any]] | None) -> str:
             rows.append(row)
         if len(rows) >= 8:
             break
+    pool = format_closed_poi_pool_block(poi_candidates)
     if not rows:
-        return ""
+        return pool
     return (
-        "\n\n===== BEGIN POI_FACTS（类型/评分/营业信息，可能过时；软参考）=====\n"
-        "开放时间未核验官方页前勿写成硬保证；冲突时以 HARD CONSTRAINTS 为准。\n"
+        pool
+        + "\n\n===== BEGIN POI_FACTS（类型/评分/营业信息，可能过时；软参考）=====\n"
+        "开放时间未核验官方页前勿写成硬保证；冲突时以 HARD CONSTRAINTS / CLOSED_POI_POOL 为准。\n"
         f"{json.dumps(rows, ensure_ascii=False)}\n"
         "===== END POI_FACTS ====="
     )

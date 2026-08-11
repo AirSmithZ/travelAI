@@ -1,5 +1,7 @@
 import type { TravelPlan } from '../types/travelPlan';
+import { resolvePlanningStrategy } from '../types/tripRequest';
 import { hasLockedHotel } from './hotelDayLoop';
+import { countAdoptedModules } from './evidenceAdopt';
 
 export type ReadinessAction =
   | 'prefill'
@@ -72,9 +74,12 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
 
   const pasteOk = (plan.evidence_link_modules ?? []).filter((m) => m.status === 'ok').length;
   const pasteTotal = (plan.evidence_link_modules ?? []).length;
-  let evidenceDetail = '可粘贴链接检索 · 或生成时自动搜';
-  if (pasteOk > 0) {
-    evidenceDetail = `已检索 ${pasteOk}/${pasteTotal || pasteOk} 条用户链接`;
+  const adoptCount = countAdoptedModules(plan.evidence_link_modules);
+  let evidenceDetail = '可粘贴链接检索 · 检索后勾选采纳地点';
+  if (adoptCount > 0) {
+    evidenceDetail = `已采纳 ${adoptCount} 条链接 · 点此查看`;
+  } else if (pasteOk > 0) {
+    evidenceDetail = `已检索 ${pasteOk}/${pasteTotal || pasteOk} 条 · 请勾选采纳地点`;
   } else if (pasteTotal > 0) {
     evidenceDetail = `${pasteTotal} 条链接待检索 · 点开面板`;
   } else if (evidenceCount > 0) {
@@ -159,10 +164,10 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
       id: 'evidence',
       label: '玩法印证',
       detail: evidenceDetail,
-      done: evidenceCount > 0 || pasteOk > 0,
+      done: adoptCount > 0 || evidenceCount > 0,
       hard: false,
       soft: true,
-      hint: '打开玩法印证说明面板',
+      hint: '打开玩法印证：贴链检索后勾选要采纳的地点',
       modifyHint: '查看玩法印证',
       // P76: 始终可打开说明面板（生成前看用法，生成后看链接）
       action: 'open_evidence',
@@ -185,11 +190,29 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
   if (flightCount > 0 && dest && hasStayZone(plan) && !hasStayLocked(plan)) {
     softWarnings.push('片区已确认，请再锁定具体酒店后再生成');
   }
-  if (flightCount > 0 && dest && evidenceCount === 0 && dayCount === 0) {
+  if (pasteOk > 0 && adoptCount === 0 && dayCount === 0) {
+    softWarnings.push('已检索印证但未勾选采纳；生成将主要靠模型与自动检索');
+  }
+  if (flightCount > 0 && dest && evidenceCount === 0 && adoptCount === 0 && dayCount === 0) {
     softWarnings.push('生成时将检索玩法参考；印证较弱也可继续');
   }
 
-  const canGenerate = Boolean(dest) && flightCount > 0 && hasStayLocked(plan);
+  const strategy = resolvePlanningStrategy(tr);
+  const activitySkeletonOk =
+    adoptCount > 0 ||
+    tr.preference_tags.length > 0 ||
+    Boolean((tr.notes || '').trim().length >= 8) ||
+    tr.free_text.trim().length >= 20 ||
+    evidenceVerified > 0;
+
+  if (strategy === 'activity_first' && !activitySkeletonOk && dayCount === 0) {
+    softWarnings.push('「跟笔记走」需先贴链或写兴趣骨架，再生成玩法');
+  }
+
+  let canGenerate = Boolean(dest) && flightCount > 0 && hasStayLocked(plan);
+  if (strategy === 'activity_first') {
+    canGenerate = canGenerate && activitySkeletonOk;
+  }
   const doneCount = items.filter((i) => i.done).length;
 
   return {
@@ -267,6 +290,16 @@ export function getPlanningNextStep(plan: TravelPlan): PlanningNextStep | null {
       body: '航班已确认。请打开住宿面板：确认片区后锁定具体酒店（名称+位置），才能生成玩法。',
       ctaLabel: '去锁定酒店',
       action: 'open_stay',
+    };
+  }
+  if (resolvePlanningStrategy(plan.trip_request) === 'activity_first' && !readiness.canGenerate) {
+    return {
+      kind: 'generate',
+      eyebrow: '下一步',
+      title: '补齐笔记/兴趣骨架',
+      body: '当前为「跟笔记走」：请先贴玩法链接或写清兴趣/必去，再生成行程。',
+      ctaLabel: '打开玩法印证',
+      action: 'open_evidence',
     };
   }
   if (readiness.canGenerate) {

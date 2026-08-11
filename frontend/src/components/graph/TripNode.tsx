@@ -39,6 +39,28 @@ function TripNodeComponent({ data }: NodeProps & { data: TripNodeData }) {
       <div className="trip-node__name">{node.name}</div>
       {timeLabel && <div className="trip-node__time">{timeLabel}</div>}
       {costLabel && <div className="trip-node__cost">{costLabel}</div>}
+      {!compact && (node.evidence_refs?.length ?? 0) > 0 && (
+        <div className="trip-node__evidence" title={node.evidence_refs!.map((r) => r.title || r.url).join('\n')}>
+          {node.evidence_refs!.slice(0, 2).map((r) =>
+            r.url ? (
+              <a
+                key={r.url}
+                className="trip-node__evidence-link"
+                href={r.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+              >
+                印证
+              </a>
+            ) : (
+              <span key={r.note_id || r.title} className="trip-node__evidence-link">
+                印证
+              </span>
+            ),
+          )}
+        </div>
+      )}
       {!compact && node.tags && node.tags.length > 0 && (
         <div className="trip-node__tags">
           {node.tags.slice(0, 2).map((tag) => (

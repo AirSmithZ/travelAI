@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { usePlanStore } from '../../stores/usePlanStore';
 import {
+  PLANNING_STRATEGY_OPTIONS,
+  resolvePlanningStrategy,
+  type PlanningStrategy,
+} from '../../types/tripRequest';
+import {
   derivePlanReadiness,
   getPlanningNextStep,
   type ReadinessAction,
@@ -62,15 +67,29 @@ function handleItemAction(
   }
 }
 
-/** UX-CHAT-01 + UX-CHAT-10: readonly progress (left) + next-step CTA (right). */
+function strategyNeedsConfirm(plan: {
+  travel_intel: { flights: unknown[]; hotels: unknown[] };
+  itinerary: { days?: unknown[] } | null;
+}): boolean {
+  return (
+    plan.travel_intel.flights.length > 0 ||
+    plan.travel_intel.hotels.length > 0 ||
+    Boolean(plan.itinerary?.days?.length)
+  );
+}
+
+/** UX-CHAT-01 + UX-CHAT-10 + STRAT-UI: readonly progress + strategy + next-step CTA. */
 export function PlanSummaryCard({ onPrefill, onRequestGenerate }: PlanSummaryCardProps) {
   const plan = usePlanStore((s) => s.getActivePlan());
+  const updateTripRequest = usePlanStore((s) => s.updateTripRequest);
   const setLeftPanelMode = usePlanStore((s) => s.setLeftPanelMode);
   const setActiveView = usePlanStore((s) => s.setActiveView);
   const [expanded, setExpanded] = useState(true);
+  const [pendingStrategy, setPendingStrategy] = useState<PlanningStrategy | null>(null);
   const isGenerating = usePlanStore((s) => s.isGeneratingItinerary);
   const readiness = derivePlanReadiness(plan);
   const nextStep = getPlanningNextStep(plan);
+  const strategy = resolvePlanningStrategy(plan.trip_request);
   // P98: 生成中或已有行程时不展示「检查并生成玩法」
   const showNext =
     Boolean(nextStep) &&
@@ -84,6 +103,24 @@ export function PlanSummaryCard({ onPrefill, onRequestGenerate }: PlanSummaryCar
     if (dayCount === 0) return;
     setActiveView('map');
   };
+
+  function applyStrategy(next: PlanningStrategy) {
+    updateTripRequest({ planning_strategy: next });
+    setPendingStrategy(null);
+  }
+
+  function onPickStrategy(next: PlanningStrategy) {
+    if (next === strategy) return;
+    if (strategyNeedsConfirm(plan)) {
+      setPendingStrategy(next);
+      return;
+    }
+    applyStrategy(next);
+  }
+
+  const pendingMeta = pendingStrategy
+    ? PLANNING_STRATEGY_OPTIONS.find((o) => o.id === pendingStrategy)
+    : null;
 
   return (
     <section
@@ -110,6 +147,56 @@ export function PlanSummaryCard({ onPrefill, onRequestGenerate }: PlanSummaryCar
         <div
           className={`plan-summary__body${showNext ? ' plan-summary__body--split' : ''}`}
         >
+          <div className="plan-summary__strategy" role="group" aria-label="规划策略">
+            <span className="plan-summary__strategy-label">规划策略</span>
+            <div className="plan-summary__strategy-seg">
+              {PLANNING_STRATEGY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`plan-summary__strategy-btn${
+                    strategy === opt.id ? ' plan-summary__strategy-btn--active' : ''
+                  }`}
+                  aria-pressed={strategy === opt.id}
+                  title={opt.hint}
+                  onClick={() => onPickStrategy(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="plan-summary__strategy-hint">
+              {PLANNING_STRATEGY_OPTIONS.find((o) => o.id === strategy)?.hint}
+            </p>
+          </div>
+
+          {pendingStrategy && pendingMeta ? (
+            <div className="plan-summary__strategy-confirm" role="dialog" aria-modal="false">
+              <p className="plan-summary__strategy-confirm-title">
+                切换为「{pendingMeta.label}」？
+              </p>
+              <p className="plan-summary__strategy-confirm-body">
+                已有机酒或行程时，门禁与下一步会变化；机酒数据保留，玩法不会自动重跑。
+              </p>
+              <div className="plan-summary__strategy-confirm-actions">
+                <button
+                  type="button"
+                  className="form-btn form-btn--sm form-btn--primary"
+                  onClick={() => applyStrategy(pendingStrategy)}
+                >
+                  确认切换
+                </button>
+                <button
+                  type="button"
+                  className="form-btn form-btn--sm"
+                  onClick={() => setPendingStrategy(null)}
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <ul className="plan-summary__list">
             {readiness.items.map((item) => {
               const inert = item.action === 'none' && !item.done;

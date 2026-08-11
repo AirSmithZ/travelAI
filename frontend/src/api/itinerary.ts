@@ -175,7 +175,11 @@ export async function geocodeItineraryNodesStream(
   itinerary: Itinerary,
   destination: string,
   handlers?: GeocodeStreamHandlers,
-  options?: { free_text?: string; notes?: string },
+  options?: {
+    free_text?: string;
+    notes?: string;
+    travel_intel?: import('../types/travelIntel').TravelIntel;
+  },
 ): Promise<Itinerary> {
   let result: Itinerary | null = null;
 
@@ -186,6 +190,7 @@ export async function geocodeItineraryNodesStream(
       destination,
       free_text: options?.free_text ?? '',
       notes: options?.notes ?? '',
+      travel_intel: options?.travel_intel ?? undefined,
     },
     {
       onEvent: (event, data) => {
@@ -210,7 +215,11 @@ export async function geocodeItineraryNodesStream(
 export async function geocodeItineraryNodes(
   itinerary: Itinerary,
   destination: string,
-  options?: { free_text?: string; notes?: string },
+  options?: {
+    free_text?: string;
+    notes?: string;
+    travel_intel?: import('../types/travelIntel').TravelIntel;
+  },
 ): Promise<Itinerary> {
   const base = apiBase();
   const res = await fetch(`${base}/api/v1/itineraries/geocode-nodes`, {
@@ -221,6 +230,7 @@ export async function geocodeItineraryNodes(
       destination,
       free_text: options?.free_text ?? '',
       notes: options?.notes ?? '',
+      travel_intel: options?.travel_intel ?? undefined,
     }),
   });
 

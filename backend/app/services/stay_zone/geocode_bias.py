@@ -206,6 +206,78 @@ def resolve_zone_geocode_context(
     )
 
 
+def _hotel_coords(hotel: dict[str, Any]) -> tuple[float, float] | None:
+    try:
+        lat = float(hotel.get("lat"))
+        lng = float(hotel.get("lng"))
+    except (TypeError, ValueError):
+        return None
+    if abs(lat) < 0.01 and abs(lng) < 0.01:
+        return None
+    return lat, lng
+
+
+def resolve_itinerary_geocode_context(
+    destination: str,
+    *,
+    flights: list[dict[str, Any]] | None = None,
+    hotels: list[dict[str, Any]] | None = None,
+) -> GeocodePlaceContext:
+    """GEO-13: fence itinerary POI geocode using confirmed hotel or arrival airport.
+
+    Priority:
+    1. First hotel with valid lat/lng (stay anchor)
+    2. Outbound arrival airport IATA coords
+    3. Destination string + country alias only
+    """
+    dest = (destination or "").strip()
+    anchor = airport_anchor_from_flights(flights)
+
+    hotel_hit: dict[str, Any] | None = None
+    for h in hotels or []:
+        if not isinstance(h, dict):
+            continue
+        if _hotel_coords(h) is None:
+            continue
+        hotel_hit = h
+        break
+
+    if hotel_hit is not None:
+        lat, lng = _hotel_coords(hotel_hit)  # type: ignore[misc]
+        city_label = (
+            str(hotel_hit.get("city") or "").strip()
+            or (anchor or {}).get("city_zh")
+            or (anchor or {}).get("city_en")
+            or dest
+        )
+        country_code = (
+            country_code_for_destination(str(city_label))
+            or (anchor or {}).get("country_code")
+            or country_code_for_destination(dest)
+        )
+        geocode_destination = str(city_label)
+        if anchor and anchor.get("city_en") and not str(hotel_hit.get("city") or "").strip():
+            country_en = (anchor.get("country_en") or "").strip()
+            geocode_destination = (
+                f"{anchor['city_en']}, {country_en}" if country_en else str(anchor["city_en"])
+            )
+        else:
+            normalized = normalize_city(str(city_label))
+            if normalized:
+                geocode_destination = normalized
+        return GeocodePlaceContext(
+            city_label=str(city_label),
+            geocode_destination=geocode_destination,
+            country_code=str(country_code).lower() if country_code else None,
+            fence_lat=lat,
+            fence_lng=lng,
+            iata=(anchor or {}).get("iata"),
+        )
+
+    # No hotel pin — reuse zone resolver with empty zone (flight / dest only)
+    return resolve_zone_geocode_context({}, dest, flights=flights)
+
+
 def _norm_city_token(value: str) -> str:
     return re.sub(r"\s+", "", (value or "").strip().lower())
 

@@ -95,6 +95,10 @@ class GeocodeItineraryRequest(BaseModel):
         description="User prompt for TRN-02 ferry/trail hint matching during auto-enrich",
     )
     notes: str = ""
+    travel_intel: TravelIntelIn | None = Field(
+        default=None,
+        description="GEO-13: flights/hotels pin geocode fence (optional)",
+    )
 
 
 class GeocodeItineraryResponse(BaseModel):

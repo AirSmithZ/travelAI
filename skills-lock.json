@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "rollinggo-hotel-booking": {
+      "source": "RollingGo-AI/rollinggo-hotel-skill-CN",
+      "sourceType": "github",
+      "skillPath": "skills/rollinggo-hotel-booking/SKILL.md",
+      "computedHash": "13b086c9ba52a279a50a848ac606077c5f34ce8ad9ea67a8f7350f12554eced5"
+    }
+  }
+}

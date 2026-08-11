@@ -1,7 +1,12 @@
 import type { FlightLegSnapshot, FlightQuote } from './flight';
 import { formatFlightSource, formatLegRoute, isRoundTripQuote } from './flight';
 import { resolveAirportCode } from '../data/airportLabels';
-import type { HotelBookingStatus, RecommendedStayZone, StayZonePreferences } from './stayZone';
+import type {
+  HotelBookingStatus,
+  PromptThemeTag,
+  RecommendedStayZone,
+  StayZonePreferences,
+} from './stayZone';
 import { defaultStayZonePreferences } from './stayZone';
 
 export type TravelIntelStatus = 'draft' | 'partial' | 'confirmed' | 'skipped';
@@ -71,6 +76,8 @@ export interface TravelIntel {
   recommended_stay_zones?: RecommendedStayZone[];
   stay_zone_preferences?: StayZonePreferences;
   stay_zones_fetched_at?: string | null;
+  /** HOT-THEME-TAG：粗推时抽取的提示词主题（不写回 preference_tags） */
+  stay_prompt_themes?: PromptThemeTag[];
 }
 
 export function createEmptyTravelIntel(): TravelIntel {
@@ -82,6 +89,7 @@ export function createEmptyTravelIntel(): TravelIntel {
     recommended_stay_zones: [],
     stay_zone_preferences: defaultStayZonePreferences(),
     stay_zones_fetched_at: null,
+    stay_prompt_themes: [],
   };
 }
 

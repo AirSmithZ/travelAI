@@ -31,9 +31,10 @@ _CITY_COLLAPSE_RADIUS_KM = 1.5
 
 logger = logging.getLogger(__name__)
 
-_GEOCODE_CACHE: dict[tuple[str, str, str], dict[str, Any] | None] = {}
+# value: (expires_at_monotonic, hit_or_none)
+_GEOCODE_CACHE: dict[tuple, tuple[float, dict[str, Any] | None]] = {}
 _GEOCODE_CACHE_MAX = 256
-_DEST_CENTER_CACHE: dict[str, "DestinationCenter | None"] = {}
+_DEST_CENTER_CACHE: dict[str, tuple[float, "DestinationCenter | None"]] = {}
 _DEST_CENTER_CACHE_MAX = 64
 
 
@@ -49,6 +50,83 @@ def clear_geocode_caches() -> None:
     """测试用：清空 in-process 地点与目的地中心缓存。"""
     _GEOCODE_CACHE.clear()
     _DEST_CENTER_CACHE.clear()
+
+
+def _ttl_pair(settings: Settings | None, *, miss: bool) -> tuple[int, int]:
+    cfg = settings or get_settings()
+    if miss:
+        return (
+            int(getattr(cfg, "geocode_cache_miss_ttl_sec", 600) or 0),
+            int(getattr(cfg, "dest_center_cache_miss_ttl_sec", 600) or 0),
+        )
+    return (
+        int(getattr(cfg, "geocode_cache_ttl_sec", 86400) or 0),
+        int(getattr(cfg, "dest_center_cache_ttl_sec", 86400) or 0),
+    )
+
+
+def _geo_cache_get(key: tuple) -> tuple[bool, dict[str, Any] | None]:
+    """Return (hit, value). hit False → miss; hit True → value may be None (cached failure)."""
+    row = _GEOCODE_CACHE.get(key)
+    if not row:
+        return False, None
+    expires_at, val = row
+    if time.monotonic() >= expires_at:
+        _GEOCODE_CACHE.pop(key, None)
+        return False, None
+    return True, val
+
+
+def _geo_cache_set(
+    key: tuple,
+    val: dict[str, Any] | None,
+    *,
+    settings: Settings | None = None,
+) -> None:
+    miss = val is None
+    ttl, _ = _ttl_pair(settings, miss=miss)
+    if ttl <= 0:
+        return
+    if len(_GEOCODE_CACHE) >= _GEOCODE_CACHE_MAX and key not in _GEOCODE_CACHE:
+        _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)), None)
+    _GEOCODE_CACHE[key] = (time.monotonic() + float(ttl), val)
+
+
+def _dest_cache_get(cache_key: str) -> tuple[bool, DestinationCenter | None]:
+    row = _DEST_CENTER_CACHE.get(cache_key)
+    if not row:
+        return False, None
+    expires_at, val = row
+    if time.monotonic() >= expires_at:
+        _DEST_CENTER_CACHE.pop(cache_key, None)
+        return False, None
+    return True, val
+
+
+def _dest_cache_set(
+    cache_key: str,
+    val: DestinationCenter | None,
+    *,
+    settings: Settings | None = None,
+) -> None:
+    miss = val is None
+    _, ttl = _ttl_pair(settings, miss=miss)
+    if ttl <= 0:
+        return
+    if len(_DEST_CENTER_CACHE) >= _DEST_CENTER_CACHE_MAX and cache_key not in _DEST_CENTER_CACHE:
+        _DEST_CENTER_CACHE.pop(next(iter(_DEST_CENTER_CACHE)), None)
+    _DEST_CENTER_CACHE[cache_key] = (time.monotonic() + float(ttl), val)
+
+
+def _country_codes_compatible(expected: str | None, got: str | None) -> bool:
+    """Reject e.g. destination=越南(vn) resolving to Taiwan(tw)."""
+    if not expected or not got:
+        return True
+    e = expected.strip().lower()
+    g = got.strip().lower()
+    if len(e) >= 2 and len(g) >= 2 and e[:2].isalpha() and g[:2].isalpha():
+        return e[:2] == g[:2]
+    return e in g or g in e
 
 
 def _city_query_suffixes(destination: str) -> list[str]:
@@ -118,14 +196,15 @@ def resolve_destination_center(
     *,
     settings: Settings | None = None,
 ) -> DestinationCenter | None:
-    """解析目的地中心 lat/lng（优先和风 GeoAPI，再 geocode；进程内缓存）。"""
+    """解析目的地中心 lat/lng（优先和风 GeoAPI，再 geocode；进程内 TTL 缓存）。"""
     raw = destination.strip()
     if not raw:
         return None
 
     cache_key = raw.lower()
-    if cache_key in _DEST_CENTER_CACHE:
-        return _DEST_CENTER_CACHE[cache_key]
+    hit_ok, cached = _dest_cache_get(cache_key)
+    if hit_ok:
+        return cached
 
     cfg = settings or get_settings()
     city_q = normalize_city(raw)
@@ -138,12 +217,21 @@ def resolve_destination_center(
     if qw is None and city_q and city_q != raw:
         qw = lookup_city_center(raw, cfg)
     if qw is not None:
-        center = DestinationCenter(
-            lat=float(qw["lat"]),
-            lng=float(qw["lng"]),
-            country_code=qw.get("country_code") or alias_cc,
-            query=city_q or raw,
-        )
+        qw_cc = qw.get("country_code") or alias_cc
+        if _country_codes_compatible(alias_cc, qw_cc if isinstance(qw_cc, str) else None):
+            center = DestinationCenter(
+                lat=float(qw["lat"]),
+                lng=float(qw["lng"]),
+                country_code=qw_cc if isinstance(qw_cc, str) else alias_cc,
+                query=city_q or raw,
+            )
+        else:
+            logger.warning(
+                "reject dest center country mismatch dest=%s alias=%s got=%s",
+                raw,
+                alias_cc,
+                qw_cc,
+            )
     else:
         bias = GeocodeBias(country_code=alias_cc) if alias_cc else None
         try:
@@ -158,18 +246,25 @@ def resolve_destination_center(
             )
             if result.results:
                 hit = result.results[0]
-                center = DestinationCenter(
-                    lat=hit.lat,
-                    lng=hit.lng,
-                    country_code=hit.country_code or alias_cc,
-                    query=city_q or raw,
-                )
+                hit_cc = hit.country_code or alias_cc
+                if _country_codes_compatible(alias_cc, hit_cc):
+                    center = DestinationCenter(
+                        lat=hit.lat,
+                        lng=hit.lng,
+                        country_code=hit_cc,
+                        query=city_q or raw,
+                    )
+                else:
+                    logger.warning(
+                        "reject dest center country mismatch dest=%s alias=%s got=%s",
+                        raw,
+                        alias_cc,
+                        hit_cc,
+                    )
         except GeocodeProviderError as e:
             logger.warning("resolve_destination_center failed for %s: %s", raw, e)
 
-    if len(_DEST_CENTER_CACHE) >= _DEST_CENTER_CACHE_MAX:
-        _DEST_CENTER_CACHE.pop(next(iter(_DEST_CENTER_CACHE)))
-    _DEST_CENTER_CACHE[cache_key] = center
+    _dest_cache_set(cache_key, center, settings=cfg)
     return center
 
 
@@ -535,8 +630,9 @@ def geocode_place(
         center_lng=center_lng,
         country_code=country_code,
     )
-    if key in _GEOCODE_CACHE:
-        return _GEOCODE_CACHE[key]
+    cached_ok, cached_val = _geo_cache_get(key)
+    if cached_ok:
+        return cached_val
 
     aliases = _query_aliases(name, en)
     bias_kwargs = {
@@ -593,9 +689,7 @@ def geocode_place(
             **bias_kwargs,
         )
 
-    if len(_GEOCODE_CACHE) >= _GEOCODE_CACHE_MAX:
-        _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))
-    _GEOCODE_CACHE[key] = hit
+    _geo_cache_set(key, hit)
     return hit
 
 
@@ -659,14 +753,26 @@ def _apply_hit_fields(node: dict[str, Any], hit: dict[str, Any]) -> None:
         node[key] = value
 
 
-def _apply_geocode_to_node(node: dict[str, Any], destination: str) -> _GeocodeNodeOutcome:
+def _apply_geocode_to_node(
+    node: dict[str, Any],
+    destination: str,
+    *,
+    center_lat: float | None = None,
+    center_lng: float | None = None,
+    country_code: str | None = None,
+) -> _GeocodeNodeOutcome:
     name = str(node.get("name", "") or "")
     name_en = str(node.get("name_en") or "").strip()
     category = str(node.get("category") or "") or None
     aliases = _query_aliases(name, name_en or None)
-    key = _cache_key(name, destination, name_en)
-    if key in _GEOCODE_CACHE:
-        cached = _GEOCODE_CACHE[key]
+    bias_kwargs = {
+        "center_lat": center_lat,
+        "center_lng": center_lng,
+        "country_code": country_code,
+    }
+    key = _cache_key(name, destination, name_en, **bias_kwargs)
+    cached_ok, cached = _geo_cache_get(key)
+    if cached_ok:
         if cached:
             _apply_hit_fields(node, cached)
             return _GeocodeNodeOutcome(name=name, ok=True)
@@ -675,12 +781,16 @@ def _apply_geocode_to_node(node: dict[str, Any], destination: str) -> _GeocodeNo
 
     try:
         result = geocode_autocomplete(
-            name, destination, limit=5, name_en=name_en or None
+            name,
+            destination,
+            limit=5,
+            name_en=name_en or None,
+            **bias_kwargs,
         )
         out_of_fence = result.rejected_out_of_fence > 0 and not result.results
         hit: dict[str, Any] | None = None
         if result.results:
-            bias, fence_km, _ = _bias_for_destination(destination)
+            bias, fence_km, _ = _bias_for_destination(destination, **bias_kwargs)
             first, ambiguous = _pick_best_hit(
                 name,
                 result.results,
@@ -699,19 +809,15 @@ def _apply_geocode_to_node(node: dict[str, Any], destination: str) -> _GeocodeNo
                 )
         if hit is None:
             hit = _wikidata_fallback(
-                name, name_en=name_en or None, destination=destination
+                name, name_en=name_en or None, destination=destination, **bias_kwargs
             )
             if hit is None and out_of_fence:
                 node["coord_confidence"] = "low"
-                if len(_GEOCODE_CACHE) >= _GEOCODE_CACHE_MAX:
-                    _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))
-                _GEOCODE_CACHE[key] = None
+                _geo_cache_set(key, None)
                 return _GeocodeNodeOutcome(name=name, ok=False, out_of_fence=True)
         if hit is not None:
             _apply_hit_fields(node, hit)
-            if len(_GEOCODE_CACHE) >= _GEOCODE_CACHE_MAX:
-                _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))
-            _GEOCODE_CACHE[key] = hit
+            _geo_cache_set(key, hit)
             return _GeocodeNodeOutcome(
                 name=name,
                 ok=True,
@@ -719,20 +825,16 @@ def _apply_geocode_to_node(node: dict[str, Any], destination: str) -> _GeocodeNo
                 suspicious=bool(result.rejected_out_of_fence),
             )
         node["coord_confidence"] = "low"
-        if len(_GEOCODE_CACHE) >= _GEOCODE_CACHE_MAX:
-            _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))
-        _GEOCODE_CACHE[key] = None
+        _geo_cache_set(key, None)
         return _GeocodeNodeOutcome(name=name, ok=False, out_of_fence=out_of_fence)
     except GeocodeProviderError as e:
         logger.warning("geocode node failed for %s: %s", name, e)
         hit = _wikidata_fallback(
-            name, name_en=name_en or None, destination=destination
+            name, name_en=name_en or None, destination=destination, **bias_kwargs
         )
         if hit is not None:
             _apply_hit_fields(node, hit)
-            if len(_GEOCODE_CACHE) >= _GEOCODE_CACHE_MAX:
-                _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))
-            _GEOCODE_CACHE[key] = hit
+            _geo_cache_set(key, hit)
             return _GeocodeNodeOutcome(name=name, ok=True)
         node["coord_confidence"] = "low"
         return _GeocodeNodeOutcome(name=name, ok=False)
@@ -744,9 +846,17 @@ def geocode_itinerary(
     *,
     max_workers: int = 4,
     on_progress: Callable[[int, int], None] | None = None,
+    center_lat: float | None = None,
+    center_lng: float | None = None,
+    country_code: str | None = None,
+    geocode_destination: str | None = None,
 ) -> dict[str, Any]:
-    """为缺失坐标的节点补全地理编码（并行 + 缓存 + 目的地围栏）。"""
-    dest = destination.strip()
+    """为缺失坐标的节点补全地理编码（并行 + TTL 缓存 + 目的地/机酒围栏）。
+
+    GEO-13: pass ``center_lat/lng`` (hotel or arrival airport) so POIs are not
+    fenced to a country centroid when ``destination`` is national-level.
+    """
+    dest = (geocode_destination or destination).strip() or destination.strip()
     pending: list[dict[str, Any]] = []
     for day in itinerary.get("days", []):
         for node in day.get("nodes", []):
@@ -755,8 +865,22 @@ def geocode_itinerary(
 
     # 预热目的地中心，避免并行时重复解析
     setup_warnings: list[str] = []
-    if dest:
-        _, _, setup_warnings = _bias_for_destination(dest)
+    bias_kwargs = {
+        "center_lat": center_lat,
+        "center_lng": center_lng,
+        "country_code": country_code,
+    }
+    if dest or center_lat is not None:
+        _, _, setup_warnings = _bias_for_destination(dest, **bias_kwargs)
+        if center_lat is not None and center_lng is not None:
+            setup_warnings = [
+                w
+                for w in setup_warnings
+                if "目的地中心未能解析" not in w
+            ]
+            setup_warnings.append(
+                f"行程 geocode 围栏已钉机酒锚 ({center_lat:.3f},{center_lng:.3f})"
+            )
 
     total = len(pending)
     if total == 0:
@@ -770,7 +894,17 @@ def geocode_itinerary(
     done_count = 0
     outcomes: list[_GeocodeNodeOutcome] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(_apply_geocode_to_node, node, dest) for node in pending]
+        futures = [
+            pool.submit(
+                _apply_geocode_to_node,
+                node,
+                dest,
+                center_lat=center_lat,
+                center_lng=center_lng,
+                country_code=country_code,
+            )
+            for node in pending
+        ]
         for fut in as_completed(futures):
             outcomes.append(fut.result())
             done_count += 1
@@ -809,11 +943,13 @@ def geocode_itinerary(
     _merge_meta_warnings(itinerary, warn_msgs)
 
     logger.info(
-        "geocode_itinerary done nodes=%s workers=%s failed=%s fence_drop=%s latency_ms=%s",
+        "geocode_itinerary done nodes=%s workers=%s failed=%s fence_drop=%s "
+        "center=%s latency_ms=%s",
         total,
         workers,
         len(failed),
         len(out_of_fence),
+        (center_lat, center_lng) if center_lat is not None else None,
         int((time.perf_counter() - started) * 1000),
     )
     return itinerary

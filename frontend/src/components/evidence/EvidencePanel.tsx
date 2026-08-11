@@ -150,8 +150,14 @@ export function EvidencePanel({
   const removeEvidenceLink = usePlanStore((s) => s.removeEvidenceLink);
   const updateEvidenceLinkUrl = usePlanStore((s) => s.updateEvidenceLinkUrl);
   const fetchEvidenceLink = usePlanStore((s) => s.fetchEvidenceLink);
+  const toggleEvidenceAdoptPoi = usePlanStore((s) => s.toggleEvidenceAdoptPoi);
+  const setEvidenceAdoptPoiLevel = usePlanStore((s) => s.setEvidenceAdoptPoiLevel);
+  const setEvidenceAdoptRhythm = usePlanStore((s) => s.setEvidenceAdoptRhythm);
+  const addEvidenceManualPoi = usePlanStore((s) => s.addEvidenceManualPoi);
 
   const [draftUrl, setDraftUrl] = useState('');
+  /** moduleId → manual POI draft */
+  const [manualPoiDraft, setManualPoiDraft] = useState<Record<string, string>>({});
   /** moduleId / auto-index → expanded */
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
@@ -179,7 +185,7 @@ export function EvidencePanel({
         <div>
           <h2 className="evidence-panel__title">玩法印证</h2>
           <p className="evidence-panel__sub">
-            粘贴链接后检索笔记正文；列表默认折叠，可展开查看全文。生成时注入正文（有截断控费），机酒硬约束仍优先
+            粘贴链接后检索；勾选要采纳的地点（或节奏参考）。生成只强注入已勾选内容，机酒硬约束仍优先。赞数≠必去。
           </p>
           {(modules.length > 0 || items.length > 0) && (
             <p className="evidence-panel__tally">
@@ -223,7 +229,7 @@ export function EvidencePanel({
       <div className="evidence-panel__modules" aria-label="用户指定链接">
         {modules.length === 0 ? (
           <p className="evidence-panel__hint">
-            添加 1～5 条链接；每条独立检索与折叠。未检索的链接不会进入生成。
+            添加 1～5 条链接；检索后勾选采纳地点。未勾选的链接不进入生成强权重。
           </p>
         ) : (
           modules.map((mod, index) => {
@@ -284,6 +290,115 @@ export function EvidencePanel({
                       expanded={expanded}
                       onToggle={() => toggleExpanded(expandKey)}
                     />
+                    <div className="evidence-module__adopt" aria-label="采纳地点">
+                      <p className="evidence-module__adopt-title">采纳到行程（检索后勾选 · 想去/必去）</p>
+                      <label className="evidence-module__adopt-rhythm">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(mod.adoptRhythm)}
+                          onChange={(e) =>
+                            setEvidenceAdoptRhythm(mod.id, e.target.checked)
+                          }
+                        />
+                        整帖作节奏参考（注入摘要，不强制照搬全部景点）
+                      </label>
+                      {(mod.candidatePois?.length ?? 0) > 0 ? (
+                        <ul className="evidence-module__adopt-list">
+                          {(mod.candidatePois ?? []).map((name) => {
+                            const checked = (mod.adoptedPois ?? []).some(
+                              (x) => x.toLowerCase() === name.toLowerCase(),
+                            );
+                            const levelKey = Object.entries(mod.adoptLevels ?? {}).find(
+                              ([k]) => k.toLowerCase() === name.toLowerCase(),
+                            );
+                            const level = checked ? (levelKey?.[1] ?? 'nice') : null;
+                            return (
+                              <li key={name} className="evidence-module__adopt-row">
+                                <label className="evidence-module__adopt-item">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleEvidenceAdoptPoi(mod.id, name)}
+                                  />
+                                  <span>{name}</span>
+                                </label>
+                                {checked && (
+                                  <div
+                                    className="evidence-module__adopt-levels"
+                                    role="group"
+                                    aria-label={`${name} 优先级`}
+                                  >
+                                    <button
+                                      type="button"
+                                      className={`evidence-module__level${level === 'nice' ? ' is-on' : ''}`}
+                                      onClick={() =>
+                                        setEvidenceAdoptPoiLevel(mod.id, name, 'nice')
+                                      }
+                                    >
+                                      想去
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`evidence-module__level evidence-module__level--must${level === 'must' ? ' is-on' : ''}`}
+                                      onClick={() =>
+                                        setEvidenceAdoptPoiLevel(mod.id, name, 'must')
+                                      }
+                                    >
+                                      必去
+                                    </button>
+                                  </div>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <p className="evidence-module__adopt-empty">
+                          未抽出地点名时可手补，或仅勾选节奏参考。
+                        </p>
+                      )}
+                      <div className="evidence-module__adopt-manual">
+                        <input
+                          type="text"
+                          className="evidence-module__adopt-input"
+                          placeholder="手补地点名"
+                          value={manualPoiDraft[mod.id] ?? ''}
+                          onChange={(e) =>
+                            setManualPoiDraft((prev) => ({
+                              ...prev,
+                              [mod.id]: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const v = (manualPoiDraft[mod.id] ?? '').trim();
+                              if (!v) return;
+                              addEvidenceManualPoi(mod.id, v);
+                              setManualPoiDraft((prev) => ({ ...prev, [mod.id]: '' }));
+                            }
+                          }}
+                          aria-label="手补地点"
+                        />
+                        <button
+                          type="button"
+                          className="evidence-module__adopt-add"
+                          onClick={() => {
+                            const v = (manualPoiDraft[mod.id] ?? '').trim();
+                            if (!v) return;
+                            addEvidenceManualPoi(mod.id, v);
+                            setManualPoiDraft((prev) => ({ ...prev, [mod.id]: '' }));
+                          }}
+                        >
+                          添加并采纳
+                        </button>
+                      </div>
+                      {(mod.adoptedPois?.length ?? 0) === 0 && !mod.adoptRhythm && (
+                        <p className="evidence-module__adopt-warn">
+                          尚未勾选：此链不会进入生成强权重。
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
                 {mod.status === 'idle' && (

@@ -335,6 +335,102 @@
   border-color: color-mix(in srgb, #1a7f4b 40%, var(--border));
 }
 
+.stay-zone__card--unbookable {
+  opacity: 0.96;
+  border-style: dashed;
+}
+
+.stay-zone__card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.stay-zone__theme-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+}
+
+.stay-zone__theme-tag--more {
+  font-weight: 500;
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.stay-zone__theme-tag--uncovered {
+  font-weight: 500;
+  color: var(--text-dim);
+  border-style: dashed;
+  border-color: var(--border);
+  background: transparent;
+}
+
+.stay-zone__themes-summary {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.stay-zone__fit-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--bg);
+}
+
+.stay-zone__fit-tag--secondary {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.stay-zone__fit-tag--current_anchor {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+}
+
+.stay-zone__fit-tag--preference_fit {
+  color: var(--text);
+  border-color: color-mix(in srgb, #2a7a4b 40%, var(--border));
+  background: color-mix(in srgb, #2a7a4b 10%, var(--bg-elevated));
+}
+
+.stay-zone__fit-tag--compromise {
+  color: var(--text-muted);
+}
+
+.stay-zone__fit-tag--needs_city_change {
+  color: #8a4b12;
+  border-color: color-mix(in srgb, #c47a2a 45%, var(--border));
+  background: color-mix(in srgb, #c47a2a 12%, var(--bg-elevated));
+}
+
+.stay-zone__fit-tag--locked {
+  color: var(--text-dim);
+}
+
+.stay-zone__tag-note {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+
 .stay-zone__card-top {
   display: flex;
   align-items: baseline;
@@ -549,6 +645,12 @@
   gap: 6px;
 }
 
+.stay-zone__hotel-list--in-card {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
 .stay-zone__hotel {
   display: flex;
   align-items: center;
@@ -607,6 +709,14 @@
   font-size: 10px;
   line-height: 1.35;
   color: var(--text-dim);
+}
+
+.stay-zone__lodging-price {
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .stay-zone__lodging-meta {

@@ -87,6 +87,30 @@ def _require_locked_hotel(body: GenerateItineraryRequest) -> None:
         )
 
 
+def _require_activity_first_skeleton(body: GenerateItineraryRequest) -> None:
+    """STRAT-UI C: activity_first needs paste/兴趣骨架 before first generate."""
+    if body.mode == "optimize":
+        return
+    strategy = (body.trip_request.planning_strategy or "flight_hotel_first").strip()
+    if strategy != "activity_first":
+        return
+    tags = body.trip_request.preference_tags or []
+    notes = (body.trip_request.notes or "").strip()
+    free_text = (body.trip_request.free_text or "").strip()
+    ue = body.user_evidence or []
+    has_ue = any(
+        isinstance(e, dict)
+        and (str(e.get("url") or "").strip() or str(e.get("title") or "").strip())
+        for e in ue
+    )
+    if tags or has_ue or len(notes) >= 8 or len(free_text) >= 20:
+        return
+    raise HTTPException(
+        status_code=400,
+        detail="「跟笔记走」策略需先贴链/写兴趣骨架（preference_tags、notes 或 user_evidence）",
+    )
+
+
 def _require_generate_mode(body: GenerateItineraryRequest) -> None:
     """FLOW-02: optimize needs current_itinerary; regenerate may omit but prefers it."""
     if body.mode == "optimize" and not body.current_itinerary:
@@ -111,6 +135,7 @@ async def generate_itinerary_endpoint(
 ) -> GenerateItineraryResponse:
     _require_confirmed_flights(body)
     _require_locked_hotel(body)
+    _require_activity_first_skeleton(body)
     _require_generate_mode(body)
     settings = get_settings()
     travel_intel = body.travel_intel.model_dump() if body.travel_intel else None
@@ -139,6 +164,7 @@ async def generate_itinerary_stream_endpoint(
     """SSE：llm delta（preview）→ llm done → result。"""
     _require_confirmed_flights(body)
     _require_locked_hotel(body)
+    _require_activity_first_skeleton(body)
     _require_generate_mode(body)
 
     async def event_generator():
@@ -215,15 +241,20 @@ async def generate_itinerary_stream_endpoint(
 @router.post("/geocode-nodes", response_model=GeocodeItineraryResponse)
 def geocode_itinerary_nodes_endpoint(body: GeocodeItineraryRequest) -> GeocodeItineraryResponse:
     """为行程中缺失坐标的节点补全地理编码（supplement add_node 等，P86）。"""
+    from app.services.itinerary_llm import _geocode_kwargs_from_intel
+
     dest = (body.destination or "").strip()
     if not dest:
         raise HTTPException(status_code=400, detail="destination 不能为空")
     settings = get_settings()
     started = time.perf_counter()
+    intel = body.travel_intel.model_dump() if body.travel_intel else None
+    gkw = _geocode_kwargs_from_intel(dest, intel)
     itinerary = geocode_itinerary(
         deepcopy(body.itinerary),
         dest,
         max_workers=settings.geocode_max_workers,
+        **gkw,
     )
     itinerary = _post_geocode_credibility(
         itinerary,
@@ -248,9 +279,13 @@ async def geocode_itinerary_nodes_stream_endpoint(
         raise HTTPException(status_code=400, detail="destination 不能为空")
 
     async def event_generator():
+        from app.services.itinerary_llm import _geocode_kwargs_from_intel
+
         queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
         settings = get_settings()
         loop = asyncio.get_running_loop()
+        intel = body.travel_intel.model_dump() if body.travel_intel else None
+        gkw = _geocode_kwargs_from_intel(dest, intel)
 
         def on_progress(done: int, total: int) -> None:
             loop.call_soon_threadsafe(
@@ -267,6 +302,7 @@ async def geocode_itinerary_nodes_stream_endpoint(
                     dest,
                     max_workers=settings.geocode_max_workers,
                     on_progress=on_progress,
+                    **gkw,
                 )
                 itinerary = _post_geocode_credibility(
                     itinerary,

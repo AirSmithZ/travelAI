@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { geocodeAutocomplete } from '../../api/geocode';
 import { useToastStore } from '../../stores/useToastStore';
 import { FormField, FormInput } from '../ui/FormField';
@@ -14,6 +14,8 @@ type Props = {
   draft: ZoneHotelCandidate | null;
   lockedName?: string | null;
   locking: boolean;
+  /** doc 36: prefill when user clicks a locked map pin to replace */
+  seedQuery?: string | null;
   onDraftChange: (c: ZoneHotelCandidate | null) => void;
   onResultsChange: (items: ZoneHotelCandidate[]) => void;
   onActivateMap: () => void;
@@ -29,6 +31,7 @@ export function ZoneHotelNameSearchModule({
   draft,
   lockedName,
   locking,
+  seedQuery = null,
   onDraftChange,
   onResultsChange,
   onActivateMap,
@@ -40,10 +43,25 @@ export function ZoneHotelNameSearchModule({
   const [loading, setLoading] = useState(false);
   const [attempted, setAttempted] = useState(false);
 
+  useEffect(() => {
+    if (!seedQuery?.trim()) return;
+    // StayZonePanel may append ·nonce to force refresh
+    const q = seedQuery.includes('·') ? seedQuery.slice(0, seedQuery.lastIndexOf('·')) : seedQuery;
+    setQuery(q.trim());
+  }, [seedQuery]);
+
   const canLock =
     Boolean(draft) &&
     Number.isFinite(draft!.lat) &&
     Number.isFinite(draft!.lng);
+
+  const lockLabel = lockedName
+    ? locking
+      ? '替换中…'
+      : '替换为这家酒店'
+    : locking
+      ? '锁定中…'
+      : '锁定此酒店';
 
   async function search() {
     const q = query.trim();
@@ -146,7 +164,7 @@ export function ZoneHotelNameSearchModule({
           disabled={locking || !canLock}
           onClick={() => draft && onLock(draft)}
         >
-          {locking ? '锁定中…' : '锁定此酒店'}
+          {lockLabel}
         </button>
       </div>
     </section>

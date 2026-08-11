@@ -27,6 +27,20 @@ class StayZonePolygonGeometry(BaseModel):
     coordinates: list[list[float]]
 
 
+class ThemeTagOut(BaseModel):
+    id: str
+    label: str
+    polarity: Literal["positive", "negative"] = "positive"
+    confidence: Optional[float] = None
+    evidence: Optional[str] = None
+    entity: Optional[str] = None
+
+
+class ThemeRefOut(BaseModel):
+    id: str
+    label: str
+
+
 class RecommendedStayZoneOut(BaseModel):
     id: str
     sequence: int
@@ -42,6 +56,15 @@ class RecommendedStayZoneOut(BaseModel):
     status: Literal["proposed", "confirmed", "rejected"] = "proposed"
     geometry: Optional[StayZoneCircleGeometry | StayZonePolygonGeometry] = None
     purchase_url: Optional[str] = None
+    # HOT-ZONE-TAG：机酒状态（次要）
+    fit_tag: Literal[
+        "current_anchor", "preference_fit", "compromise", "needs_city_change"
+    ] = "current_anchor"
+    bookable: bool = True
+    tag_note: Optional[str] = None
+    # HOT-THEME-TAG：提示词主题命中 / 未覆盖（主展示）
+    matched_themes: list[ThemeRefOut] = Field(default_factory=list)
+    uncovered_themes: list[ThemeRefOut] = Field(default_factory=list)
 
 
 class StayZoneRecommendRequest(BaseModel):
@@ -56,6 +79,8 @@ class StayZoneRecommendResponse(BaseModel):
     fetched_at: str
     source: Literal["llm", "heuristic"] = "heuristic"
     warnings: list[str] = Field(default_factory=list)
+    # 运行时主题（不写回 preference_tags）
+    prompt_themes: list[ThemeTagOut] = Field(default_factory=list)
 
 
 class StayZoneLodgingRequest(BaseModel):
@@ -66,6 +91,11 @@ class StayZoneLodgingRequest(BaseModel):
     lng: float
     radius_m: float = Field(default=1200, ge=200, le=5000)
     limit: int = Field(default=8, ge=1, le=20)
+    # HOT-TRIP: Trip 深链日期 / 人数 / 预算
+    check_in: str = ""
+    check_out: str = ""
+    adults: int = Field(default=2, ge=1, le=9)
+    max_price: Optional[float] = Field(default=None, ge=0)
 
 
 class StayZoneLodgingCandidate(BaseModel):
@@ -77,11 +107,20 @@ class StayZoneLodgingCandidate(BaseModel):
     rating: Optional[float] = None
     distance_m: int = 0
     coord_source: str = "serpapi_lodging"
+    # HOT-RG-02: RollingGo 参考价 / 渠道链（非 Trip）
+    ref_price: Optional[float] = None
+    currency: Optional[str] = None
+    booking_url: Optional[str] = None
 
 
 class StayZoneLodgingResponse(BaseModel):
     zone_id: str
     candidates: list[StayZoneLodgingCandidate] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
-    status: Literal["ok", "empty", "rate_limited", "provider_error", "unconfigured"] = "ok"
+    status: Literal[
+        "ok", "empty", "rate_limited", "provider_error", "unconfigured", "trip_first"
+    ] = "ok"
     query: str = ""
+    # HOT-TRIP-01: always prefer deep link when structured search unavailable
+    trip_url: str = ""
+    mode: Literal["rollinggo", "serp", "trip_first"] = "trip_first"
