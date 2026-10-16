@@ -37,12 +37,33 @@ export interface TripRequest {
   day_count?: number;
   travelers?: number;
   budget_level?: BudgetLevel;
-  /** HOT-03: 每晚酒店预算上限（CNY 等，与 budget_level 并存） */
+  /** HOT-03: 每晚酒店预算上限（以内均可，CNY 等） */
   hotel_budget_per_night?: number;
+  /** HOT-ROOM-01: 酒店房间数；缺省按 ceil(travelers/2) */
+  hotel_rooms?: number;
   preference_tags: string[];
   notes?: string;
   /** STRAT-UI：默认机酒优先 */
   planning_strategy?: PlanningStrategy;
+  /**
+   * FLOW-MC-1: ordered city segments. Empty → derive single segment from destination.
+   */
+  segments?: Array<{
+    id: string;
+    city: string;
+    date_start?: string;
+    date_end?: string;
+    role?: 'hub' | 'leg';
+  }>;
+  /**
+   * FLOW-MC-ORDER: optional must-see with date windows (soft conflict vs segments).
+   */
+  must_see?: Array<{
+    name: string;
+    city?: string;
+    window_start?: string;
+    window_end?: string;
+  }>;
 }
 
 export function createEmptyTripRequest(): TripRequest {

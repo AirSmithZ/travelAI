@@ -32,6 +32,19 @@ export interface NodeCost {
   note?: string;
 }
 
+/**
+ * 文档里的一笔开销。人均和同行总价分开记。
+ * 不同货币不要相加。in_total 为 false 的行已经含在别的行里，或还没定价。
+ */
+export interface CostQuote {
+  item: string;
+  currency: 'CNY' | 'AUD' | 'NZD';
+  per_person: number | null;
+  party: number | null;
+  in_total: boolean;
+  note?: string;
+}
+
 export interface DayWeather {
   temp_min: number;
   temp_max: number;
@@ -107,6 +120,13 @@ export interface ItineraryMeta {
     node_id: string;
     day_index?: number;
   }>;
+  /** NOTE-BOARD-01 / P130: optional persisted checklist (panel can also derive live) */
+  pre_trip_checklist?: Array<{
+    category: string;
+    items: string[];
+  }>;
+  /** 没有落在某一站上、但仍计入合计的开销（如油费） */
+  expense_extras?: CostQuote[];
 }
 
 export interface ItineraryNode {
@@ -127,6 +147,8 @@ export interface ItineraryNode {
   tags?: string[];
   cost_label?: string;
   cost?: NodeCost;
+  /** 开销面板用。一站可以有多笔（房价和进城公交分开） */
+  cost_quotes?: CostQuote[];
   /** 同场景分组（如机场 T1/T2），路线图虚线框 */
   scene_group?: string;
   coord_confidence?: CoordConfidence;

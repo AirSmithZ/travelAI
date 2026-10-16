@@ -18,8 +18,15 @@ export function getOrderedRegionNodes(
   regionNodes: ItineraryNode[],
 ): ItineraryNode[] {
   const ids = new Set(regionNodes.map((n) => n.id));
-  const dayOrder = sortNodesByPrimaryEdges(day.nodes, day.edges);
-  return dayOrder.filter((n) => ids.has(n.id));
+  const listed = regionNodes.filter((node) => node.scene_group?.startsWith('加油站'));
+  const routeNodes = regionNodes.filter((node) => !node.scene_group?.startsWith('加油站'));
+  const dayOrder = sortNodesByPrimaryEdges(
+    routeNodes.length ? routeNodes : regionNodes,
+    day.edges,
+  );
+  const ordered = dayOrder.filter((node) => ids.has(node.id));
+  if (!listed.length || !routeNodes.length) return ordered;
+  return [...ordered, ...listed];
 }
 
 /** 单元格内按全天 primary 序的水平路线段（与单程 ItineraryGraph 同源排序） */

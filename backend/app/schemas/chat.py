@@ -3,6 +3,14 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 
+class CitySegmentIn(BaseModel):
+    id: str = ""
+    city: str = ""
+    date_start: Optional[str] = None
+    date_end: Optional[str] = None
+    role: Optional[Literal["hub", "leg"]] = None
+
+
 class TripRequestIn(BaseModel):
     free_text: str = ""
     departure: Optional[str] = None
@@ -14,12 +22,16 @@ class TripRequestIn(BaseModel):
     budget_level: Optional[Literal["economy", "comfort", "luxury"]] = None
     # HOT-03: 每晚酒店预算上限（与 budget_level 并存；有数字时优先）
     hotel_budget_per_night: Optional[float] = Field(default=None, ge=0)
+    # HOT-ROOM-01: 房间数（缺省后端/FE 按 ceil(travelers/2)）
+    hotel_rooms: Optional[int] = Field(default=None, ge=1, le=9)
     preference_tags: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
     # STRAT-UI · doc 25
     planning_strategy: Optional[
         Literal["flight_hotel_first", "interest_then_anchors", "activity_first"]
     ] = "flight_hotel_first"
+    # FLOW-MC-1: multi-city segments (empty → treat as single destination)
+    segments: list[CitySegmentIn] = Field(default_factory=list)
 
 
 class ChatMessageIn(BaseModel):
@@ -67,6 +79,7 @@ FIELD_LABELS: dict[str, str] = {
     "travelers": "人数",
     "budget_level": "预算",
     "hotel_budget_per_night": "每晚酒店预算",
+    "hotel_rooms": "酒店房间数",
     "preference_tags": "偏好标签",
     "notes": "备注",
     "planning_strategy": "规划策略",

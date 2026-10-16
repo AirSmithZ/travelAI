@@ -53,7 +53,11 @@ export interface StayZoneLodgingCandidate {
   rating?: number | null;
   distance_m: number;
   coord_source?: string;
+  /** 每晚参考价（P127） */
   ref_price?: number | null;
+  /** 住期总价（可选） */
+  ref_total?: number | null;
+  stay_nights?: number | null;
   currency?: string | null;
   booking_url?: string | null;
 }
@@ -79,6 +83,7 @@ export async function searchStayZoneLodging(body: {
   check_in?: string;
   check_out?: string;
   adults?: number;
+  rooms?: number | null;
   max_price?: number | null;
 }): Promise<{
   candidates: StayZoneLodgingCandidate[];

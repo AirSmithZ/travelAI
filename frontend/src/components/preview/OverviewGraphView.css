@@ -30,7 +30,7 @@
 .overview-shell {
   display: grid;
   grid-template-columns: var(--overview-rail-width, 96px) 1fr;
-  grid-template-rows: var(--overview-header-height, 40px) 1fr auto;
+  grid-template-rows: var(--overview-header-height, 56px) 1fr auto;
   flex: 1;
   min-height: 0;
   max-width: 100%;
@@ -261,8 +261,10 @@
 }
 
 .overview-headers__row--secondary {
-  font-size: 10px;
-  line-height: 1.2;
+  gap: 8px;
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.3;
   color: var(--text-dim);
 }
 
@@ -271,8 +273,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+  min-width: 0;
   color: var(--text-muted);
   font-weight: 500;
+}
+
+.overview-headers__label.overview-headers__highlight {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .overview-headers__weather-desc {

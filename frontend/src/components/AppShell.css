@@ -118,6 +118,9 @@
 }
 
 .app-shell__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
   min-height: 0;
   overflow: hidden;
@@ -126,11 +129,69 @@
     opacity 0.2s ease;
 }
 
+.app-shell__panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell__panel-hide,
+.app-shell__panel-reveal {
+  display: flex;
+  flex: 0 0 24px;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  gap: 8px;
+  width: 24px;
+  margin: 0;
+  padding: 8px 0;
+  border: none;
+  border-radius: 0;
+  background: var(--bg-base);
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+.app-shell__panel-hide svg,
+.app-shell__panel-reveal svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.app-shell__panel-hide-label,
+.app-shell__panel-reveal-label {
+  writing-mode: vertical-rl;
+}
+
+.app-shell__panel-hide:hover,
+.app-shell__panel-reveal:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-base));
+}
+
+.app-shell__panel-hide:focus-visible,
+.app-shell__panel-reveal:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.app-shell__panel-reveal {
+  border-right: 1px solid var(--border);
+}
+
 .app-shell__panel--collapsed {
   width: 0 !important;
   min-width: 0;
   opacity: 0;
   pointer-events: none;
+  overflow: hidden;
 }
 
 .app-shell__panel--collapsed .input-panel {
@@ -218,6 +279,23 @@
 
   .app-shell__panel--collapsed {
     max-height: 0;
+  }
+
+  .app-shell__panel-hide,
+  .app-shell__panel-reveal {
+    flex-direction: row;
+    flex-basis: 32px;
+    width: 100%;
+    height: 32px;
+    gap: 6px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-shell__panel-hide-label,
+  .app-shell__panel-reveal-label {
+    writing-mode: horizontal-tb;
+    letter-spacing: 0.08em;
   }
 
   .app-shell__preview--collapsed {

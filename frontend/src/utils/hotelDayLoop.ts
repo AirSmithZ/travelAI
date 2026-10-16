@@ -8,9 +8,99 @@ import type { RecommendedStayZone } from '../types/stayZone';
 
 type Slot = 'morning' | 'evening';
 
+const WALK_KMH = 4.5;
+const TAXI_KMH = 28.0;
+/** Prefer walk under this straight-line distance (TRN-05). */
+const WALK_PREF_M = 1200;
+
+function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const r = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+export type HotelBinding = {
+  hotel_id?: string;
+  hotel_name: string;
+  node_id: string;
+  day_index: number;
+};
+
+export type ApplyHotelDayLoopOptions = {
+  /**
+   * Only rewrite days owned by these hotels' overnight windows (or replaceHotelId days).
+   * Other days keep existing nodes/edges (HOT-SWAP-01 / P128).
+   */
+  scopeHotelIds?: string[];
+  /**
+   * Prefer rewriting days previously bound to this hotel id (replace-in-place).
+   * Falls back to the new hotel's check_in/out window when no bindings exist.
+   */
+  replaceHotelId?: string;
+};
+
 function datePrefix(value: string | undefined | null): string {
   const s = (value ?? '').trim();
   return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+function hasCoords(n: Pick<ItineraryNode, 'lat' | 'lng'>): boolean {
+  return (
+    n.lat != null &&
+    n.lng != null &&
+    Number.isFinite(n.lat) &&
+    Number.isFinite(n.lng) &&
+    (Math.abs(n.lat) > 1e-6 || Math.abs(n.lng) > 1e-6)
+  );
+}
+
+/** Haversine estimate for reconnect — never silent bare 20 (TRN-05 / P129). */
+export function estimateCommuteEdge(
+  from: ItineraryNode,
+  to: ItineraryNode,
+  id: string,
+): ItineraryEdge {
+  if (hasCoords(from) && hasCoords(to)) {
+    const meters = Math.round(haversineM(from.lat, from.lng, to.lat, to.lng));
+    const walkMin = Math.max(1, Math.round((meters / 1000 / WALK_KMH) * 60));
+    const taxiMin = Math.max(1, Math.round((meters / 1000 / TAXI_KMH) * 60));
+    if (meters <= WALK_PREF_M) {
+      return {
+        id,
+        from: from.id,
+        to: to.id,
+        type: 'primary',
+        transport_mode: 'walk',
+        duration_minutes: walkMin,
+        distance_meters: meters,
+        route_source: 'estimate',
+      };
+    }
+    return {
+      id,
+      from: from.id,
+      to: to.id,
+      type: 'primary',
+      transport_mode: 'taxi',
+      duration_minutes: taxiMin,
+      distance_meters: meters,
+      route_source: 'estimate',
+    };
+  }
+  return {
+    id,
+    from: from.id,
+    to: to.id,
+    type: 'primary',
+    transport_mode: 'walk',
+    duration_minutes: 12,
+    route_source: 'estimate',
+  };
 }
 
 /** Confirmed return flight day — no evening hotel check-in (P92). */
@@ -40,7 +130,6 @@ function dayIndicesForHotel(
   const n = itinerary.days.length;
   if (n === 0) return [];
 
-  // Prefer check_in/out over zone covers (zones often include return/checkout day)
   const cin = datePrefix(hotel.check_in);
   const cout = datePrefix(hotel.check_out);
   if (cin && cout) {
@@ -68,6 +157,18 @@ function dayIndicesForHotel(
     nights = nights.slice(0, n - 1);
   }
   return nights;
+}
+
+function daysFromReplaceBindings(
+  replaceHotelId: string,
+  bindings: HotelBinding[],
+  nDays: number,
+): number[] {
+  const out = bindings
+    .filter((b) => b.hotel_id === replaceHotelId)
+    .map((b) => Math.max(0, (b.day_index || 1) - 1))
+    .filter((i) => i < nDays);
+  return [...new Set(out)].sort((a, b) => a - b);
 }
 
 function expandLoopDays(
@@ -157,7 +258,7 @@ function applyHotelFields(
     coord_source:
       hotel.lat != null && hotel.lng != null ? 'travel_intel' : node.coord_source,
     region: node.region || hotel.city,
-    tips: tips.slice(0, 4),
+    tips: tips.slice(0, 8),
     is_optional: false,
   };
 }
@@ -200,14 +301,7 @@ function reconnectPrimary(dayNum: number, nodes: ItineraryNode[], edges: Itinera
   );
   const primary: ItineraryEdge[] = [];
   for (let j = 1; j < nodes.length; j++) {
-    primary.push({
-      id: `d${dayNum}-e${j}`,
-      from: nodes[j - 1].id,
-      to: nodes[j].id,
-      type: 'primary',
-      transport_mode: 'walk',
-      duration_minutes: 20,
-    });
+    primary.push(estimateCommuteEdge(nodes[j - 1], nodes[j], `d${dayNum}-e${j}`));
   }
   return [...primary, ...alt];
 }
@@ -259,7 +353,7 @@ function placeDayHotels(
 
 export interface HotelLoopResult {
   itinerary: Itinerary;
-  bindings: Array<{ hotel_id?: string; hotel_name: string; node_id: string; day_index: number }>;
+  bindings: HotelBinding[];
 }
 
 /** Apply confirmed hotels as day-loop anchors on an existing itinerary. */
@@ -268,6 +362,7 @@ export function applyHotelDayLoop(
   hotels: ConfirmedHotelStay[],
   zones: RecommendedStayZone[] = [],
   flights?: Array<{ role?: string; depart_at?: string }>,
+  opts?: ApplyHotelDayLoopOptions,
 ): HotelLoopResult {
   const named = hotels.filter((h) => h.name?.trim());
   if (!named.length) {
@@ -277,19 +372,54 @@ export function applyHotelDayLoop(
   const n = itinerary.days.length;
   const departureDay = resolveDepartureDayIndex(itinerary, flights);
   const ordered = [...named].sort((a, b) => a.sequence - b.sequence);
+  const scopeIds = opts?.scopeHotelIds?.filter(Boolean);
+  const scoped = scopeIds?.length
+    ? ordered.filter((h) => scopeIds.includes(h.id))
+    : ordered;
+  if (!scoped.length) {
+    return {
+      itinerary,
+      bindings: (itinerary.meta?.hotel_bindings as HotelBinding[] | undefined) ?? [],
+    };
+  }
+
+  const prevBindings = (itinerary.meta?.hotel_bindings as HotelBinding[] | undefined) ?? [];
   const dayOwner = new Map<number, ConfirmedHotelStay>();
   const daySlots = new Map<number, Set<Slot>>();
 
-  for (const h of ordered) {
-    const overnight = dayIndicesForHotel(h, itinerary, zones, departureDay);
-    const loop = expandLoopDays(overnight, n, departureDay);
-    for (const [i, slots] of loop) {
-      dayOwner.set(i, h);
-      daySlots.set(i, slots);
+  for (const h of scoped) {
+    let overnight =
+      opts?.replaceHotelId != null
+        ? daysFromReplaceBindings(opts.replaceHotelId, prevBindings, n)
+        : [];
+    if (!overnight.length) {
+      overnight = dayIndicesForHotel(h, itinerary, zones, departureDay);
+    }
+    // Replace-in-place: only touch previously bound overnight days (no expand onto next day).
+    if (opts?.replaceHotelId && overnight.length) {
+      for (const i of overnight) {
+        const slots = new Set<Slot>();
+        if (i !== 0) slots.add('morning');
+        if (departureDay == null || i !== departureDay) slots.add('evening');
+        if (i === 0) {
+          slots.add('evening');
+          slots.delete('morning');
+        }
+        if (slots.size === 0) slots.add('evening');
+        dayOwner.set(i, h);
+        daySlots.set(i, slots);
+      }
+    } else {
+      const loop = expandLoopDays(overnight, n, departureDay);
+      for (const [i, slots] of loop) {
+        dayOwner.set(i, h);
+        daySlots.set(i, slots);
+      }
     }
   }
 
-  const bindings: HotelLoopResult['bindings'] = [];
+  const scopedOnly = Boolean(scopeIds?.length || opts?.replaceHotelId);
+  const newBindings: HotelBinding[] = [];
   const days = itinerary.days.map((day, i) => {
     const h = dayOwner.get(i);
     if (!h) return day;
@@ -297,7 +427,7 @@ export function applyHotelDayLoop(
     const dayNum = day.day_index || i + 1;
     const placed = placeDayHotels(day.nodes, day.edges ?? [], h, i, dayNum, slots);
     for (const nid of placed.nodeIds) {
-      bindings.push({
+      newBindings.push({
         hotel_id: h.id,
         hotel_name: h.name.trim(),
         node_id: nid,
@@ -307,29 +437,42 @@ export function applyHotelDayLoop(
     return { ...day, nodes: placed.nodes, edges: placed.edges };
   });
 
+  const touchedDayNums = new Set(
+    [...dayOwner.keys()].map((i) => itinerary.days[i]?.day_index || i + 1),
+  );
+  const keptBindings = scopedOnly
+    ? prevBindings.filter((b) => !touchedDayNums.has(b.day_index || 0))
+    : [];
+  const bindings = [...keptBindings, ...newBindings];
+
   const cross_day_edges: ItineraryEdge[] = [];
   for (let i = 0; i < days.length - 1; i++) {
     const fromNodes = days[i].nodes;
     const toNodes = days[i + 1].nodes;
     if (!fromNodes.length || !toNodes.length) continue;
+    const edge = estimateCommuteEdge(
+      fromNodes[fromNodes.length - 1],
+      toNodes[0],
+      `xd-e${i + 1}`,
+    );
     cross_day_edges.push({
-      id: `xd-e${i + 1}`,
-      from: fromNodes[fromNodes.length - 1].id,
-      to: toNodes[0].id,
-      type: 'primary',
-      transport_mode: 'taxi',
-      duration_minutes: 25,
+      ...edge,
+      transport_mode: edge.distance_meters != null && edge.distance_meters > 80000 ? 'flight' : 'taxi',
       label: '跨日衔接',
     });
   }
 
   const prevWarn = itinerary.meta?.warnings ?? [];
-  const names = ordered
+  const names = scoped
     .slice(0, 3)
     .map((h) => h.name.trim())
     .join('、');
-  const note = `已按用户确认酒店锚定日闭环：${names}`;
-  const warnings = prevWarn.includes(note) ? prevWarn : [...prevWarn, note];
+  const note = scopedOnly
+    ? `已更新酒店日闭环（仅当前住宿）：${names}`
+    : `已按用户确认酒店锚定日闭环：${names}`;
+  const warnings = prevWarn.includes(note)
+    ? prevWarn
+    : [...prevWarn.filter((w) => !w.includes('酒店锚定日闭环') && !w.includes('仅当前住宿')), note];
 
   return {
     itinerary: {
@@ -347,12 +490,15 @@ export function applyHotelDayLoop(
 }
 
 export function hasLockedHotel(hotels: ConfirmedHotelStay[] | undefined): boolean {
-  return (hotels ?? []).some(
-    (h) =>
-      Boolean(h.name?.trim()) &&
-      h.lat != null &&
-      h.lng != null &&
-      (Math.abs(h.lat) > 1e-6 || Math.abs(h.lng) > 1e-6) &&
-      h.booking_status !== 'zone_only',
+  return (hotels ?? []).some(isLockedHotelStay);
+}
+
+export function isLockedHotelStay(h: ConfirmedHotelStay): boolean {
+  return (
+    Boolean(h.name?.trim()) &&
+    h.lat != null &&
+    h.lng != null &&
+    (Math.abs(h.lat) > 1e-6 || Math.abs(h.lng) > 1e-6) &&
+    h.booking_status !== 'zone_only'
   );
 }

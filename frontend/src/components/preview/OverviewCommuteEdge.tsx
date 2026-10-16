@@ -1,5 +1,9 @@
 import type { ItineraryEdge } from '../../types/itinerary';
 import { TRANSPORT_ICONS } from '../../data/categoryTokens';
+import {
+  formatCommuteEdgeLabel,
+  formatCommuteEdgeTitle,
+} from '../../utils/commuteLabels';
 import '../graph/TripEdge.css';
 import './OverviewCommuteEdge.css';
 
@@ -18,6 +22,7 @@ export function OverviewCommuteEdge({
 }: OverviewCommuteEdgeProps) {
   const icon = TRANSPORT_ICONS[edge.transport_mode];
   const isAlt = edge.type === 'alternative';
+  const label = formatCommuteEdgeLabel(edge);
 
   return (
     <button
@@ -27,12 +32,12 @@ export function OverviewCommuteEdge({
         e.stopPropagation();
         onSelect?.();
       }}
-      title={edge.label ?? `${icon} ${edge.duration_minutes} 分钟`}
+      title={formatCommuteEdgeTitle(edge)}
     >
       <span className="overview-trip-edge__line" aria-hidden />
       <span className={`trip-edge__label ${isAlt ? 'trip-edge__label--alt' : ''}`}>
         <span className="trip-edge__icon">{icon}</span>
-        <span>{edge.duration_minutes} 分钟</span>
+        <span>{label}</span>
       </span>
     </button>
   );

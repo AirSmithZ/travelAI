@@ -1,0 +1,95 @@
+.notes-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 16px;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  color: var(--text);
+}
+
+.notes-board__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notes-board__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.notes-board__desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted, #6b7280);
+}
+
+.notes-board__close {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: var(--radius-sm, 6px);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.notes-board__empty,
+.notes-board__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted, #6b7280);
+}
+
+.notes-board__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.notes-board__group-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-muted, #6b7280);
+}
+
+.notes-board__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notes-board__item {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated, var(--bg-base));
+}
+
+.notes-board__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.notes-board__meta {
+  margin: 4px 0 0;
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted, #6b7280);
+}

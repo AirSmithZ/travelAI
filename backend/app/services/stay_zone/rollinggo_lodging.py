@@ -11,9 +11,16 @@ from typing import Any
 from app.config import Settings
 from app.data.city_aliases import country_code_for_destination
 from app.services.stay_zone.lodging_search import LodgingSearchResult
+from app.services.stay_zone.occupancy import split_hotel_occupancy
 from app.services.stay_zone.rollinggo_client import (
     rollinggo_configured,
     search_hotels_mcp,
+)
+
+# P127: RollingGo message often embeds 「约436CNY/晚」 while lowestPrice is stay total.
+_PER_NIGHT_RE = re.compile(
+    r"约\s*([\d.]+)\s*(?:CNY|RMB|¥)?\s*/\s*晚",
+    re.I,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,11 +149,43 @@ def stay_nights_between(check_in: str, check_out: str) -> int:
     return max(1, min((d1 - d0).days, 28))
 
 
+def _price_per_night(
+    price: dict[str, Any],
+    *,
+    nights: int,
+) -> tuple[float | None, float | None, str | None]:
+    """Return (per_night, stay_total, currency).
+
+    RollingGo ``lowestPrice`` is typically **stay total**; message may include per-night.
+    """
+    currency = str(price.get("currency") or "CNY") if price else None
+    if not price or not price.get("hasPrice") or price.get("lowestPrice") is None:
+        return None, None, currency
+    try:
+        total = float(price.get("lowestPrice"))
+    except (TypeError, ValueError):
+        return None, None, currency
+
+    msg = str(price.get("message") or "")
+    m = _PER_NIGHT_RE.search(msg)
+    if m:
+        try:
+            return float(m.group(1)), total, currency or "CNY"
+        except ValueError:
+            pass
+
+    n = max(1, int(nights or 1))
+    if n > 1 and total > 0:
+        return round(total / n, 2), total, currency or "CNY"
+    return total, None, currency or "CNY"
+
+
 def _map_hotel(
     raw: dict[str, Any],
     *,
     hub_lat: float,
     hub_lng: float,
+    nights: int = 1,
 ) -> dict[str, Any] | None:
     name = str(raw.get("name") or raw.get("nameEn") or "").strip()
     if not name:
@@ -167,14 +206,7 @@ def _map_hotel(
         distance_m = int(round(_haversine_m(hub_lat, hub_lng, lat, lng)))
 
     price = raw.get("price") if isinstance(raw.get("price"), dict) else {}
-    ref_price = None
-    currency = None
-    if price.get("hasPrice") and price.get("lowestPrice") is not None:
-        try:
-            ref_price = float(price.get("lowestPrice"))
-            currency = str(price.get("currency") or "CNY")
-        except (TypeError, ValueError):
-            ref_price = None
+    ref_price, ref_total, currency = _price_per_night(price, nights=nights)
 
     hotel_id = raw.get("hotelId")
     place_id = f"rg:{hotel_id}" if hotel_id is not None else None
@@ -194,10 +226,13 @@ def _map_hotel(
         "distance_m": distance_m,
         "coord_source": "rollinggo",
         "booking_url": (str(raw.get("bookingUrl") or "").strip() or None),
+        "stay_nights": max(1, int(nights or 1)),
     }
     if ref_price is not None:
         out["ref_price"] = ref_price
         out["currency"] = currency or "CNY"
+    if ref_total is not None:
+        out["ref_total"] = ref_total
     return out
 
 
@@ -213,6 +248,7 @@ def search_lodging_via_rollinggo(
     check_in: str = "",
     check_out: str = "",
     adults: int = 2,
+    rooms: int | None = None,
     max_price: float | None = None,
 ) -> LodgingSearchResult:
     if not rollinggo_configured(settings):
@@ -224,8 +260,8 @@ def search_lodging_via_rollinggo(
     attempts = build_place_attempts(city=city, label=label)
     nights = stay_nights_between(check_in, check_out)
     cc = country_code_for_destination(city) or country_code_for_destination(label)
-    # Occupancy too high can empty inventory; keep search sane
-    adult_n = max(1, min(int(adults or 2), 4))
+    # HOT-ROOM-01 / skill: adultCount = 每间成人数（非团队总人数）
+    room_n, adult_n = split_hotel_occupancy(adults, rooms=rooms)
     origin = f"{city} {label} 附近酒店".strip()
     last_query = ""
     last_error: str | None = None
@@ -268,7 +304,12 @@ def search_lodging_via_rollinggo(
         )
 
     if not hotels:
-        warn = "RollingGo 对该片区地名未返回酒店列表（非「附近无店」）；可改用 Trip.com 或店名搜索"
+        warn = (
+            f"RollingGo 对该片区地名未返回酒店列表（非「附近无店」）；"
+            f"当前按 {room_n} 间×每间 {adult_n} 人、"
+            f"{'每晚≤' + str(int(max_price)) if max_price else '未设预算上限'} 询价；"
+            f"可改房间数/预算或用 Trip.com / 店名搜索"
+        )
         if last_error:
             warn = f"{warn}（末次错误：{last_error}）"
         return LodgingSearchResult(
@@ -282,7 +323,7 @@ def search_lodging_via_rollinggo(
     for h in hotels:
         if not isinstance(h, dict):
             continue
-        row = _map_hotel(h, hub_lat=lat, hub_lng=lng)
+        row = _map_hotel(h, hub_lat=lat, hub_lng=lng, nights=nights)
         if not row:
             skipped_no_coord += 1
             continue

@@ -106,6 +106,7 @@ def attach_purchase_url(
     zone: dict[str, Any],
     *,
     adults: int = 2,
+    rooms: int | None = None,
     max_price: float | None = None,
 ) -> dict[str, Any]:
     zone["purchase_url"] = build_tripcom_hotel_url(
@@ -114,6 +115,7 @@ def attach_purchase_url(
         zone.get("check_out") or zone.get("check_in") or "",
         area_keyword=zone.get("label") or "",
         adults=adults,
+        rooms=rooms,
         max_price=max_price,
     )
     return zone

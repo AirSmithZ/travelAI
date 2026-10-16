@@ -177,7 +177,7 @@ def assign_zone_tags(
     if not same:
         tag = "needs_city_change"
         # Always refresh note against bookable anchor (LLM may have compared to「越南」)
-        note = f"更贴合偏好，但与当前机酒锚点「{destination}」不同城，需改目的地/航班后再订"
+        note = f"更贴合偏好，但与当前机酒锚点「{destination}」不同城；可「加为下一段」后再订，或改目的地/航班"
     elif "seaside" in themes and not zone_matches_seaside(zone):
         tag = "compromise" if llm_tag != "current_anchor" else "current_anchor"
         # Prefer marking destination-city hub as current_anchor
@@ -310,6 +310,26 @@ def apply_tags_to_zones(
     tagged = [
         assign_zone_tags(dict(z), destination=anchor, themes=legacy) for z in zones
     ]
+    # FLOW-MC-2: cities already in trip segments are bookable even if ≠ primary anchor
+    seg_cities: list[str] = []
+    for s in segments or []:
+        c = getattr(s, "city", None) or (s.get("city") if isinstance(s, dict) else None)
+        if c and str(c).strip():
+            seg_cities.append(str(c).strip())
+    for raw in trip_request.get("segments") or []:
+        if isinstance(raw, dict):
+            c = (raw.get("city") or "").strip()
+            if c:
+                seg_cities.append(c)
+    if seg_cities:
+        for z in tagged:
+            zcity = str(z.get("city") or "").strip()
+            if not zcity or z.get("fit_tag") != "needs_city_change":
+                continue
+            if any(cities_same(zcity, sc) for sc in seg_cities):
+                z["bookable"] = True
+                if not z.get("tag_note") or "不同城" in str(z.get("tag_note") or ""):
+                    z["tag_note"] = f"已在行程城段中 · 可确认片区并锁店"
     if anchor and not any(z.get("fit_tag") == "current_anchor" for z in tagged):
         for z in tagged:
             if z.get("bookable") and cities_same(str(z.get("city") or ""), anchor):
@@ -324,4 +344,12 @@ def apply_tags_to_zones(
         bookable_anchor=anchor,
     )
     tagged = [assign_zone_tags(z, destination=anchor, themes=legacy) for z in tagged]
+    # Re-apply segment bookable after second assign_zone_tags pass
+    if seg_cities:
+        for z in tagged:
+            zcity = str(z.get("city") or "").strip()
+            if not zcity or z.get("fit_tag") != "needs_city_change":
+                continue
+            if any(cities_same(zcity, sc) for sc in seg_cities):
+                z["bookable"] = True
     return sort_zones_by_tag(tagged)

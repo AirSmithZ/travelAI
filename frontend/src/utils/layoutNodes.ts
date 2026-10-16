@@ -10,6 +10,10 @@ import {
 const NODE_WIDTH = TRIP_NODE_WIDTH;
 const NODE_HEIGHT = TRIP_NODE_HEIGHT_DAGRE;
 
+function isFuelListing(node: ItineraryNode): boolean {
+  return Boolean(node.scene_group?.startsWith('加油站'));
+}
+
 export function layoutNodes(
   nodes: ItineraryNode[],
   edges: ItineraryEdge[],
@@ -19,6 +23,7 @@ export function layoutNodes(
   g.setGraph({ rankdir: 'LR', nodesep: TRIP_NODE_SEP, ranksep: TRIP_RANK_SEP, marginx: 40, marginy: 60 });
 
   nodes.forEach((node) => {
+    if (isFuelListing(node) && !node.position) return;
     const pos = node.position;
     g.setNode(node.id, {
       width: NODE_WIDTH,
@@ -76,6 +81,30 @@ export function layoutNodes(
         });
       }
     });
+
+  const fuels = nodes.filter((node) => isFuelListing(node) && !node.position);
+  if (fuels.length > 0) {
+    let minX = 40;
+    let maxY = 40;
+    let any = false;
+    for (const node of nodes) {
+      if (isFuelListing(node)) continue;
+      const pos = positions.get(node.id);
+      if (!pos) continue;
+      any = true;
+      minX = Math.min(minX, pos.x);
+      maxY = Math.max(maxY, pos.y + NODE_HEIGHT);
+    }
+    const cols = 4;
+    fuels.forEach((node, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      positions.set(node.id, {
+        x: (any ? minX : 40) + col * (NODE_WIDTH + 24),
+        y: (any ? maxY : 40) + 56 + row * (NODE_HEIGHT + 28),
+      });
+    });
+  }
 
   return positions;
 }

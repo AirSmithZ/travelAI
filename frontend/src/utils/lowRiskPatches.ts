@@ -15,6 +15,7 @@ const PLANNING_AUTO_FIELDS = new Set([
   'date_end',
   'budget_level',
   'hotel_budget_per_night',
+  'hotel_rooms',
   'travelers',
   'preference_tags',
   'free_text',

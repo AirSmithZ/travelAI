@@ -28,6 +28,8 @@ export interface ConfirmedFlightLeg {
   stops: number;
   duration_minutes: number;
   quote: FlightQuote;
+  /** FLOW-MC: bind leg to city segment when multi-city */
+  segment_id?: string;
   quote_id: string;
   purchase_url?: string;
   booking_status: BookingStatus;
@@ -52,6 +54,8 @@ export interface ConfirmedHotelStay {
   lng?: number;
   address?: string;
   purchase_url?: string;
+  /** FLOW-MC: which city segment this stay belongs to */
+  segment_id?: string;
 }
 
 export interface FlightSearchSession {
@@ -404,6 +408,7 @@ export interface NextFlightLegSuggestion {
 /**
  * B-P3-01/02：根据已确认航段建议下一段 OD / role。
  * 无航段 → 去程；有去无回 → 回程反转；否则 → 城际（起点=上一段到达）。
+ * FLOW-MC-3：若 trip.segments 有下一段城市，预填 destination。
  */
 export function suggestNextFlightLeg(
   flights: ConfirmedFlightLeg[],
@@ -411,6 +416,8 @@ export function suggestNextFlightLeg(
     departure?: string | null;
     destination?: string | null;
     date_end?: string | null;
+    /** FLOW-MC-3: ordered city segments for intercity prefill */
+    segments?: Array<{ id: string; city: string }> | null;
   },
 ): NextFlightLegSuggestion {
   const sorted = sortFlightsBySequence(flights);
@@ -439,11 +446,32 @@ export function suggestNextFlightLeg(
   }
 
   const last = sorted[sorted.length - 1]!;
+  const nextCity = nextSegmentCityPrefill(trip?.segments, flights);
   return {
     role: 'intercity',
     origin: last.dest_iata,
-    destination: '',
+    destination: nextCity,
     clearReturnDate: true,
-    hint: `建议：城际（自 ${last.dest_iata} 继续）`,
+    hint: nextCity
+      ? `建议：城际（自 ${last.dest_iata} → ${nextCity}）`
+      : `建议：城际（自 ${last.dest_iata} 继续）`,
   };
+}
+
+function nextSegmentCityPrefill(
+  segments: Array<{ id: string; city: string }> | null | undefined,
+  flights: ConfirmedFlightLeg[],
+): string {
+  if (!segments?.length || segments.length <= 1) return '';
+  const nonReturn = sortFlightsBySequence(flights).filter((f) => f.role !== 'return');
+  const last = nonReturn[nonReturn.length - 1];
+  if (!last) return segments[1]?.city?.trim() || '';
+  let idx = last.segment_id
+    ? segments.findIndex((s) => s.id === last.segment_id)
+    : -1;
+  if (idx < 0) {
+    // fall through — caller may also use flightSegmentSync.nextSegmentCityForIntercity
+    idx = 0;
+  }
+  return segments[idx + 1]?.city?.trim() || '';
 }

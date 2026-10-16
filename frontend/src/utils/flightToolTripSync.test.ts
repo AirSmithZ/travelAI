@@ -55,4 +55,32 @@ const empty = createEmptyTripRequest();
   assert.equal(patches.length, 0);
 }
 
+{
+  // FLOW-MC-3: with segments, do not overwrite hub destination
+  const multi = {
+    ...empty,
+    destination: '胡志明市',
+    segments: [
+      { id: 'seg_1', city: '胡志明市' },
+      { id: 'seg_2', city: '芽庄' },
+    ],
+  };
+  const patches = patchesFromSearchFlightsTool(
+    [
+      {
+        name: 'search_flights',
+        args: {
+          origin: '胡志明市',
+          destination: '芽庄',
+          date: '2026-10-04',
+          adults: 2,
+          preference: 'balanced',
+        },
+      },
+    ],
+    multi,
+  );
+  assert.ok(!patches.some((p) => p.field_path === 'destination'));
+}
+
 console.log('flightToolTripSync.test.ts ok');

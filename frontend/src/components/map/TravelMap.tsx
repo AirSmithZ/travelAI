@@ -22,6 +22,7 @@ import {
 import { isValidMapCoord } from '../../utils/mapCoordGuards';
 import type { DayPlan, ItineraryEdge, ItineraryNode, NodeCategory } from '../../types/itinerary';
 import type { RecommendedStayZone } from '../../types/stayZone';
+import { formatCommuteEdgeLabel } from '../../utils/commuteLabels';
 import './TravelMap.css';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
@@ -33,6 +34,7 @@ const NODE_CLUSTER_COUNT = 'itinerary-nodes-cluster-count';
 const NODE_LABEL = 'itinerary-nodes-label';
 
 const ROUTE_LAYER_IDS = ['route-primary', 'route-alt', 'route-cross-day'] as const;
+const ROUTE_LABEL_SUFFIX = '-label';
 
 function collectMapDays(
   itinerary: { days: DayPlan[] },
@@ -73,9 +75,10 @@ function buildNodesGeoJSON(
         id: node.id,
         name: node.overlapCount > 1 ? `${node.name} (${node.overlapCount}处重合)` : node.name,
         category: node.category,
-        color: categoryColor(node.category),
+        color: (node.tags ?? []).includes('加油站') ? '#c2410c' : categoryColor(node.category),
         selected: node.id === selectedNodeId,
         optional: node.is_optional,
+        fuel: (node.tags ?? []).includes('加油站'),
         overlap: node.overlapCount > 1,
       },
       geometry: {
@@ -84,6 +87,35 @@ function buildNodesGeoJSON(
       },
     })),
   };
+}
+
+/**
+ * 地图只钉有坐标的站。团里没有地面点的站（野生动物园、峡湾游船）仍留在流程图上，
+ * 这里把前后两站连起来，避免团线在缺口处断开。
+ */
+function edgesForMap(day: DayPlan, displayById: Map<string, MapDisplayNode>): ItineraryEdge[] {
+  const kept = day.edges.filter(
+    (edge) => displayById.has(edge.from) && displayById.has(edge.to),
+  );
+  const located = day.nodes.filter((node) => !node.is_optional && displayById.has(node.id));
+  const bridged: ItineraryEdge[] = [];
+  for (let i = 1; i < located.length; i += 1) {
+    const from = located[i - 1];
+    const to = located[i];
+    if (kept.some((edge) => edge.from === from.id && edge.to === to.id)) continue;
+    const incoming = day.edges.find((edge) => edge.to === to.id && edge.type === 'primary');
+    bridged.push({
+      id: `map-bridge-${from.id}-${to.id}`,
+      from: from.id,
+      to: to.id,
+      type: 'primary',
+      transport_mode: incoming?.transport_mode ?? 'bus',
+      duration_minutes: incoming?.duration_minutes ?? 0,
+      label: incoming?.label || '经过没有坐标的站',
+      route_source: incoming?.route_source ?? 'user_hint',
+    });
+  }
+  return [...kept, ...bridged];
 }
 
 /** Only edges whose both ends are in the current mappable day set (no orphan segments). */
@@ -99,7 +131,10 @@ function buildDayRouteFeatures(
       if (from.id === to.id) return null;
       return {
         type: 'Feature' as const,
-        properties: { edgeId: edge.id },
+        properties: {
+          edgeId: edge.id,
+          label: formatCommuteEdgeLabel(edge),
+        },
         geometry: {
           type: 'LineString' as const,
           coordinates: [
@@ -163,6 +198,8 @@ function ensureNodeLayers(map: maplibregl.Map) {
           'case',
           ['boolean', ['get', 'selected'], false],
           12,
+          ['boolean', ['get', 'fuel'], false],
+          6,
           ['case', ['boolean', ['get', 'overlap'], false], 10, 9],
         ],
         'circle-color': ['get', 'color'],
@@ -199,6 +236,8 @@ function ensureNodeLayers(map: maplibregl.Map) {
 
 function clearRouteLayers(map: maplibregl.Map) {
   ROUTE_LAYER_IDS.forEach((id) => {
+    const labelId = `${id}${ROUTE_LABEL_SUFFIX}`;
+    if (map.getLayer(labelId)) map.removeLayer(labelId);
     if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource(id)) map.removeSource(id);
   });
@@ -236,10 +275,13 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
   const graphViewMode = usePlanStore((s) => s.graphViewMode);
   const selectedNodeId = usePlanStore((s) => s.selectedNodeId);
   const mapPickNodeId = usePlanStore((s) => s.mapPickNodeId);
+  const mapPickStayTemp = usePlanStore((s) => s.mapPickStayTemp);
   const isGeocodingItinerary = usePlanStore((s) => s.isGeocodingItinerary);
   const selectNode = usePlanStore((s) => s.selectNode);
   const setActiveView = usePlanStore((s) => s.setActiveView);
   const cancelMapPick = usePlanStore((s) => s.cancelMapPick);
+  const cancelMapPickStayTemp = usePlanStore((s) => s.cancelMapPickStayTemp);
+  const addTempStayZoneFromMap = usePlanStore((s) => s.addTempStayZoneFromMap);
   const updateNode = usePlanStore((s) => s.updateNode);
 
   const pickNode = useMemo(() => {
@@ -249,6 +291,7 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
   }, [itinerary, mapPickNodeId]);
 
   const isPickMode = Boolean(mapPickNodeId && pickNode);
+  const isStayTempPickMode = Boolean(mapPickStayTemp) && !isPickMode;
 
   const mapDays = useMemo(
     () =>
@@ -520,8 +563,7 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
           const dayDisplay = new Map(
             [...displayById.entries()].filter(([id]) => dayIds.has(id)),
           );
-          for (const edge of day.edges) {
-            if (!dayDisplay.has(edge.from) || !dayDisplay.has(edge.to)) continue;
+          for (const edge of edgesForMap(day, dayDisplay)) {
             if (edge.type === 'alternative') altEdges.push(edge);
             else primaryEdges.push(edge);
           }
@@ -552,6 +594,27 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
                 'line-width': width,
                 'line-opacity': opacity,
                 ...(dash ? { 'line-dasharray': dash } : {}),
+              },
+            },
+            map.getLayer(NODE_CIRCLE) ? NODE_CIRCLE : undefined,
+          );
+          map.addLayer(
+            {
+              id: `${sourceId}${ROUTE_LABEL_SUFFIX}`,
+              type: 'symbol',
+              source: sourceId,
+              layout: {
+                'symbol-placement': 'line-center',
+                'text-field': ['get', 'label'],
+                'text-size': 11,
+                'text-font': MAP_LABEL_FONT,
+                'text-allow-overlap': false,
+                'text-optional': true,
+              },
+              paint: {
+                'text-color': '#e2e8f0',
+                'text-halo-color': '#0b1220',
+                'text-halo-width': 1.4,
               },
             },
             map.getLayer(NODE_CIRCLE) ? NODE_CIRCLE : undefined,
@@ -696,12 +759,16 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
 
     const onZoneClick = (e: MapLayerMouseEvent) => {
       if (usePlanStore.getState().mapPickNodeId) return;
+      if (usePlanStore.getState().mapPickStayTemp) return;
       const id = e.features?.[0]?.properties?.id;
       if (typeof id === 'string') setSelectedStayZoneId(id);
     };
 
     const onEnter = () => {
-      if (!usePlanStore.getState().mapPickNodeId) {
+      if (
+        !usePlanStore.getState().mapPickNodeId &&
+        !usePlanStore.getState().mapPickStayTemp
+      ) {
         map.getCanvas().style.cursor = 'pointer';
       }
     };
@@ -739,6 +806,25 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
       pendingFitRef.current = true;
     }
   }, [visible, mapReady, syncMapData]);
+
+  // 住宿临时搜店区选点（HOT-ZONE-CATALOG knife3）
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !isStayTempPickMode) {
+      return;
+    }
+
+    map.getCanvas().style.cursor = 'crosshair';
+    const handleClick = (e: maplibregl.MapMouseEvent) => {
+      const { lat, lng } = e.lngLat;
+      addTempStayZoneFromMap(lat, lng);
+    };
+    map.on('click', handleClick);
+    return () => {
+      map.off('click', handleClick);
+      map.getCanvas().style.cursor = '';
+    };
+  }, [mapReady, isStayTempPickMode, addTempStayZoneFromMap]);
 
   // 选点模式
   useEffect(() => {
@@ -887,6 +973,20 @@ export function TravelMap({ visible = true }: { visible?: boolean }) {
         <span className="travel-map__mode-badge travel-map__mode-badge--warn">
           {mappableNodes.length}/{visibleNodes.length} 个节点有坐标
         </span>
+      )}
+      {isStayTempPickMode && (
+        <div className="travel-map__pick-banner">
+          <span className="travel-map__pick-label">
+            临时搜店区 · 点击地图放置搜店圆心（约 1.2km）
+          </span>
+          <button
+            type="button"
+            className="form-btn form-btn--sm"
+            onClick={() => cancelMapPickStayTemp()}
+          >
+            取消
+          </button>
+        </div>
       )}
       {isPickMode && pickNode && (
         <div className="travel-map__pick-banner">

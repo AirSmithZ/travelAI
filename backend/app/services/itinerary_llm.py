@@ -49,6 +49,7 @@ ITINERARY_LLM_SYSTEM = """你是旅行行程规划助手。根据用户的 TripR
    - 普通日：节点序列必须以 confirmed 酒店名开头并以同名酒店结尾（hotel→POI/餐饮→hotel）
    - 抵达日（Day1）：airport（或入境）→ … → 同名酒店（无早出酒店）
    - **离开/返程日**（有 confirmed 返程航班的当天，或行程末日）：同名酒店 → … → airport；**禁止当晚再写入住/返回酒店过夜**（与抵达日对称）
+   - **多城换城日**（role=intercity）：以 transit/airport 为主；POI/region 必须落在当日 city_segments 所属城；禁止跨城串景点
    - 酒店 name 必须与 confirmed_hotels 逐字一致，禁止另造店名
 4. **餐饮**：默认安排早/午/晚三餐（category=restaurant）；仅航班过紧、跨城长途等极端情况可用 snack 并在 tips 写明「路上解决/快餐」
 5. 不要输出 lat/lng（后续地理编码）
@@ -316,6 +317,7 @@ def _compact_flight(f: dict[str, Any]) -> dict[str, Any]:
         "arrive_at": f.get("arrive_at"),
         "airline": f.get("airline"),
         "flight_numbers": f.get("flight_numbers"),
+        "segment_id": f.get("segment_id"),
         "is_anchor": f.get("is_anchor", True),
     }
 
@@ -329,6 +331,7 @@ def _compact_hotel(h: dict[str, Any]) -> dict[str, Any]:
         "check_out": h.get("check_out"),
         "is_primary": h.get("is_primary"),
         "zone_id": h.get("zone_id"),
+        "segment_id": h.get("segment_id"),
         "address": h.get("address"),
         "lat": h.get("lat"),
         "lng": h.get("lng"),
@@ -344,13 +347,17 @@ def _compact_zone(z: dict[str, Any]) -> dict[str, Any]:
         "check_in": z.get("check_in"),
         "check_out": z.get("check_out"),
         "covers_day_indices": z.get("covers_day_indices"),
+        "segment_id": z.get("segment_id"),
         "anchor_hints": z.get("anchor_hints"),
         "rationale": z.get("rationale"),
         "geometry": z.get("geometry"),
     }
 
 
-def _format_travel_intel_block(travel_intel: dict[str, Any] | None) -> str:
+def _format_travel_intel_block(
+    travel_intel: dict[str, Any] | None,
+    trip_request: TripRequestIn | dict[str, Any] | None = None,
+) -> str:
     if not travel_intel:
         return ""
 
@@ -364,7 +371,18 @@ def _format_travel_intel_block(travel_intel: dict[str, Any] | None) -> str:
         if isinstance(z, dict) and z.get("status") == "confirmed"
     ]
 
-    if not flights and not hotels and not confirmed_zones:
+    tr: dict[str, Any] = {}
+    if isinstance(trip_request, dict):
+        tr = trip_request
+    elif trip_request is not None:
+        tr = trip_request.model_dump() if hasattr(trip_request, "model_dump") else {}
+
+    from app.services.stay_zone.segment import derive_raw_segments
+
+    segments = derive_raw_segments(tr) if tr else []
+    multi = len(segments) > 1
+
+    if not flights and not hotels and not confirmed_zones and not multi:
         return ""
 
     lines = [
@@ -376,11 +394,42 @@ def _format_travel_intel_block(travel_intel: dict[str, Any] | None) -> str:
         "2. 若存在 confirmed_hotels：hotel 节点 name 必须与列表完全一致（逐字）；"
         "普通日 hotel→…→hotel 同名首尾；抵达日 airport→…→hotel；"
         "有 role=return 的返程日（及行程离开日）hotel→…→airport，**当日禁止晚间入住/过夜酒店节点**；"
-        "POI/餐饮围绕该酒店；后端会确定性校准日闭环与日程时刻。",
+        "POI/餐饮围绕**当日所属城段的酒店**；后端会确定性校准日闭环与日程时刻。",
         "3. 若无 confirmed_hotels 但有 confirmed stay zones：住宿 region 须落在片区内（产品上首次生成应已锁定具体酒店）。",
         "4. 默认每日三餐（restaurant）；极端赶路可用 snack 并注明。回程日须预留去机场时间，勿再安排回酒店入住。",
         "5. 仅在下列锚点之上排 POI 与市内交通。",
     ]
+    if multi:
+        lines.append(
+            "6. **多城城段（FLOW-MC）**：须按 city_segments 日期窗归属每日；"
+            "换城/城际日（role=intercity 航班当日）以 transit/airport 为主，"
+            "**禁止当晚入住下一段酒店过夜**（离开日 check_out 无过夜）；"
+            "各日 POI/region 必须落在该日 segment.city，禁止把第二城景点排进第一城。"
+        )
+        by_seg: dict[str, dict[str, Any]] = {}
+        for s in segments:
+            by_seg[s["id"]] = {
+                "segment_id": s["id"],
+                "city": s["city"],
+                "date_start": s.get("date_start"),
+                "date_end": s.get("date_end"),
+                "hotels": [],
+                "flights": [],
+            }
+        for h in hotels:
+            sid = str(h.get("segment_id") or "") or segments[0]["id"]
+            bucket = by_seg.get(sid) or by_seg[segments[0]["id"]]
+            bucket["hotels"].append(h)
+        for f in flights:
+            sid = str(f.get("segment_id") or "")
+            if sid and sid in by_seg:
+                by_seg[sid]["flights"].append(f)
+            elif f.get("role") == "outbound":
+                by_seg[segments[0]["id"]]["flights"].append(f)
+        lines.append(f"city_segments: {json.dumps(segments, ensure_ascii=False)}")
+        lines.append(
+            f"by_segment: {json.dumps(list(by_seg.values()), ensure_ascii=False)}"
+        )
     if flights:
         lines.append(f"confirmed_flights: {json.dumps(flights, ensure_ascii=False)}")
     if hotels:
@@ -749,6 +798,17 @@ def _load_evidence_for_generate(
     if not dest:
         return [], []
 
+    # FLOW-MC-4: multi-city query OR for evidence pack
+    try:
+        from app.services.stay_zone.segment import derive_raw_segments
+
+        segs = derive_raw_segments(trip_request.model_dump())
+        cities = [str(s.get("city") or "").strip() for s in segs if s.get("city")]
+        cities = list(dict.fromkeys(c for c in cities if c))
+        dest_query = " ".join(cities) if len(cities) > 1 else dest
+    except Exception:
+        dest_query = dest
+
     stay_zone_label: str | None = None
     if travel_intel:
         for z in travel_intel.get("recommended_stay_zones") or []:
@@ -762,7 +822,7 @@ def _load_evidence_for_generate(
     tags = list(trip_request.preference_tags or [])
     try:
         evidence = fetch_evidence_pack_sync(
-            dest,
+            dest_query,
             trip_request.day_count,
             settings=settings,
             stay_zone_label=stay_zone_label,
@@ -776,7 +836,7 @@ def _load_evidence_for_generate(
         return evidence, []
 
     try:
-        return enrich_evidence_pois(evidence, dest, settings=settings)
+        return enrich_evidence_pois(evidence, dest_query, settings=settings)
     except Exception as e:
         logger.warning("poi enrich failed: %s", e)
         return evidence, []
@@ -802,10 +862,17 @@ def _finalize_evidence_for_generate(
     )
     evidence = _merge_user_and_auto_evidence(user_evidence, auto_evidence)
     poi_candidates: list[dict[str, Any]] = []
-    if evidence and dest:
+    from app.services.stay_zone.segment import derive_raw_segments
+
+    segs = derive_raw_segments(trip_request.model_dump())
+    cities = list(
+        dict.fromkeys(str(s.get("city") or "").strip() for s in segs if s.get("city"))
+    )
+    dest_for_pool = " ".join(cities) if len(cities) > 1 else dest
+    if evidence and dest_for_pool:
         try:
             evidence, poi_candidates = enrich_evidence_pois(
-                evidence, dest, settings=settings
+                evidence, dest_for_pool, settings=settings
             )
         except Exception as e:
             logger.warning("poi enrich failed: %s", e)
@@ -814,7 +881,7 @@ def _finalize_evidence_for_generate(
         poi_candidates = build_closed_poi_pool(
             poi_candidates,
             evidence=evidence,
-            destination=dest,
+            destination=dest_for_pool or dest,
             travel_intel=travel_intel,
             settings=settings,
         )
@@ -835,7 +902,7 @@ def _build_generate_user(
 ) -> str:
     from app.services.itinerary_credibility import format_weather_constraints_block
 
-    intel_block = _format_travel_intel_block(travel_intel)
+    intel_block = _format_travel_intel_block(travel_intel, trip_request)
     evidence_block = _format_evidence_block(evidence, poi_candidates)
     weather_block = format_weather_constraints_block(forecast)
     budget_line = ""
@@ -942,15 +1009,24 @@ def _after_geocode_enrich(
 def _geocode_kwargs_from_intel(
     destination: str,
     travel_intel: dict[str, Any] | None,
+    trip_request: dict[str, Any] | None = None,
+    itinerary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """GEO-13 kwargs for geocode_itinerary from confirmed flights/hotels."""
+    """GEO-13 kwargs for geocode_itinerary from confirmed flights/hotels.
+
+    FLOW-MC-4: when multi-segment, also build ``day_biases`` so each day uses
+    its owning hotel / segment city fence.
+    """
     from app.services.stay_zone.geocode_bias import resolve_itinerary_geocode_context
+    from app.services.stay_zone.segment import city_for_day_date, derive_raw_segments
 
     intel = travel_intel if isinstance(travel_intel, dict) else {}
+    hotels = intel.get("hotels") if isinstance(intel.get("hotels"), list) else None
+    flights = intel.get("flights") if isinstance(intel.get("flights"), list) else None
     ctx = resolve_itinerary_geocode_context(
         destination,
-        flights=intel.get("flights") if isinstance(intel.get("flights"), list) else None,
-        hotels=intel.get("hotels") if isinstance(intel.get("hotels"), list) else None,
+        flights=flights,
+        hotels=hotels,
     )
     kwargs: dict[str, Any] = {}
     if ctx.geocode_destination:
@@ -960,6 +1036,32 @@ def _geocode_kwargs_from_intel(
         kwargs["center_lng"] = float(ctx.fence_lng)
     if ctx.country_code:
         kwargs["country_code"] = ctx.country_code
+
+    tr = trip_request if isinstance(trip_request, dict) else {}
+    segs = derive_raw_segments(tr) if tr else []
+    if itinerary and len(segs) > 1:
+        day_biases: dict[int, dict[str, Any]] = {}
+        for i, day in enumerate(itinerary.get("days") or []):
+            if not isinstance(day, dict):
+                continue
+            dc = city_for_day_date(day.get("date"), tr, hotels)
+            if not dc:
+                continue
+            preferred = dc.hotel if isinstance(dc.hotel, dict) else None
+            day_ctx = resolve_itinerary_geocode_context(
+                dc.city or destination,
+                flights=flights,
+                hotels=hotels,
+                preferred_hotel=preferred,
+            )
+            day_biases[i] = {
+                "geocode_destination": day_ctx.geocode_destination or dc.city,
+                "center_lat": day_ctx.fence_lat,
+                "center_lng": day_ctx.fence_lng,
+                "country_code": day_ctx.country_code,
+            }
+        if day_biases:
+            kwargs["day_biases"] = day_biases
     return kwargs
 
 
@@ -973,17 +1075,35 @@ def _finalize_llm_itinerary(
     free_text: str = "",
     notes: str = "",
     travel_intel: dict[str, Any] | None = None,
+    trip_request: dict[str, Any] | TripRequestIn | None = None,
 ) -> tuple[dict[str, Any], int | None, int | None]:
     from datetime import datetime, timezone
+
+    from app.services.stay_zone.segment import stamp_day_segment_ids
 
     itinerary["meta"]["generated_at"] = datetime.now(timezone.utc).isoformat()
     itinerary["meta"]["model"] = client.active_model
     llm_latency_ms = client.last_call_meta.get("latency_ms")
     geocode_ms: int | None = None
 
+    tr_dict: dict[str, Any] = {}
+    if isinstance(trip_request, dict):
+        tr_dict = trip_request
+    elif trip_request is not None and hasattr(trip_request, "model_dump"):
+        tr_dict = trip_request.model_dump()
+    if not tr_dict.get("destination"):
+        tr_dict = {**tr_dict, "destination": dest}
+
+    hotels = None
+    if isinstance(travel_intel, dict):
+        hotels = travel_intel.get("hotels") if isinstance(travel_intel.get("hotels"), list) else None
+    itinerary = stamp_day_segment_ids(itinerary, tr_dict, hotels)
+
     if geocode and dest:
         started = time.perf_counter()
-        gkw = _geocode_kwargs_from_intel(dest, travel_intel)
+        gkw = _geocode_kwargs_from_intel(
+            dest, travel_intel, trip_request=tr_dict, itinerary=itinerary
+        )
         itinerary = geocode_itinerary(
             itinerary, dest, max_workers=settings.geocode_max_workers, **gkw
         )
@@ -1080,6 +1200,8 @@ async def generate_itinerary_async(
                 settings=cfg,
                 free_text=trip_request.free_text or "",
                 notes=trip_request.notes or "",
+                travel_intel=intel,
+                trip_request=trip_request,
             )
         except (ValidationError, ValueError) as e:
             # llm-api-engineering: do not silently degrade structured output to mock
@@ -1144,7 +1266,7 @@ async def _fix_truncated_itinerary_json_async(
         else "请输出完整合法 JSON（含 title 与 days），每天 4–6 个节点即可；禁止空对象 {}。"
     )
     snippet = accumulated[:3000] + ("…" if len(accumulated) > 3000 else "")
-    intel_block = _format_travel_intel_block(travel_intel)
+    intel_block = _format_travel_intel_block(travel_intel, trip_request)
     evidence_block = _format_evidence_block(evidence, poi_candidates)
     weather_block = format_weather_constraints_block(forecast)
     fix_user = (
@@ -1366,6 +1488,8 @@ async def generate_itinerary_stream_events(
         settings=cfg,
         free_text=trip_request.free_text or "",
         notes=trip_request.notes or "",
+        travel_intel=intel,
+        trip_request=trip_request,
     )
     yield {
         "event": "result",
@@ -1444,6 +1568,8 @@ def generate_itinerary(
                 settings=cfg,
                 free_text=trip_request.free_text or "",
                 notes=trip_request.notes or "",
+                travel_intel=intel,
+                trip_request=trip_request,
             )
         except (ValidationError, ValueError) as e:
             logger.warning("LLM itinerary validation failed: %s", e)

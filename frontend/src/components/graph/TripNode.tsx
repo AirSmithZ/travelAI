@@ -51,11 +51,11 @@ function TripNodeComponent({ data }: NodeProps & { data: TripNodeData }) {
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
               >
-                印证
+                {r.title || '印证'}
               </a>
             ) : (
               <span key={r.note_id || r.title} className="trip-node__evidence-link">
-                印证
+                {r.title || '印证'}
               </span>
             ),
           )}
@@ -71,8 +71,24 @@ function TripNodeComponent({ data }: NodeProps & { data: TripNodeData }) {
         </div>
       )}
       {!compact && node.tips && node.tips.length > 0 && (
-        <div className="trip-node__desc" title={node.tips.join('\n')}>
-          {node.tips.join(' · ')}
+        <div
+          className={`trip-node__desc ${selected ? 'trip-node__desc--expanded' : ''}`}
+          title={node.tips.join('\n')}
+        >
+          {selected ? (
+            <ul className="trip-node__tips-list">
+              {node.tips.map((tip, i) => (
+                <li key={`${i}-${tip.slice(0, 24)}`}>{tip}</li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              {node.tips.join(' · ')}
+              {node.tips.join(' · ').length > 48 || node.tips.length > 1 ? (
+                <span className="trip-node__tips-more"> · 选中展开</span>
+              ) : null}
+            </>
+          )}
         </div>
       )}
       <Handle type="source" position={Position.Right} className="trip-node__handle" />

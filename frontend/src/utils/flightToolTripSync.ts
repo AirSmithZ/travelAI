@@ -18,6 +18,8 @@ function placeForTrip(value: string): string {
 /**
  * P89: when Chat emits search_flights, derive trip_request patches so
  * plan summary / flight panel stay in sync (LLM often omits patches).
+ * FLOW-MC-3: once segments[] exist, do not overwrite hub destination with
+ * an intercity OD (segments own cities).
  */
 export function patchesFromSearchFlightsTool(
   toolCalls: ChatToolCall[] | undefined,
@@ -48,7 +50,18 @@ export function patchesFromSearchFlightsTool(
   const adults = Math.max(1, Math.min(9, Number(args.adults) || 1));
 
   if (origin) addSet('departure', origin, `出发地：${origin}`);
-  if (destination) addSet('destination', destination, `目的地：${destination}`);
+
+  const hasSegments = (tripRequest.segments?.filter((s) => s.city?.trim()).length ?? 0) > 0;
+  if (destination) {
+    if (hasSegments) {
+      // Keep display hub; city segments already model multi-city destinations
+      if (!tripRequest.destination?.trim()) {
+        addSet('destination', destination, `目的地：${destination}`);
+      }
+    } else {
+      addSet('destination', destination, `目的地：${destination}`);
+    }
+  }
   if (date && DATE_RE.test(date)) addSet('date_start', date, `出发日期：${date}`);
   if (returnDate && DATE_RE.test(returnDate)) {
     addSet('date_end', returnDate, `返程日期：${returnDate}`);

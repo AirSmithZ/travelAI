@@ -116,6 +116,53 @@ assert(isLowRiskAutoPatch(hardPatch, { hasItinerary: false }), 'dest auto pre-it
 assert(!isLowRiskAutoPatch(hardPatch, { hasItinerary: true }), 'dest confirm post-itinerary');
 const splitPlanning = splitLowRiskPatches([autoPatch, hardPatch], { hasItinerary: false });
 assert(splitPlanning.auto.length === 2 && splitPlanning.confirm.length === 0, 'planning split');
+// FLOW-MC-ORDER min: segment date overlap blocks generate
+{
+  const multi = createEmptyPlan();
+  multi.trip_request.destination = '胡志明市';
+  multi.trip_request.segments = [
+    { id: 'seg_1', city: '胡志明市', date_start: '2026-10-01', date_end: '2026-10-05' },
+    { id: 'seg_2', city: '芽庄', date_start: '2026-10-03', date_end: '2026-10-06' },
+  ];
+  multi.travel_intel.flights = plan.travel_intel.flights;
+  multi.travel_intel.hotels = [
+    {
+      id: 'h1',
+      sequence: 1,
+      city: '胡志明市',
+      name: 'A',
+      check_in: '2026-10-01',
+      check_out: '2026-10-04',
+      is_primary: true,
+      is_anchor: true,
+      booking_status: 'selected',
+      lat: 10.7,
+      lng: 106.7,
+      segment_id: 'seg_1',
+    },
+    {
+      id: 'h2',
+      sequence: 2,
+      city: '芽庄',
+      name: 'B',
+      check_in: '2026-10-04',
+      check_out: '2026-10-06',
+      is_primary: true,
+      is_anchor: true,
+      booking_status: 'selected',
+      lat: 12.2,
+      lng: 109.2,
+      segment_id: 'seg_2',
+    },
+  ];
+  const r = derivePlanReadiness(multi);
+  assert(!r.canGenerate, 'date overlap hard blocks generate');
+  assert(
+    r.softWarnings.some((w) => w.includes('城际') || w.includes('城段日期')),
+    'order issues surface in warnings',
+  );
+}
+
 const splitDetailed = splitLowRiskPatches([autoPatch, hardPatch], { hasItinerary: true });
 assert(splitDetailed.auto.length === 1 && splitDetailed.confirm.length === 1, 'detailed split');
 

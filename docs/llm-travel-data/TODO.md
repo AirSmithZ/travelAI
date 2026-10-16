@@ -2,7 +2,7 @@
 
 ← [总索引](../TODO.md) · [README](./README.md) · [06-机酒流程](./06-机酒确认与行程生成流程方案.md)
 
-> **更新**：2026-08-11（**WS-EVID-REFS / WS-ADOPT-LEVEL** · ACT-POOL-ENFORCE · 34/36 · COST-01 ❌）
+> **更新**：2026-08-12（**波1+MC-1…4 ✅** · NOTE-BOARD ✅ · ORDER 气候薄层 ✅ · P131 A+D刀1～3 HOT-ZONE-CATALOG ✅）
 > **ID 前缀**：`SEC-` / `DATA-` / `B-` / `GEO-` / `WX-` / `WS-` / `AG-` / `TRN-` / `COST-` · 状态：🔲 开放 · ⏸ 暂停 · ✅ 完成 · 🔧 进行中 · ❌ 取消
 
 ---
@@ -44,7 +44,10 @@
 | **HOT-RG-02** | ✅ | P2 | 后端 lodging 优先链：RollingGo →（可选）Serp → Trip CTA · 地图钉 | [31](./31-RollingGo-lodging接入与地图钉实施.md) · `rollinggo_lodging.py` |
 | **HOT-ZONE-TAG** | ✅ | P1 | 粗推多片区 + **机酒状态** fit_tag；需换城不可锁店 | [32](./32-住宿粗推多片区与偏好Tag实施.md) |
 | **HOT-THEME-TAG** | ✅ | **P0** | 提示词主题 tag 抽取 + 片区命中/未覆盖展示（不写回 preference_tags；允 custom；中文优先） | [33](./33-提示词主题Tag分析.md) · Q1–Q4 ✅ · `theme_extract.py` |
-| **HOT-ROOM-01** | 🔲 | P1 | 搜酒店区分 **人数 vs 房间数**（勿把 travelers 当 RollingGo per-room adultCount） | [问题日志 P123](../问题日志.md) |
+| **HOT-ROOM-01** | ✅ | **P0** | 人数 vs 房间数：Trip `crn`+每间 `adult`；RollingGo 每间 `adultCount`；可选 `hotel_rooms` | [问题日志 P123](../问题日志.md) · `occupancy.py` |
+| **HOT-PRICE-01** | ✅ | **P0** | 预算=每晚上限；列表每晚参考价；RollingGo 总价÷晚数 / 解析 message | [问题日志 P127](../问题日志.md) · `rollinggo_lodging.py` |
+| **HOT-SWAP-01** | ✅ | **P0** | 换店只改当前锚定酒店/日期窗（`scopeHotelIds`/`replaceHotelId`） | [问题日志 P128](../问题日志/01-开放中.md#p128) · `hotelDayLoop.ts` |
+| **HOT-ZONE-CATALOG** | ✅ | **P1** | **A+D 刀1～3**：胡志明/岘港目录 · LLM 只排 id · 懒搜+空冷却 · 地图 temp | [40](./40-HOT-ZONE-CATALOG-D方案.md) · [P131](../问题日志/01-开放中.md#p131) |
 | **HOT-UX-01** | ✅ | **P0** | 生成后仍可打开住宿面板换店 | [36](./36-住宿搜索UX与换店困难分析.md) |
 | **HOT-UX-02/03** | ✅ | P1 | 住宿态店名搜索 + 锁钉预填替换文案 | [36](./36-住宿搜索UX与换店困难分析.md) |
 | **WS-ADOPT** | ✅ | P1 | 印证单帖检索后勾选采纳；generate 只注入采纳 | [34](./34-玩法印证与节点借鉴分析结论.md) |
@@ -63,6 +66,12 @@
 | **FLOW-01/01b** | ✅ | — | 无航班阻断前后端 | [18](./18-机酒优先与迭代行程产品决策.md) |
 | **FLOW-01c** | ✅ | P0 | 无锁定酒店阻断 generate；生成前锁店进 intel；日闭环+三餐锚定 | [18 §4.3](./18-机酒优先与迭代行程产品决策.md) · [问题日志 P88](../问题日志.md) |
 | **FLOW-01d** | ✅ | P0 | 明确返程日禁止晚间入住酒店（对称抵达日无早出） | [问题日志 P92](../问题日志.md) · `intel_anchor_enforce.py` |
+| **FLOW-MC** | ✅ | **P1** | 多城 = 城段组合（MC-1…4 ✅；ORDER 气候薄层 ✅） | [38 实施拆解](./38-多城城段实施影响与联动改动.md) |
+| **FLOW-MC-1** | ✅ | **P1** | `segments[]` + derive 兼容 + **∀段锁店** 门禁（FE+BE） | [38 §3 刀1](./38-多城城段实施影响与联动改动.md) · `citySegments.ts` |
+| **FLOW-MC-2** | ✅ | **P1** | `segment_stays` 真多段 + 需换城→「加为下一段」+ P128 scoped | [38 §3 刀2](./38-多城城段实施影响与联动改动.md) · StayZonePanel |
+| **FLOW-MC-3** | ✅ | P2 | 确认航班写 `segment_id`；城际→加段；搜票 OD/下一段预填←segments；chat 不覆写 hub destination | [38 §3 刀3](./38-多城城段实施影响与联动改动.md) · `flightSegmentSync.ts` |
+| **FLOW-MC-4** | ✅ | P2 | HARD 多段 + `city_for_day` + 按日 geocode 围栏 + 多酒店 Maps 池（衔 P122） | [38 §3 刀4](./38-多城城段实施影响与联动改动.md) · `segment.py` / `geocoding.py` |
+| **FLOW-MC-ORDER** | ✅ | **P1** | 航班序↔segments + **气候城×月 WARN** + optional `must_see` visit_window（均不自动改票） | [39](./39-多城先去哪决策因子.md) · `validateSegmentOrder` / `climateHints.ts` |
 | **GEN-THINK** | ✅ | P0 | generate/fix `thinking:disabled`；截断 flash 修；前端 validate 态 | [问题日志 P93](../问题日志.md) |
 | **FLOW-02** | ✅ | P1 | `optimize` / `regenerate` + dirty banner（不自动重跑） | [18 §4](./18-机酒优先与迭代行程产品决策.md) · [20 §6](./20-L1L2运行验证记录.md) |
 | **UX-FLT-CACHE** | ✅ | P2 | 航班 / lodging 同条件前端缓存 + TTL + 刷新（**P70：空结果不入缓存**） | [22 §2.4](./22-对话编排与玩法印证UX调研.md) · `searchResultCache.ts` · [问题日志 P70](../问题日志.md) |
@@ -105,7 +114,8 @@
 | **B-FLT-06** | ✅ | P3 | `npm run sync:airport-labels` ← `city_codes.json` | [09](./09-阶段B航班功能实施计划.md) |
 | **B-FLT-07** | ✅ | P3 | 深链仅用户点击 `<a target="_blank">`，无 auto open（回归确认） | Flight/Stay panels |
 | **B-FLT-08** | ⏸ | — | flight-verify 合并或废弃 | [06](./06-机酒确认与行程生成流程方案.md) |
-| **B-FLT-09** | 🔲 | P2 | Ignav `booking-links` 有值时在报价卡/确认态展示购买入口（与 Trip CTA 并存；无则仅 Trip） | [问题日志 P124](../问题日志.md) · [06 §4](./06-机酒确认与行程生成流程方案.md) |
+| **B-FLT-09** | ✅ | P2 | Ignav `booking-links` 有值时在报价卡/确认态展示购买入口（与 Trip CTA 并存；无则仅 Trip） | [问题日志 P124](../问题日志.md) · FlightIntelPanel |
+| **B-FLT-10** | ✅ | **P1** | CJK 机场名勿塌 metro `ignav_iata`（羽田→HND 等）；国家级默认枢纽仍可后续增强 | [问题日志 P125](../问题日志.md) · `city_codes.py` |
 
 ---
 
@@ -126,6 +136,8 @@
 | **TRN-02** | ✅ | P1 | geocode 后可疑边自动补算 + Directions TTL 缓存；`COMMUTE_AUTO_*`；全量 Directions 仍关 | [04 §5.2](./04-通勤与交通卡.md) · [问题日志 P115](../问题日志.md) |
 | **TRN-02b** | ✅ | P1 | 通勤核实后按边时长重排当日时刻（后端 realign + EdgeEditor cascade） | [04 §5.3](./04-通勤与交通卡.md) · [问题日志 P116](../问题日志.md) |
 | **TRN-03** | ⏸ | P3 | 交通卡 YAML KB（产品暂不做） | [04 §3](./04-通勤与交通卡.md) |
+| **TRN-04** | ✅ | P2 | 总览边展示 **距离 + 时长**；悬停步行/打车估；短距 Directions walk+drive | [问题日志 P126](../问题日志.md) · `commuteLabels.ts` |
+| **TRN-05** | ✅ | **P0** | 消灭硬编码 20min；haversine 估时+距离；地图 line-center 标签 | [问题日志 P129](../问题日志/01-开放中.md#p129) · `hotelDayLoop` · TravelMap · intel_anchor_enforce |
 
 ---
 
@@ -159,6 +171,8 @@
 | **AG-02/03/04** | 🔲 | 矩阵配置 / 意图路由 / 完整 Agent+KB |
 | **AG-SURVEY** | ✅ | GitHub 旅行 Agent 对照 + 机酒/玩法顺序讨论（**不推翻** [18] 机酒优先） | [24](./24-GitHub旅行Agent调研与机酒玩法顺序讨论.md) |
 | **AG-BORROW** | ✅ | 可借/不借能力矩阵 + 规划策略三档产品契约（分析稿） | [25](./25-GitHub能力借鉴与规划策略三档分析.md) |
+| **NOTE-BOARD-01** | ✅ | P2 | 「行前注意」面板：KB+用户/tips/印证抽取 → 摘要可打开 | [问题日志 P130](../问题日志.md) · [05](./05-行前细节清单.md) · `NotesBoardPanel` |
+| **UX-NODE-TIPS** | ✅ | P2 | 节点卡 tips：默认 2 行预览；选中展开列表 | [问题日志 P132](../问题日志/01-开放中.md#p132) · TripNode |
 | **GEO-CACHE-01** | ✅ | geocode TTL + 毒圆心拒写 | [28](./28-外部API缓存与GEO锚实施计划.md) |
 | **WX-CACHE-01** | ✅ | 和风预报短 TTL | [28](./28-外部API缓存与GEO锚实施计划.md) |
 | **SERP-BUDGET-01** | ✅ | Serp 共享 429 熔断 | [28](./28-外部API缓存与GEO锚实施计划.md) |

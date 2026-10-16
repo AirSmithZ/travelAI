@@ -8,8 +8,16 @@ function formatRefPrice(c: ZoneHotelCandidate): string {
   if (c.ref_price == null || !Number.isFinite(c.ref_price)) return '';
   const cur = (c.currency || 'CNY').toUpperCase();
   const n = Math.round(c.ref_price);
-  if (cur === 'CNY' || cur === 'RMB') return `参考价 ¥${n}/晚`;
-  return `参考价 ${cur} ${n}/晚`;
+  const perNight =
+    cur === 'CNY' || cur === 'RMB' ? `参考价 ¥${n}/晚` : `参考价 ${cur} ${n}/晚`;
+  const nights = c.stay_nights != null && c.stay_nights > 1 ? c.stay_nights : null;
+  const total =
+    c.ref_total != null && Number.isFinite(c.ref_total) && nights
+      ? cur === 'CNY' || cur === 'RMB'
+        ? ` · ${nights}晚约¥${Math.round(c.ref_total)}`
+        : ` · ${nights}晚约 ${cur} ${Math.round(c.ref_total)}`
+      : '';
+  return `${perNight}${total}`;
 }
 
 export function HotelCandidateList({

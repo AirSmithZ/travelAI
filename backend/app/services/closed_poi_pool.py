@@ -32,13 +32,22 @@ def normalize_poi_name(name: str) -> str:
 
 def hotel_anchor_from_intel(
     travel_intel: dict[str, Any] | None,
+    *,
+    segment_id: str | None = None,
 ) -> tuple[float, float, str] | None:
-    """Return (lat, lng, city_hint) from first locked hotel with coords."""
+    """Return (lat, lng, city_hint) from locked hotel with coords.
+
+    FLOW-MC-4: optional ``segment_id`` prefers that segment's hotel; else first.
+    """
     if not travel_intel:
         return None
-    for h in travel_intel.get("hotels") or []:
-        if not isinstance(h, dict):
-            continue
+    hotels = [h for h in (travel_intel.get("hotels") or []) if isinstance(h, dict)]
+    if segment_id:
+        preferred = [h for h in hotels if str(h.get("segment_id") or "") == segment_id]
+        ordered = preferred + [h for h in hotels if h not in preferred]
+    else:
+        ordered = hotels
+    for h in ordered:
         try:
             lat = float(h.get("lat"))
             lng = float(h.get("lng"))
@@ -49,6 +58,33 @@ def hotel_anchor_from_intel(
         city = str(h.get("city") or h.get("name") or "").strip()
         return lat, lng, city
     return None
+
+
+def hotel_anchors_from_intel(
+    travel_intel: dict[str, Any] | None,
+) -> list[tuple[float, float, str]]:
+    """All locked hotel anchors (dedupe by ~coords) for multi-city Maps seeds."""
+    if not travel_intel:
+        return []
+    out: list[tuple[float, float, str]] = []
+    seen: set[tuple[int, int]] = set()
+    for h in travel_intel.get("hotels") or []:
+        if not isinstance(h, dict):
+            continue
+        try:
+            lat = float(h.get("lat"))
+            lng = float(h.get("lng"))
+        except (TypeError, ValueError):
+            continue
+        if abs(lat) < 0.01 and abs(lng) < 0.01:
+            continue
+        key = (int(lat * 1000), int(lng * 1000))
+        if key in seen:
+            continue
+        seen.add(key)
+        city = str(h.get("city") or h.get("name") or "").strip()
+        out.append((lat, lng, city))
+    return out
 
 
 def verified_pool_names(poi_candidates: list[dict[str, Any]] | None) -> list[str]:
@@ -428,7 +464,8 @@ def build_closed_poi_pool(
     max_items = max(8, int(cfg.closed_poi_pool_max))
     max_km = float(cfg.closed_poi_max_km)
 
-    anchor = hotel_anchor_from_intel(travel_intel)
+    anchors = hotel_anchors_from_intel(travel_intel)
+    anchor = anchors[0] if anchors else hotel_anchor_from_intel(travel_intel)
     fence_lat = anchor[0] if anchor else None
     fence_lng = anchor[1] if anchor else None
     city_hint = anchor[2] if anchor else dest
@@ -449,6 +486,25 @@ def build_closed_poi_pool(
     maps: list[dict[str, Any]] = []
     min_seed = max(0, int(cfg.closed_poi_maps_min_seed))
     if (
+        anchors
+        and verified_n < min_seed
+        and cfg.closed_poi_maps_enable
+    ):
+        # FLOW-MC-4: seed Maps from each locked hotel city (cap 3 to protect Serp)
+        for lat, lng, city in anchors[:3]:
+            chunk = fetch_maps_attraction_pool(
+                lat=lat,
+                lng=lng,
+                destination=city or dest,
+                settings=cfg,
+                limit=max(4, int(cfg.closed_poi_maps_limit)),
+                max_km=max_km,
+            )
+            if chunk:
+                maps.extend(chunk)
+        if maps:
+            merged = merge_poi_candidates(merged, maps, max_items=max_items)
+    elif (
         anchor
         and verified_n < min_seed
         and cfg.closed_poi_maps_enable
@@ -465,12 +521,13 @@ def build_closed_poi_pool(
             merged = merge_poi_candidates(merged, maps, max_items=max_items)
 
     logger.info(
-        "closed_poi_pool built verified=%s total=%s maps=%s adopted=%s dest=%r",
+        "closed_poi_pool built verified=%s total=%s maps=%s adopted=%s dest=%r anchors=%s",
         sum(1 for p in merged if p.get("verified")),
         len(merged),
         len(maps),
         sum(1 for p in merged if p.get("adopted")),
         dest,
+        len(anchors),
     )
     return merged
 

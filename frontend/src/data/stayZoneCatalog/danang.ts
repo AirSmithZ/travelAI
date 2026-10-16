@@ -1,0 +1,102 @@
+/**
+ * HOT-ZONE-CATALOG D · 岘港封闭片区池（第二城试点）。
+ * 真实商圈坐标；可订性仍以 RollingGo/Trip 为准。
+ */
+
+import type { StayZoneCatalogEntry } from './hcmc';
+
+export const DANANG_CATALOG_CITY_KEYS = [
+  '岘港',
+  '峴港',
+  'da nang',
+  'danang',
+  'dad',
+  'đà nẵng',
+];
+
+export const DANANG_STAY_ZONE_CATALOG: StayZoneCatalogEntry[] = [
+  {
+    id: 'catalog:danang:my-khe',
+    city: '岘港',
+    label: '美溪海滩',
+    label_en: 'My Khe Beach',
+    lat: 16.0599,
+    lng: 108.2465,
+    radius_m: 1500,
+    search_query: 'My Khe Beach Da Nang hotels',
+    themes: ['beach', 'family'],
+    transit_note: '沙滩步行友好；去古城需交通',
+  },
+  {
+    id: 'catalog:danang:an-thuong',
+    city: '岘港',
+    label: '安赏 / 海边餐饮带',
+    label_en: 'An Thuong',
+    lat: 16.0535,
+    lng: 108.244,
+    radius_m: 1200,
+    search_query: 'An Thuong Da Nang',
+    themes: ['food', 'beach', 'nightlife'],
+    transit_note: '餐厅酒吧密集；近美溪',
+  },
+  {
+    id: 'catalog:danang:han-river',
+    city: '岘港',
+    label: '韩江 / 市中心',
+    label_en: 'Han River downtown',
+    lat: 16.0678,
+    lng: 108.2208,
+    radius_m: 1400,
+    search_query: 'Han River Da Nang hotels',
+    themes: ['transit', 'food', 'culture'],
+    transit_note: '龙桥/市中心；去海滩约 10–15min',
+  },
+  {
+    id: 'catalog:danang:son-tra',
+    city: '岘港',
+    label: '山茶半岛一带',
+    label_en: 'Son Tra',
+    lat: 16.106,
+    lng: 108.277,
+    radius_m: 1800,
+    search_query: 'Son Tra Peninsula Da Nang hotels',
+    themes: ['quiet', 'nature'],
+    transit_note: '安静靠山；去市区需车',
+  },
+  {
+    id: 'catalog:danang:bac-my-an',
+    city: '岘港',
+    label: '北美安',
+    label_en: 'Bac My An',
+    lat: 16.039,
+    lng: 108.248,
+    radius_m: 1300,
+    search_query: 'Bac My An Da Nang',
+    themes: ['beach', 'quiet', 'family'],
+    transit_note: '相对安静的海滩段',
+  },
+  {
+    id: 'catalog:danang:hai-chau',
+    city: '岘港',
+    label: '海洲城区',
+    label_en: 'Hai Chau',
+    lat: 16.067,
+    lng: 108.21,
+    radius_m: 1400,
+    search_query: 'Hai Chau District Da Nang',
+    themes: ['transit', 'food'],
+    transit_note: '本地生活区；交通便利',
+  },
+  {
+    id: 'catalog:danang:airport',
+    city: '岘港',
+    label: '岘港机场带',
+    label_en: 'Da Nang Airport',
+    lat: 16.0439,
+    lng: 108.199,
+    radius_m: 1600,
+    search_query: 'Da Nang Airport hotels',
+    themes: ['transit'],
+    transit_note: '早飞友好；非观光核心',
+  },
+];

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { usePlanStore, selectActiveItinerary, selectOverviewColumnWidths } from '../../stores/usePlanStore';
+import {
+  usePlanStore,
+  selectActiveItinerary,
+  selectActivePlan,
+  selectOverviewColumnWidths,
+} from '../../stores/usePlanStore';
 import { useOverviewScrollSync } from '../../hooks/useOverviewScrollSync';
 import { useOverviewColumnVirtualizer } from '../../hooks/useOverviewColumnVirtualizer';
 import { useOverviewColumnResize } from '../../hooks/useOverviewColumnResize';
@@ -11,6 +16,7 @@ import {
 } from '../../utils/primaryHotelOverview';
 import { OVERVIEW_REGION_ENTER_MS } from '../../utils/graphLayoutConstants';
 import { formatWeatherBrief } from '../../utils/formatWeather';
+import { dayPlaceCaption } from '../../utils/dayPlaceCaption';
 import {
   CELL_PADDING,
   COLUMN_HEADER_HEIGHT,
@@ -42,6 +48,7 @@ function formatHeaderDate(date: string): string {
 
 export function OverviewGraphView() {
   const itinerary = usePlanStore(selectActiveItinerary);
+  const tripRequest = usePlanStore((s) => selectActivePlan(s).trip_request);
   const travelIntel = usePlanStore((s) => s.getActivePlan().travel_intel);
   const selectedNodeId = usePlanStore((s) => s.selectedNodeId);
   const activeDayIndex = usePlanStore((s) => s.activeDayIndex);
@@ -77,6 +84,7 @@ export function OverviewGraphView() {
 
   const dayCount = itinerary?.days.length ?? 0;
   const exportOverviewCapture = usePlanStore((s) => s.exportOverviewCapture);
+  const overviewSpread = usePlanStore((s) => s.overviewSpread);
   const metrics = useMemo(() => getOverviewMetrics(dayCount), [dayCount]);
 
   const crossRegionEdges = useMemo(() => {
@@ -85,8 +93,11 @@ export function OverviewGraphView() {
   }, [itinerary]);
 
   const layout = useMemo(
-    () => (itinerary ? layoutOverview(itinerary.days, metrics, overviewColumnWidths) : null),
-    [itinerary, metrics, overviewColumnWidths],
+    () =>
+      itinerary
+        ? layoutOverview(itinerary.days, metrics, overviewColumnWidths, { spread: overviewSpread })
+        : null,
+    [itinerary, metrics, overviewColumnWidths, overviewSpread],
   );
 
   const { onResizePointerDown, resizingDayIndex } = useOverviewColumnResize(
@@ -372,7 +383,7 @@ export function OverviewGraphView() {
 
   return (
     <div
-      className={`overview-graph${metrics.compact ? ' overview-graph--compact' : ''}`}
+      className={`overview-graph${metrics.compact ? ' overview-graph--compact' : ''}${overviewSpread ? ' overview-graph--spread' : ''}`}
       style={cssVars}
     >
       {hotelAlignWarnings.length > 0 && !isExporting && (
@@ -418,6 +429,10 @@ export function OverviewGraphView() {
               const colW = layout.columnWidths[i] ?? metrics.minColumnWidth;
               const colLeft = layout.columnOffsets[i] ?? 0;
               const tempLabel = day.weather ? formatWeatherBrief(day.weather) : null;
+              const caption = dayPlaceCaption(day, tripRequest, travelIntel.hotels);
+              const headerTitle = [caption.placeLine, caption.detail || caption.highlight]
+                .filter(Boolean)
+                .join(' · ');
 
               const isResizing = resizingDayIndex === i;
 
@@ -431,6 +446,7 @@ export function OverviewGraphView() {
                     type="button"
                     className={`overview-headers__col ${isFocused ? 'overview-headers__col--focused' : ''}`}
                     style={{ width: '100%', height: '100%' }}
+                    title={headerTitle || undefined}
                     onClick={() => scrollToDay(i)}
                   >
                   <span className="overview-headers__row overview-headers__row--primary">
@@ -446,6 +462,18 @@ export function OverviewGraphView() {
                       </>
                     )}
                   </span>
+                  {(caption.placeLine || caption.highlight) && (
+                    <span className="overview-headers__row overview-headers__row--secondary">
+                      {caption.placeLine && (
+                        <span className="overview-headers__label">{caption.placeLine}</span>
+                      )}
+                      {caption.highlight && (
+                        <span className="overview-headers__label overview-headers__highlight">
+                          {caption.highlight}
+                        </span>
+                      )}
+                    </span>
+                  )}
                   </button>
                   <div
                     className="overview-col-resize-handle"

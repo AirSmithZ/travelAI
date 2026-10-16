@@ -1,6 +1,6 @@
 import type { TravelPlan } from '../types/travelPlan';
 import type { LeftPanelMode } from '../stores/usePlanStore';
-import { createEmptyPlan } from './planHelpers';
+import { ANZ_PLAN_ID, createAnzPlan } from '../data/anzPlan';
 import { migrateItineraryCrossDayEdges } from './itineraryMigrate';
 import { normalizeFormPatch } from './patchSchema';
 import { createEmptyTravelIntel } from '../types/travelIntel';
@@ -74,6 +74,38 @@ export function savePlansToStorage(payload: StoragePayload): void {
   );
 }
 
+function planIsBlank(plan: TravelPlan | undefined): boolean {
+  if (!plan) return true;
+  return (plan.itinerary?.days.length ?? 0) === 0 && !plan.trip_request.destination.trim();
+}
+
+/** 把整理好的澳新行程放进计划列表。已有同版行程时不覆盖，避免冲掉图上拖过的位置。 */
+function withAnzPlan(plans: TravelPlan[], activePlanId: string): {
+  plans: TravelPlan[];
+  activePlanId: string;
+} {
+  const seed = createAnzPlan();
+  const model = seed.itinerary?.meta.model;
+  const index = plans.findIndex((plan) => plan.id === ANZ_PLAN_ID);
+  let next = plans;
+  if (index < 0) {
+    next = [seed, ...plans];
+  } else if (plans[index].itinerary?.meta.model !== model) {
+    const existing = plans[index];
+    next = plans.slice();
+    next[index] = {
+      ...seed,
+      created_at: existing.created_at,
+      chat_messages: existing.chat_messages,
+    };
+  }
+  const active = next.find((plan) => plan.id === activePlanId);
+  return {
+    plans: next,
+    activePlanId: planIsBlank(active) ? ANZ_PLAN_ID : activePlanId,
+  };
+}
+
 export function getInitialState(): {
   plans: TravelPlan[];
   activePlanId: string;
@@ -81,12 +113,13 @@ export function getInitialState(): {
 } {
   const stored = loadPlansFromStorage();
   if (stored && stored.plans.length > 0) {
+    const merged = withAnzPlan(stored.plans, stored.active_plan_id);
     return {
-      plans: stored.plans,
-      activePlanId: stored.active_plan_id,
+      plans: merged.plans,
+      activePlanId: merged.activePlanId,
       leftPanelMode: stored.left_panel_mode ?? 'chat',
     };
   }
-  const plan = createEmptyPlan();
+  const plan = createAnzPlan();
   return { plans: [plan], activePlanId: plan.id, leftPanelMode: 'chat' };
 }

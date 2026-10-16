@@ -53,7 +53,7 @@ export function hotelFromZoneInput(
     address?: string;
     pendingMapPick?: boolean;
   },
-  opts: { sequence: number; previousId?: string },
+  opts: { sequence: number; previousId?: string; segment_id?: string },
 ): ConfirmedHotelStay {
   const hasCoords =
     !input.pendingMapPick &&
@@ -75,6 +75,7 @@ export function hotelFromZoneInput(
     lng: input.lng,
     address: input.address,
     purchase_url: zone.purchase_url,
+    segment_id: opts.segment_id,
   };
 }
 

@@ -161,6 +161,27 @@ a.trip-node__evidence-link:hover {
   overflow: hidden;
 }
 
+.trip-node__desc--expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.trip-node__tips-list {
+  margin: 0;
+  padding-left: 1.1em;
+  list-style: disc;
+}
+
+.trip-node__tips-list li {
+  margin: 0 0 2px;
+}
+
+.trip-node__tips-more {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
 .trip-node__warn {
   margin-top: 4px;
   font-size: 9px;

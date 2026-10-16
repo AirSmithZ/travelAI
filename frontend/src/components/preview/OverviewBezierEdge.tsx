@@ -2,6 +2,12 @@ import { memo } from 'react';
 import { getBezierPath, Position } from '@xyflow/react';
 import { TRANSPORT_ICONS } from '../../data/categoryTokens';
 import type { ItineraryEdge } from '../../types/itinerary';
+import { usePlanStore } from '../../stores/usePlanStore';
+import {
+  estimateCommuteChipWidth,
+  formatCommuteEdgeLabel,
+  spreadEdgeCaption,
+} from '../../utils/commuteLabels';
 import {
   OVERVIEW_EDGE_LABEL,
   OVERVIEW_EDGE_STROKE,
@@ -46,8 +52,9 @@ function OverviewBezierEdgeComponent({
   variant = 'default',
 }: OverviewBezierEdgeProps) {
   const isAlt = edge.type === 'alternative';
+  const spread = usePlanStore((s) => s.overviewSpread);
   const icon = TRANSPORT_ICONS[edge.transport_mode];
-  const labelText = `${icon} ${edge.duration_minutes} 分钟`;
+  const labelText = spread ? spreadEdgeCaption(edge) : `${icon} ${formatCommuteEdgeLabel(edge)}`;
 
   const [path, labelX, labelY] = getBezierPath({
     sourceX: x1,
@@ -65,7 +72,7 @@ function OverviewBezierEdgeComponent({
   const w = Math.max(1, maxX - minX);
   const h = Math.max(1, maxY - minY);
 
-  const labelW = estimateLabelWidth(labelText);
+  const labelW = spread ? estimateCommuteChipWidth(labelText) : estimateLabelWidth(labelText);
   const labelH = 20;
 
   const strokeColor = isAlt

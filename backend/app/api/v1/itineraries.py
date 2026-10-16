@@ -64,11 +64,15 @@ def _require_confirmed_flights(body: GenerateItineraryRequest) -> None:
 
 
 def _require_locked_hotel(body: GenerateItineraryRequest) -> None:
-    """Hotel must be locked before first generate (name + coords). optimize may reuse."""
+    """Hotel must be locked before first generate (name + coords). optimize may reuse.
+
+    FLOW-MC-1: when trip_request.segments has 2+ cities, each segment needs a locked hotel
+    (by segment_id or city match). Single-segment / legacy: any one locked hotel.
+    """
     if body.mode == "optimize":
         return
     hotels = (body.travel_intel.hotels if body.travel_intel else None) or []
-    locked = False
+    locked: list[dict] = []
     for h in hotels:
         if not isinstance(h, dict):
             continue
@@ -78,12 +82,49 @@ def _require_locked_hotel(body: GenerateItineraryRequest) -> None:
         except (TypeError, ValueError):
             continue
         if name and (abs(lat) > 1e-6 or abs(lng) > 1e-6):
-            locked = True
-            break
+            if (h.get("booking_status") or "") == "zone_only":
+                continue
+            locked.append(h)
     if not locked:
         raise HTTPException(
             status_code=400,
             detail="请先锁定具体酒店后再生成玩法行程（travel_intel.hotels 需含名称与坐标）",
+        )
+
+    segs_raw = getattr(body.trip_request, "segments", None) or []
+    segs = [
+        s
+        for s in segs_raw
+        if getattr(s, "city", None) and str(getattr(s, "city")).strip()
+    ]
+    if len(segs) <= 1:
+        return
+
+    def _norm(c: str) -> str:
+        return "".join(str(c).strip().lower().split())
+
+    missing: list[str] = []
+    for i, seg in enumerate(segs):
+        sid = (getattr(seg, "id", None) or "").strip() or f"seg_{i + 1}"
+        city = str(seg.city).strip()
+        ok = False
+        for h in locked:
+            hid = (h.get("segment_id") or "").strip()
+            if hid and hid == sid:
+                ok = True
+                break
+            if hid and hid != sid:
+                continue
+            hcity = (h.get("city") or "").strip()
+            if not hcity or _norm(hcity) == _norm(city) or sid == "seg_1":
+                ok = True
+                break
+        if not ok:
+            missing.append(city or sid)
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"多城行程请为每个城段锁定酒店（待锁：{'、'.join(missing)}）",
         )
 
 

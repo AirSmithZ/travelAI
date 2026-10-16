@@ -1,6 +1,8 @@
 import type { TravelPlan } from '../types/travelPlan';
 import { resolvePlanningStrategy } from '../types/tripRequest';
-import { hasLockedHotel } from './hotelDayLoop';
+import { allSegmentsHaveLockedHotel, deriveSegments, missingSegmentLocks, validateSegmentOrder } from './citySegments';
+import { validateClimateHints, validateVisitWindows } from './climateHints';
+import { buildNotesBoard } from './notesBoard';
 import { countAdoptedModules } from './evidenceAdopt';
 
 export type ReadinessAction =
@@ -8,6 +10,7 @@ export type ReadinessAction =
   | 'open_flight'
   | 'open_stay'
   | 'open_evidence'
+  | 'open_notes'
   /** Expand map preview (itinerary route or stay-zone geometry) */
   | 'open_preview'
   | 'generate'
@@ -48,7 +51,7 @@ function hasStayZone(plan: TravelPlan): boolean {
 }
 
 function hasStayLocked(plan: TravelPlan): boolean {
-  return hasLockedHotel(plan.travel_intel.hotels);
+  return allSegmentsHaveLockedHotel(plan.trip_request, plan.travel_intel.hotels);
 }
 
 function hasPreferences(plan: TravelPlan): boolean {
@@ -93,11 +96,28 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
     evidenceDetail = '可粘贴链接或生成时自动检索';
   }
 
+  const segs = deriveSegments(tr);
+  const missingStay = missingSegmentLocks(tr, plan.travel_intel.hotels);
+  let stayDetail = hasStayLocked(plan)
+    ? segs.length > 1
+      ? `已锁定 ${segs.length} 城段酒店 · 点此查看`
+      : '已锁定具体酒店 · 点此查看'
+    : hasStayZone(plan)
+      ? '已确认片区，待锁定酒店'
+      : '未锁定 · 去推荐片区';
+  if (missingStay.length > 0) {
+    stayDetail = `待锁店：${missingStay.map((s) => s.city).join('、')}`;
+  }
+
   const items: ReadinessItem[] = [
     {
       id: 'destination',
       label: '目的地',
-      detail: dest || '未填写',
+      detail: dest
+        ? segs.length > 1
+          ? `${dest} · ${segs.length} 城段`
+          : dest
+        : '未填写',
       done: Boolean(dest),
       hard: true,
       soft: false,
@@ -148,15 +168,14 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
     {
       id: 'stay',
       label: '住宿',
-      detail: hasStayLocked(plan)
-        ? '已锁定具体酒店 · 点此查看'
-        : hasStayZone(plan)
-          ? '已确认片区，待锁定酒店'
-          : '未锁定 · 去推荐片区',
+      detail: stayDetail,
       done: hasStayLocked(plan),
       hard: true,
       soft: false,
-      hint: '去锁定酒店：确认片区并锁定具体酒店',
+      hint:
+        missingStay.length > 0
+          ? `去锁定酒店：还差 ${missingStay.map((s) => s.city).join('、')}`
+          : '去锁定酒店：确认片区并锁定具体酒店',
       modifyHint: '换一家酒店',
       action: 'open_stay',
     },
@@ -171,6 +190,34 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
       modifyHint: '查看玩法印证',
       // P76: 始终可打开说明面板（生成前看用法，生成后看链接）
       action: 'open_evidence',
+    },
+    {
+      id: 'notes',
+      label: '行前注意',
+      detail: (() => {
+        const tipLines: string[] = [];
+        for (const day of plan.itinerary?.days ?? []) {
+          for (const node of day.nodes ?? []) {
+            for (const tip of node.tips ?? []) {
+              if (tip?.trim()) tipLines.push(tip.trim());
+            }
+          }
+        }
+        const n = buildNotesBoard({
+          destination: dest,
+          free_text: tr.free_text,
+          notes: tr.notes,
+          tipLines,
+          cities: segs.map((s) => s.city),
+        }).filter((i) => i.source !== 'system').length;
+        return dest ? (n > 0 ? `${n} 条 · 点此查看` : '可查看常识清单') : '先定目的地';
+      })(),
+      done: Boolean(dest),
+      hard: false,
+      soft: true,
+      hint: '打开行前注意：签证/行李/习俗汇总',
+      modifyHint: '查看行前注意',
+      action: dest ? 'open_notes' : 'prefill',
     },
     {
       id: 'itinerary',
@@ -209,7 +256,18 @@ export function derivePlanReadiness(plan: TravelPlan): PlanReadiness {
     softWarnings.push('「跟笔记走」需先贴链或写兴趣骨架，再生成玩法');
   }
 
-  let canGenerate = Boolean(dest) && flightCount > 0 && hasStayLocked(plan);
+  // FLOW-MC-ORDER (min): flight/segment consistency — warn; hard date overlap blocks generate
+  const orderIssues = [
+    ...validateSegmentOrder(tr, plan.travel_intel.flights),
+    ...validateClimateHints(tr),
+    ...validateVisitWindows(tr),
+  ];
+  for (const issue of orderIssues) {
+    if (issue.severity === 'warn') softWarnings.push(issue.message);
+  }
+  const orderHard = orderIssues.some((i) => i.severity === 'hard');
+
+  let canGenerate = Boolean(dest) && flightCount > 0 && hasStayLocked(plan) && !orderHard;
   if (strategy === 'activity_first') {
     canGenerate = canGenerate && activitySkeletonOk;
   }

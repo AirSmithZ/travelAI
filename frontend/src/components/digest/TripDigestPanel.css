@@ -1,0 +1,245 @@
+.digest-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  pointer-events: none;
+}
+
+.digest-panel__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.digest-panel__drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(680px, 96vw);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+
+.digest-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.digest-panel__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.digest-panel__sub,
+.digest-stay__note,
+.digest-item p,
+.digest-empty {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.digest-panel__close {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.digest-panel__close:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.digest-panel__scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.digest-stats {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.digest-stats li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.digest-stats span {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.digest-stats strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.digest-stay {
+  margin-bottom: 18px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.digest-stay__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.digest-stay__title span {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.digest-stay__when {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.digest-days {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.digest-day {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.digest-day:hover {
+  border-color: var(--border-strong);
+}
+
+.digest-day__date {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.digest-day__label {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.digest-group {
+  margin: 8px 0;
+}
+
+.digest-group summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.digest-group summary span {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.digest-items {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.digest-item {
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.digest-item__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.digest-item strong {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.digest-mark {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+}
+
+.digest-mark--in {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.digest-mark--other {
+  color: var(--text-muted);
+}
+
+.digest-empty {
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}

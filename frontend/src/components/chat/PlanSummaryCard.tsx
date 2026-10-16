@@ -24,7 +24,7 @@ function handleItemAction(
   opts: {
     onPrefill: (text: string) => void;
     onRequestGenerate?: () => void;
-    setLeftPanelMode: (mode: 'flight' | 'stay' | 'evidence' | 'chat' | 'form') => void;
+    setLeftPanelMode: (mode: 'flight' | 'stay' | 'evidence' | 'notes' | 'chat' | 'form') => void;
     openPreview: () => void;
     /** true = chip「用对话修改」→ 始终预填，不跳面板 */
     modify: boolean;
@@ -51,6 +51,10 @@ function handleItemAction(
   }
   if (action === 'open_evidence') {
     opts.setLeftPanelMode('evidence');
+    return;
+  }
+  if (action === 'open_notes') {
+    opts.setLeftPanelMode('notes');
     return;
   }
   if (action === 'open_preview') {

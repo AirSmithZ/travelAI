@@ -21,6 +21,8 @@ export function PreviewPane() {
   const addDay = usePlanStore((s) => s.addDay);
   const setActiveView = usePlanStore((s) => s.setActiveView);
   const setGraphViewMode = usePlanStore((s) => s.setGraphViewMode);
+  const overviewSpread = usePlanStore((s) => s.overviewSpread);
+  const toggleOverviewSpread = usePlanStore((s) => s.toggleOverviewSpread);
 
   const hasItinerary = Boolean(itinerary?.days.length);
   const stayHotelMapPins = usePlanStore((s) => s.stayHotelMapPins);
@@ -50,6 +52,16 @@ export function PreviewPane() {
           )}
           <ViewTabs active={activeView} onChange={setActiveView} />
           {hasItinerary && activeView === 'graph' && <ExportGraphButton />}
+          {hasItinerary && activeView === 'graph' && graphViewMode === 'overview' && (
+            <button
+              type="button"
+              className={`export-graph-btn${overviewSpread ? ' export-graph-btn--active' : ''}`}
+              aria-pressed={overviewSpread}
+              onClick={toggleOverviewSpread}
+            >
+              {overviewSpread ? '收回排列' : '展开排列'}
+            </button>
+          )}
           <StayZoneToolbarButton />
         </div>
         {showDayTabs && itinerary && (
@@ -58,6 +70,8 @@ export function PreviewPane() {
             activeIndex={activeDayIndex}
             onChange={selectDay}
             onAddDay={() => addDay()}
+            tripRequest={plan.trip_request}
+            hotels={plan.travel_intel.hotels}
           />
         )}
       </div>

@@ -222,11 +222,12 @@ def resolve_itinerary_geocode_context(
     *,
     flights: list[dict[str, Any]] | None = None,
     hotels: list[dict[str, Any]] | None = None,
+    preferred_hotel: dict[str, Any] | None = None,
 ) -> GeocodePlaceContext:
     """GEO-13: fence itinerary POI geocode using confirmed hotel or arrival airport.
 
     Priority:
-    1. First hotel with valid lat/lng (stay anchor)
+    1. preferred_hotel (FLOW-MC-4 day owner) or first hotel with valid lat/lng
     2. Outbound arrival airport IATA coords
     3. Destination string + country alias only
     """
@@ -234,13 +235,16 @@ def resolve_itinerary_geocode_context(
     anchor = airport_anchor_from_flights(flights)
 
     hotel_hit: dict[str, Any] | None = None
-    for h in hotels or []:
-        if not isinstance(h, dict):
-            continue
-        if _hotel_coords(h) is None:
-            continue
-        hotel_hit = h
-        break
+    if preferred_hotel is not None and _hotel_coords(preferred_hotel) is not None:
+        hotel_hit = preferred_hotel
+    else:
+        for h in hotels or []:
+            if not isinstance(h, dict):
+                continue
+            if _hotel_coords(h) is None:
+                continue
+            hotel_hit = h
+            break
 
     if hotel_hit is not None:
         lat, lng = _hotel_coords(hotel_hit)  # type: ignore[misc]

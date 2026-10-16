@@ -38,6 +38,7 @@ def post_stay_zone_lodging(
         check_out,
         area_keyword=body.label or "",
         adults=body.adults,
+        rooms=body.rooms,
         max_price=body.max_price,
     )
 
@@ -54,6 +55,7 @@ def post_stay_zone_lodging(
             check_in=check_in,
             check_out=check_out,
             adults=body.adults,
+            rooms=body.rooms,
             max_price=body.max_price,
         )
         if rg.status == "ok" and rg.candidates:

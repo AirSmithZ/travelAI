@@ -15,8 +15,10 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  min-width: 88px;
-  padding: 10px 14px;
+  gap: 1px;
+  min-width: 104px;
+  max-width: 168px;
+  padding: 8px 12px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -40,21 +42,68 @@
   transform: translateY(-1px);
 }
 
+.day-tabs__when {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+}
+
 .day-tabs__weekday {
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--accent);
 }
 
 .day-tabs__date {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
-  margin: 2px 0;
+}
+
+.day-tabs__place,
+.day-tabs__highlight {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-tabs__place {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.day-tabs__country {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.day-tabs__dot {
+  margin: 0 3px;
+  color: var(--text-dim);
+}
+
+.day-tabs__city {
+  font-weight: 700;
+}
+
+.day-tabs__highlight {
+  display: none;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--accent);
+}
+
+.day-tabs--roomy .day-tabs__highlight,
+.day-tabs__item--active .day-tabs__highlight {
+  display: block;
 }
 
 .day-tabs__weather {

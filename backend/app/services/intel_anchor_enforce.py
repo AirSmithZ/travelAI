@@ -15,6 +15,7 @@ from app.services.visit_duration import (
     clamp_duration_minutes,
     typical_duration_minutes,
 )
+from app.services.geocode_providers import haversine_km
 
 # Flight → airport buffers (ground time estimates, not airborne duration)
 ARRIVE_BUFFER_MIN = 75
@@ -23,6 +24,44 @@ DEPART_BUFFER_MIN = 120
 GAP_MIN = 15
 MIN_NODE_DUR = 20
 EARLY_DEPART_BEFORE_MIN = 6 * 60  # treat departures before 06:00 specially
+WALK_PREF_KM = 1.2
+WALK_KMH = 4.5
+TAXI_KMH = 28.0
+
+
+def _estimate_primary_edge(from_node: dict[str, Any], to_node: dict[str, Any], edge_id: str) -> dict[str, Any]:
+    """TRN-05: never silent duration=20; prefer haversine estimate with distance."""
+    base: dict[str, Any] = {
+        "id": edge_id,
+        "from": from_node.get("id"),
+        "to": to_node.get("id"),
+        "type": "primary",
+        "route_source": "estimate",
+    }
+    if _has_coords(from_node.get("lat"), from_node.get("lng")) and _has_coords(
+        to_node.get("lat"), to_node.get("lng")
+    ):
+        km = haversine_km(
+            float(from_node["lat"]),
+            float(from_node["lng"]),
+            float(to_node["lat"]),
+            float(to_node["lng"]),
+        )
+        meters = int(round(km * 1000))
+        base["distance_meters"] = meters
+        if km <= WALK_PREF_KM:
+            mins = max(1, int(round((km / WALK_KMH) * 60)))
+            base["transport_mode"] = "walk"
+            base["duration_minutes"] = mins
+        else:
+            mins = max(1, int(round((km / TAXI_KMH) * 60)))
+            base["transport_mode"] = "taxi"
+            base["duration_minutes"] = mins
+        return base
+    base["transport_mode"] = "walk"
+    base["duration_minutes"] = 12
+    return base
+
 
 
 def _norm_name(value: str | None) -> str:
@@ -310,14 +349,7 @@ def _reconnect_primary_chain(day: dict[str, Any]) -> None:
     primary = []
     for j in range(1, len(ids)):
         primary.append(
-            {
-                "id": f"d{day_num}-e{j}",
-                "from": ids[j - 1],
-                "to": ids[j],
-                "type": "primary",
-                "transport_mode": "walk",
-                "duration_minutes": 20,
-            }
+            _estimate_primary_edge(nodes[j - 1], nodes[j], f"d{day_num}-e{j}")
         )
     day["edges"] = primary + alt
 

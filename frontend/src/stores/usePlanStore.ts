@@ -82,7 +82,24 @@ import {
 } from '../types/chatActivity';
 import type { RecommendedStayZone, StayZonePreferences } from '../types/stayZone';
 import type { StayHotelMapPin } from '../utils/stayHotelMapPins';
-import { applyHotelDayLoop, hasLockedHotel } from '../utils/hotelDayLoop';
+import { applyHotelDayLoop } from '../utils/hotelDayLoop';
+import {
+  allSegmentsHaveLockedHotel,
+  appendCitySegment,
+  deriveSegments,
+  missingSegmentLocks,
+  zoneCityInSegments,
+} from '../utils/citySegments';
+import { bindLegsToSegments } from '../utils/flightSegmentSync';
+import {
+  catalogCityMatches,
+  catalogEntriesToStayZones,
+  getStayZoneCatalogForCity,
+  hasStayZoneCatalog,
+  mergeCatalogIntoZones,
+  buildTempMapStayZone,
+} from '../utils/stayZoneCatalog';
+import { observeStayZone } from '../utils/stayZoneObserve';
 import { findCrossDayPoiDuplicates } from '../utils/crossDayPoiDedup';
 import {
   hotelFromStandaloneInput,
@@ -127,7 +144,10 @@ export type EditorTarget =
   | { kind: 'form'; focus: 'day'; dayIndex: number }
   | { kind: 'form'; focus: 'region'; regionName: string };
 
-export type LeftPanelMode = 'chat' | 'flight' | 'stay' | 'form' | 'evidence';
+export type LeftPanelMode = 'chat' | 'flight' | 'stay' | 'form' | 'evidence' | 'notes';
+
+/** auto：沿用总览/地图自动折叠；hidden / open：用户按钮的显式选择 */
+export type LeftPanelUserOverride = 'auto' | 'hidden' | 'open';
 
 export interface AddHotelFromZoneInput {
   name: string;
@@ -167,10 +187,14 @@ interface PlanState {
   /** 表头 / 区域轨编辑目标（与 node/edge 互斥） */
   editorTarget: EditorTarget | null;
   leftPanelMode: LeftPanelMode;
+  /** 用户手动收起/展开左栏；auto 时仍走总览/地图自动折叠 */
+  leftPanelUserOverride: LeftPanelUserOverride;
   /** UX-14：无 itinerary 时用户手动展开右侧预览 */
   previewExpandedWithoutItinerary: boolean;
   /** 地图选点校准目标节点（§3.6 方式 B） */
   mapPickNodeId: string | null;
+  /** HOT-ZONE-CATALOG knife3: map-click temp stay search circle */
+  mapPickStayTemp: boolean;
   /** 住宿片区卡片 hover / 选中，驱动地图高亮 */
   selectedStayZoneId: string | null;
   /** P100: 锁店阶段酒店候选/已锁酒店预览钉（无行程节点时） */
@@ -179,6 +203,8 @@ interface PlanState {
   stayHotelMapPinPickId: string | null;
   /** 总览导出时临时渲染全部列 */
   exportOverviewCapture: boolean;
+  /** 总览「展开排列」：加宽通勤缝，加油站改成三排。不写入节点坐标。 */
+  overviewSpread: boolean;
   /** 总览列宽（按 planId），用户拖拽表头调整 */
   overviewColumnWidths: Record<string, number[]>;
   isGeneratingItinerary: boolean;
@@ -237,8 +263,17 @@ interface PlanState {
     fetchedAt: string,
     promptThemes?: import('../types/stayZone').PromptThemeTag[],
   ) => void;
+  /** HOT-ZONE-CATALOG D: load closed district catalog for a city into recommended zones */
+  loadStayZoneCatalog: (city: string) => number;
+  /** Knife3: enter map-click mode to create a temporary search circle */
+  startMapPickStayTemp: () => void;
+  cancelMapPickStayTemp: () => void;
+  /** Knife3: commit map click → temp stay zone */
+  addTempStayZoneFromMap: (lat: number, lng: number) => string | null;
   setStayZonePreferences: (prefs: StayZonePreferences) => void;
   confirmStayZone: (zoneId: string) => void;
+  /** FLOW-MC-2: 需换城片区 → 追加城段（不直接锁店） */
+  appendSegmentFromStayZone: (zoneId: string) => string | null;
   rejectStayZone: (zoneId: string) => void;
   /** Returns hotel id on success (intel lock and/or itinerary day-loop). */
   addHotelFromZone: (zoneId: string, input: AddHotelFromZoneInput) => string | null;
@@ -276,6 +311,7 @@ interface PlanState {
   removeCrossDayEdge: (edgeId: string) => void;
 
   setLeftPanelMode: (mode: LeftPanelMode) => void;
+  setLeftPanelUserOverride: (value: LeftPanelUserOverride) => void;
   setPreviewExpandedWithoutItinerary: (expanded: boolean) => void;
   setChatActivity: (activity: ChatActivitySession | null) => void;
   updateChatActivity: (updater: (prev: ChatActivitySession) => ChatActivitySession) => void;
@@ -315,7 +351,11 @@ interface PlanState {
 
   startMapPick: (nodeId: string) => void;
   cancelMapPick: () => void;
+  startMapPickStayTemp: () => void;
+  cancelMapPickStayTemp: () => void;
+  addTempStayZoneFromMap: (lat: number, lng: number) => string | null;
   setExportOverviewCapture: (value: boolean) => void;
+  toggleOverviewSpread: () => void;
   setOverviewColumnWidth: (dayIndex: number, width: number) => void;
 }
 
@@ -334,10 +374,20 @@ export function selectOverviewColumnWidths(state: PlanState): number[] {
   return state.overviewColumnWidths[state.activePlanId] ?? EMPTY_OVERVIEW_COLUMN_WIDTHS;
 }
 
+/** 手动收起被「打开某块左栏」的操作清掉，避免点了机票/当天编辑却看不见 */
+function revealLeftPanelIfHidden(
+  state: PlanState,
+): Partial<Pick<PlanState, 'leftPanelUserOverride'>> {
+  if (state.leftPanelUserOverride !== 'hidden') return {};
+  return { leftPanelUserOverride: 'auto' };
+}
+
 /** 总览 / 地图浏览时折叠左栏；编辑/选点/机酒/Activity 时展开（UX-CHAT-08 · P74） */
 export function selectLeftPanelCollapsed(state: PlanState): boolean {
   // P104: 右栏已折叠时左栏必须展开，避免双折叠空屏
   if (selectPreviewCollapsed(state)) return false;
+  if (state.leftPanelUserOverride === 'hidden') return true;
+  if (state.leftPanelUserOverride === 'open') return false;
   if (state.editorTarget) return false;
   if (state.mapPickNodeId) return false;
   if (state.chatActivity) return false;
@@ -347,6 +397,7 @@ export function selectLeftPanelCollapsed(state: PlanState): boolean {
     return false;
   }
   if (state.leftPanelMode === 'evidence') return false;
+  if (state.leftPanelMode === 'notes') return false;
   if (state.graphViewMode === 'overview') return true;
   if (state.activeView === 'map') return true;
   return false;
@@ -525,12 +576,15 @@ export const usePlanStore = create<PlanState>()(
     selectedEdgeId: null,
     editorTarget: null,
     leftPanelMode: initial.leftPanelMode,
+    leftPanelUserOverride: 'auto',
     previewExpandedWithoutItinerary: false,
     mapPickNodeId: null,
+    mapPickStayTemp: false,
     selectedStayZoneId: null,
     stayHotelMapPins: [],
     stayHotelMapPinPickId: null,
     exportOverviewCapture: false,
+    overviewSpread: false,
     overviewColumnWidths: {},
     isGeneratingItinerary: false,
     isGeocodingItinerary: false,
@@ -761,10 +815,14 @@ export const usePlanStore = create<PlanState>()(
         useToastStore.getState().show('优化适配需要已有行程', 'warning');
         return 'blocked';
       }
-      if (mode !== 'optimize' && !hasLockedHotel(p.travel_intel.hotels)) {
-        useToastStore
-          .getState()
-          .show('请先在住宿面板锁定具体酒店（名称+位置）后再生成玩法', 'warning');
+      if (mode !== 'optimize' && !allSegmentsHaveLockedHotel(p.trip_request, p.travel_intel.hotels)) {
+        const missing = missingSegmentLocks(p.trip_request, p.travel_intel.hotels);
+        useToastStore.getState().show(
+          missing.length > 0
+            ? `多城行程请为每个城段锁店（待锁：${missing.map((s) => s.city).join('、')}）`
+            : '请先在住宿面板锁定具体酒店（名称+位置）后再生成玩法',
+          'warning',
+        );
         return 'blocked';
       }
 
@@ -1246,6 +1304,7 @@ export const usePlanStore = create<PlanState>()(
       const search = get().getActivePlan().travel_intel.last_flight_search;
       const quote = search?.ranked.find((o) => o.id === quoteId);
       const isRoundTrip = quote ? isRoundTripQuote(quote) : false;
+      let createdCities: string[] = [];
 
       set((s) =>
         updateActivePlan(s, (p) => {
@@ -1264,19 +1323,23 @@ export const usePlanStore = create<PlanState>()(
             purchaseUrl: session.purchase_url,
           });
 
+          const bound = bindLegsToSegments(p.trip_request, newLegs);
+          createdCities = bound.createdCities;
+
           let flights = [...p.travel_intel.flights];
           if (isRoundTripQuote(q)) {
             flights = flights.filter((f) => f.role !== 'outbound' && f.role !== 'return');
-            flights.push(...newLegs);
+            flights.push(...bound.legs);
           } else if (role === 'intercity') {
-            flights.push(...newLegs);
+            flights.push(...bound.legs);
           } else {
             flights = flights.filter((f) => f.role !== role);
-            flights.push(...newLegs);
+            flights.push(...bound.legs);
           }
 
           return {
             ...p,
+            trip_request: bound.trip_request,
             travel_intel: syncTravelIntelStatus({
               ...p.travel_intel,
               flights: renumberFlightSequences(flights),
@@ -1291,21 +1354,27 @@ export const usePlanStore = create<PlanState>()(
       );
       // B-P3：留在航班面板，便于添加下一段 / 城际
       set({ leftPanelMode: 'flight' });
+      const segNote =
+        createdCities.length > 0
+          ? ` · 已写入城段「${createdCities.join('、')}」`
+          : '';
       useToastStore.getState().show(
         isRoundTrip
-          ? '已确认往返航段，可继续添加城际或前往住宿'
-          : '已确认航段，可继续添加下一段或前往住宿',
+          ? `已确认往返航段${segNote}，可继续添加城际或前往住宿`
+          : `已确认航段${segNote}，可继续添加下一段或前往住宿`,
         'info',
       );
       // UX-CHAT-09：确认后对话给出下一跳，不自动 regenerate
-      get().addChatMessage(
-        'assistant',
-        '航班已确认。请继续确认住宿片区并锁定具体酒店，再生成玩法。',
-      );
+      const chatExtra =
+        createdCities.length > 0
+          ? `已将「${createdCities.join('、')}」写入行程城段；请为本段锁定酒店（生成前每城段都需锁店）。`
+          : '请继续确认住宿片区并锁定具体酒店，再生成玩法。';
+      get().addChatMessage('assistant', `航班已确认。${chatExtra}`);
       get().requestReadinessPrompt();
     },
 
     addManualFlightLeg: (input) => {
+      let createdCities: string[] = [];
       set((s) =>
         updateActivePlan(s, (p) => {
           const startSequence =
@@ -1318,13 +1387,21 @@ export const usePlanStore = create<PlanState>()(
             defaultPurchaseUrl: p.travel_intel.last_flight_search?.purchase_url,
           });
 
+          const bound = bindLegsToSegments(p.trip_request, [leg]);
+          createdCities = bound.createdCities;
+          const stamped = bound.legs[0]!;
+
           const flights =
             input.role === 'intercity'
-              ? [...p.travel_intel.flights, leg]
-              : [...p.travel_intel.flights.filter((f) => f.role !== input.role), leg];
+              ? [...p.travel_intel.flights, stamped]
+              : [
+                  ...p.travel_intel.flights.filter((f) => f.role !== input.role),
+                  stamped,
+                ];
 
           return {
             ...p,
+            trip_request: bound.trip_request,
             travel_intel: syncTravelIntelStatus({
               ...p.travel_intel,
               flights: renumberFlightSequences(flights),
@@ -1333,7 +1410,11 @@ export const usePlanStore = create<PlanState>()(
         }),
       );
       set({ leftPanelMode: 'flight' });
-      useToastStore.getState().show('已添加航段，可继续添加下一段或前往住宿', 'info');
+      const segNote =
+        createdCities.length > 0 ? ` · 已写入城段「${createdCities.join('、')}」` : '';
+      useToastStore
+        .getState()
+        .show(`已添加航段${segNote}，可继续添加下一段或前往住宿`, 'info');
     },
 
     removeFlightLeg: (legId) => {
@@ -1386,6 +1467,52 @@ export const usePlanStore = create<PlanState>()(
       });
     },
 
+    loadStayZoneCatalog: (city) => {
+      const plan = get().getActivePlan();
+      const entries = getStayZoneCatalogForCity(city);
+      if (!entries.length) {
+        useToastStore.getState().show('本城暂无片区目录，请用粗推或店名搜索', 'info');
+        return 0;
+      }
+      const tr = plan.trip_request;
+      const segs = deriveSegments(tr);
+      const seg =
+        segs.find((s) => catalogCityMatches(s.city, [city]) || catalogCityMatches(city, [s.city])) ||
+        segs[0];
+      const check_in = seg?.date_start || tr.date_start || '';
+      const check_out = seg?.date_end || tr.date_end || check_in;
+      const catalogZones = catalogEntriesToStayZones(entries, {
+        check_in,
+        check_out,
+        preferenceTags: tr.preference_tags,
+      });
+      const merged = mergeCatalogIntoZones(
+        plan.travel_intel.recommended_stay_zones,
+        catalogZones,
+      );
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          travel_intel: syncTravelIntelStatus({
+            ...p.travel_intel,
+            recommended_stay_zones: merged,
+            stay_zones_fetched_at: new Date().toISOString(),
+          }),
+        })),
+      );
+      const firstProposed = merged.find((z) => z.status === 'proposed');
+      if (firstProposed) get().setSelectedStayZoneId(firstProposed.id);
+      observeStayZone({ type: 'catalog_load', city, count: catalogZones.length });
+      useToastStore
+        .getState()
+        .show(`已载入 ${catalogZones.length} 个片区目录 · 确认一区后再「搜附近」`, 'info');
+      get().addChatMessage(
+        'assistant',
+        `已载入「${city}」封闭片区目录（${catalogZones.length} 区）。请确认一个区，再在该区「搜附近」锁店；未点搜索不会请求酒店接口。`,
+      );
+      return catalogZones.length;
+    },
+
     setStayZonePreferences: (prefs) => {
       set((s) =>
         updateActivePlan(s, (p) => ({
@@ -1400,8 +1527,18 @@ export const usePlanStore = create<PlanState>()(
       const zone = (plan.travel_intel.recommended_stay_zones ?? []).find(
         (z) => z.id === zoneId,
       );
-      if (zone && (zone.bookable === false || zone.fit_tag === 'needs_city_change')) {
-        useToastStore.getState().show('该片区需先换城/改航班，不能直接确认锁店', 'warning');
+      if (
+        zone &&
+        zone.fit_tag === 'needs_city_change' &&
+        !zoneCityInSegments(plan.trip_request, zone.city)
+      ) {
+        useToastStore
+          .getState()
+          .show('请先「加为下一段」把该城写入行程，再确认片区', 'warning');
+        return;
+      }
+      if (zone && zone.bookable === false && zone.fit_tag !== 'needs_city_change') {
+        useToastStore.getState().show('该片区不可确认锁店', 'warning');
         return;
       }
       set((s) =>
@@ -1414,12 +1551,46 @@ export const usePlanStore = create<PlanState>()(
           ),
         })),
       );
-      // UX-CHAT-09
       get().addChatMessage(
         'assistant',
         '住宿片区已确认。请在片区内锁定具体酒店后，再生成玩法（不会因改机酒自动重生成）。',
       );
       get().requestReadinessPrompt();
+    },
+
+    appendSegmentFromStayZone: (zoneId) => {
+      const plan = get().getActivePlan();
+      const zone = (plan.travel_intel.recommended_stay_zones ?? []).find(
+        (z) => z.id === zoneId,
+      );
+      if (!zone?.city?.trim()) {
+        useToastStore.getState().show('片区缺少城市名，无法加段', 'warning');
+        return null;
+      }
+      const { trip_request, segment, created } = appendCitySegment(
+        plan.trip_request,
+        zone.city,
+        { date_start: zone.check_in, date_end: zone.check_out },
+      );
+      set((s) =>
+        updateActivePlan(s, (p) => ({
+          ...p,
+          trip_request,
+        })),
+      );
+      if (created) {
+        useToastStore
+          .getState()
+          .show(`已添加城段「${segment.city}」· 请确认城际航班并为本段锁店`, 'info');
+        get().addChatMessage(
+          'assistant',
+          `已将「${segment.city}」加为行程下一城段（${segment.date_start || '?'} → ${segment.date_end || '?'}）。请补充/确认抵达该城的航班，再在本城片区锁定酒店；生成前每个城段都需要锁店。`,
+        );
+      } else {
+        useToastStore.getState().show(`「${segment.city}」已在城段中，可确认片区并锁店`, 'info');
+      }
+      get().requestReadinessPrompt();
+      return segment.id;
     },
 
     rejectStayZone: (zoneId) => {
@@ -1455,6 +1626,11 @@ export const usePlanStore = create<PlanState>()(
       let hotel = hotelFromZoneInput(zone, input, {
         sequence,
         previousId: prev?.id,
+        segment_id: deriveSegments(plan.trip_request).find(
+          (s) =>
+            s.city.trim().toLowerCase().replace(/\s+/g, '') ===
+            zone.city.trim().toLowerCase().replace(/\s+/g, ''),
+        )?.id,
       });
 
       const itinerary = plan.itinerary;
@@ -1489,6 +1665,7 @@ export const usePlanStore = create<PlanState>()(
       }
 
       get().recordItineraryHistory();
+      const prevInZone = plan.travel_intel.hotels.find((h) => h.zone_id === zoneId);
       const hotels = [
         ...plan.travel_intel.hotels.filter((h) => h.zone_id !== zoneId),
         hotel,
@@ -1499,6 +1676,10 @@ export const usePlanStore = create<PlanState>()(
         hotels,
         zones,
         plan.travel_intel.flights,
+        {
+          scopeHotelIds: [hotel.id],
+          replaceHotelId: prevInZone?.id,
+        },
       );
       const primaryBind =
         bindings.find((b) => b.hotel_id === hotel.id) ?? bindings[0];
@@ -1543,14 +1724,14 @@ export const usePlanStore = create<PlanState>()(
       useToastStore.getState().show(
         input.pendingMapPick
           ? `已替换为「${label}」，请在地图点选位置`
-          : `已锁定并更新日闭环酒店「${label}」`,
+          : `已锁定并更新当前住宿「${label}」`,
         'info',
       );
       get().addChatMessage(
         'assistant',
         input.pendingMapPick
           ? `已将「${label}」设为住宿锚点，请在地图上点选精确位置。`
-          : `已将「${label}」写入每日酒店闭环；若餐饮动线需跟着换片区，可点「优化适配」。`,
+          : `已将「${label}」写入当前住宿日闭环；其它已确认酒店日期未改。若餐饮动线需跟着换片区，可点「优化适配」。`,
       );
 
       return hotel.id;
@@ -1633,6 +1814,10 @@ export const usePlanStore = create<PlanState>()(
         nextHotels,
         zones,
         plan.travel_intel.flights,
+        {
+          scopeHotelIds: [hotel.id],
+          replaceHotelId: prev?.id,
+        },
       );
       const primaryBind =
         bindings.find((b) => b.hotel_id === hotel.id) ?? bindings[0];
@@ -1668,10 +1853,10 @@ export const usePlanStore = create<PlanState>()(
         activeView: 'map' as const,
       }));
 
-      useToastStore.getState().show(`已锁定并更新日闭环酒店「${label}」`, 'info');
+      useToastStore.getState().show(`已锁定并更新当前住宿「${label}」`, 'info');
       get().addChatMessage(
         'assistant',
-        `已将「${label}」写入每日酒店闭环（未绑定片区）。`,
+        `已将「${label}」写入当前住宿日闭环（未绑定片区）；其它已确认酒店日期未改。`,
       );
       return hotel.id;
     },
@@ -1980,6 +2165,7 @@ export const usePlanStore = create<PlanState>()(
           selectedNodeId: newNodeId,
           activeDayIndex: dayIndex,
           leftPanelMode: 'form',
+          ...revealLeftPanelIfHidden(s),
         };
       });
     },
@@ -2144,17 +2330,24 @@ export const usePlanStore = create<PlanState>()(
       set((s) => {
         const leavingStay = s.leftPanelMode === 'stay' && mode !== 'stay';
         const hasItinerary = Boolean(selectActiveItinerary(s)?.days?.length);
+        const reveal = revealLeftPanelIfHidden(s);
         // P104: 离开住宿回对话/机票等时，无玩法则收起片区地图并清钉
         // 同时离开 map 视图，否则左栏仍按 activeView=map 折叠 → 双折叠空屏
         if (leavingStay && !hasItinerary) {
           return {
+            ...reveal,
             leftPanelMode: mode,
             previewExpandedWithoutItinerary: false,
             stayHotelMapPins: [],
             activeView: 'graph' as const,
           };
         }
-        return { leftPanelMode: mode };
+        return { ...reveal, leftPanelMode: mode };
+      }),
+    setLeftPanelUserOverride: (value) =>
+      set((s) => {
+        if (value === 'hidden' && selectPreviewCollapsed(s)) return {};
+        return { leftPanelUserOverride: value };
       }),
     setPreviewExpandedWithoutItinerary: (expanded) =>
       set({ previewExpandedWithoutItinerary: expanded }),
@@ -2226,22 +2419,24 @@ export const usePlanStore = create<PlanState>()(
         ...(id && s.leftPanelMode !== 'chat' ? { leftPanelMode: 'form' as const } : {}),
       })),
     selectDay: (dayIndex) =>
-      set({
+      set((s) => ({
         activeDayIndex: dayIndex,
         selectedNodeId: null,
         selectedEdgeId: null,
         mapPickNodeId: null,
         editorTarget: { kind: 'form', focus: 'day', dayIndex },
         leftPanelMode: 'form',
-      }),
+        ...revealLeftPanelIfHidden(s),
+      })),
     selectRegion: (name) =>
-      set({
+      set((s) => ({
         selectedNodeId: null,
         selectedEdgeId: null,
         mapPickNodeId: null,
         editorTarget: { kind: 'form', focus: 'region', regionName: name },
         leftPanelMode: 'form',
-      }),
+        ...revealLeftPanelIfHidden(s),
+      })),
     renameRegion: (oldName, newName) => {
       const trimmed = newName.trim();
       if (!trimmed || oldName === trimmed) return;
@@ -2318,6 +2513,7 @@ export const usePlanStore = create<PlanState>()(
           mapPickNodeId: null,
           editorTarget: { kind: 'form', focus: 'day', dayIndex: newIndex },
           leftPanelMode: 'form',
+          ...revealLeftPanelIfHidden(s),
           overviewColumnWidths: {
             ...s.overviewColumnWidths,
             [planId]: nextWidths,
@@ -2438,15 +2634,89 @@ export const usePlanStore = create<PlanState>()(
       useToastStore.getState().show('已按日期重新排列各天', 'info');
     },
     startMapPick: (nodeId) =>
-      set({
+      set((s) => ({
         mapPickNodeId: nodeId,
+        mapPickStayTemp: false,
         selectedNodeId: nodeId,
         selectedEdgeId: null,
         activeView: 'map',
         leftPanelMode: 'form',
-      }),
+        ...revealLeftPanelIfHidden(s),
+      })),
     cancelMapPick: () => set({ mapPickNodeId: null }),
+    startMapPickStayTemp: () => {
+      set((s) => ({
+        mapPickStayTemp: true,
+        mapPickNodeId: null,
+        activeView: 'map',
+        leftPanelMode: 'stay',
+        previewExpandedWithoutItinerary: true,
+        ...revealLeftPanelIfHidden(s),
+      }));
+      useToastStore.getState().show('请在地图上点击，创建临时搜店范围', 'info');
+    },
+    cancelMapPickStayTemp: () => set({ mapPickStayTemp: false }),
+    addTempStayZoneFromMap: (lat, lng) => {
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      const plan = get().getActivePlan();
+      const tr = plan.trip_request;
+      const segs = deriveSegments(tr);
+      const city =
+        segs.find((s) => hasStayZoneCatalog(s.city))?.city ||
+        segs[0]?.city ||
+        tr.destination ||
+        '目的地';
+      const seg =
+        segs.find((s) => catalogCityMatches(s.city, [city]) || catalogCityMatches(city, [s.city])) ||
+        segs[0];
+      const zone = buildTempMapStayZone({
+        lat,
+        lng,
+        city,
+        check_in: seg?.date_start || tr.date_start || '',
+        check_out: seg?.date_end || tr.date_end || tr.date_start || '',
+      });
+      set((s) =>
+        updateActivePlan(s, (p) => {
+          const existing = p.travel_intel.recommended_stay_zones ?? [];
+          // Drop other proposed temp zones; keep confirmed/rejected + non-temp proposed
+          const kept = existing.filter(
+            (z) =>
+              z.status === 'confirmed' ||
+              z.status === 'rejected' ||
+              !z.id.startsWith('temp:map:'),
+          );
+          const merged = [...kept, zone].map((z, i) => ({ ...z, sequence: i + 1 }));
+          return {
+            ...p,
+            travel_intel: syncTravelIntelStatus({
+              ...p.travel_intel,
+              recommended_stay_zones: merged,
+              stay_zones_fetched_at: new Date().toISOString(),
+            }),
+          };
+        }),
+      );
+      set({ mapPickStayTemp: false, selectedStayZoneId: zone.id });
+      observeStayZone({
+        type: 'lodging_search',
+        zoneId: zone.id,
+        city,
+        catalog: false,
+        outcome: 'ok',
+        count: 0,
+      });
+      useToastStore
+        .getState()
+        .show('已创建地图临时区 · 确认后可「搜附近」', 'info');
+      get().addChatMessage(
+        'assistant',
+        `已在地图创建临时搜店区（${zone.label}）。请确认该区后再点「搜附近」锁店；目录外自助范围，非库存保证。`,
+      );
+      return zone.id;
+    },
     setExportOverviewCapture: (value) => set({ exportOverviewCapture: value }),
+    toggleOverviewSpread: () => set((s) => ({ overviewSpread: !s.overviewSpread })),
 
     setOverviewColumnWidth: (dayIndex, width) => {
       set((s) => {

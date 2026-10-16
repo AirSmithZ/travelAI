@@ -30,6 +30,8 @@ import {
   totalTripDuration,
 } from '../../types/flight';
 import { todayLocalDate } from '../../utils/dateUtils';
+import { deriveSegments } from '../../utils/citySegments';
+import { nextSegmentCityForIntercity } from '../../utils/flightSegmentSync';
 import { resolveAirportPlacePair } from '../../utils/resolveAirportPlace';
 import {
   FormDateInput,
@@ -174,9 +176,31 @@ function OfferCard({
         >
           {roundTrip || isRoundTripSearch ? '确认往返' : '确认选用'}
         </button>
+        {offer.purchase_url ? (
+          <a
+            href={offer.purchase_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flight-intel__link"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {purchaseLinkLabel(offer.purchase_url)}
+          </a>
+        ) : null}
       </div>
     </article>
   );
+}
+
+function purchaseLinkLabel(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    if (host.includes('trip.com') || host.includes('ctrip.com')) return 'Trip.com 预订';
+    if (host.includes('ch.com')) return '春秋航空预订';
+    return '去购买';
+  } catch {
+    return '去购买';
+  }
 }
 
 function ConfirmedLegBlock({
@@ -450,10 +474,12 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
   }
 
   function applyNextLegSuggestion(opts?: { forceIntercity?: boolean }) {
+    const segs = deriveSegments(tr);
     let suggestion = suggestNextFlightLeg(intel.flights, {
       departure: resolvedTripOrigin || tr.departure,
       destination: resolvedTripDest || '',
       date_end: tr.date_end,
+      segments: segs,
     });
 
     if (opts?.forceIntercity) {
@@ -461,18 +487,30 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
         suggestion = {
           role: 'intercity',
           origin: resolvedTripDest,
-          destination: '',
+          destination: nextSegmentCityForIntercity(tr, intel.flights) || segs[1]?.city || '',
           clearReturnDate: true,
           hint: '模板：城际 · 请填写下一段到达',
         };
       } else {
         const last = sortFlightsBySequence(intel.flights).at(-1)!;
+        const nextCity = nextSegmentCityForIntercity(tr, intel.flights);
         suggestion = {
           role: 'intercity',
           origin: last.dest_iata,
-          destination: '',
+          destination: nextCity,
           clearReturnDate: true,
-          hint: `模板：城际 · 自 ${last.dest_iata} 继续`,
+          hint: nextCity
+            ? `模板：城际 · 自 ${last.dest_iata} → ${nextCity}`
+            : `模板：城际 · 自 ${last.dest_iata} 继续`,
+        };
+      }
+    } else if (suggestion.role === 'intercity' && !suggestion.destination) {
+      const nextCity = nextSegmentCityForIntercity(tr, intel.flights);
+      if (nextCity) {
+        suggestion = {
+          ...suggestion,
+          destination: nextCity,
+          hint: `建议：城际（自 ${suggestion.origin} → ${nextCity}）`,
         };
       }
     }
@@ -697,6 +735,12 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
             {sortedFlights.map((leg) => (
               <li key={leg.id} className="flight-intel__leg">
                 <span className="flight-intel__leg-summary">{formatFlightLegSummary(leg)}</span>
+                {leg.segment_id ? (
+                  <span className="flight-intel__leg-seg" title="绑定城段">
+                    {deriveSegments(tr).find((s) => s.id === leg.segment_id)?.city ||
+                      leg.segment_id}
+                  </span>
+                ) : null}
                 <div className="flight-intel__leg-actions">
                   {leg.purchase_url && (
                     <a
@@ -705,7 +749,7 @@ export function FlightIntelPanel({ layout = 'embedded' }: { layout?: 'embedded' 
                       rel="noopener noreferrer"
                       className="flight-intel__link"
                     >
-                      Trip.com
+                      {purchaseLinkLabel(leg.purchase_url)}
                     </a>
                   )}
                   <button

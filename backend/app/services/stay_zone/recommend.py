@@ -1,4 +1,4 @@
-"""住宿片区推荐：LLM + heuristic 回退。"""
+"""住宿片区推荐：LLM + heuristic 回退；试点城走封闭目录排序（HOT-ZONE-CATALOG）。"""
 
 from __future__ import annotations
 
@@ -15,19 +15,24 @@ from app.schemas.stay_zone import (
     StayZoneRecommendRequest,
     StayZoneRecommendResponse,
 )
-from app.services.geocoding import geocode_place
 from app.services.llm_client import LLMClient
+from app.services.stay_zone.catalog import (
+    catalog_compact_for_prompt,
+    entry_to_zone_dict,
+    get_stay_zone_catalog_for_city,
+    order_catalog_by_ids,
+)
 from app.services.stay_zone.enrich import attach_purchase_url, attach_zone_geometry
-from app.services.stay_zone.prompt import STAY_ZONE_SYSTEM
+from app.services.stay_zone.prompt import STAY_ZONE_CATALOG_RANK_SYSTEM, STAY_ZONE_SYSTEM
 from app.services.stay_zone.score import detect_split_warnings
 from app.services.stay_zone.segment import StaySegment, segment_stays
-from app.services.stay_zone.zone_tags import apply_tags_to_zones
 from app.services.stay_zone.theme_extract import (
     align_zone_themes,
     extract_themes,
     themes_summary_labels,
     uncovered_themes_for_zone,
 )
+from app.services.stay_zone.zone_tags import apply_tags_to_zones
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +193,102 @@ def _llm_zones(
     return out or None
 
 
+def _llm_rank_catalog_ids(
+    body: StayZoneRecommendRequest,
+    catalog: list[dict[str, Any]],
+    seg: StaySegment,
+    settings: Settings,
+    prompt_themes: list[dict[str, Any]] | None = None,
+) -> tuple[list[str], dict[str, str]]:
+    """Returns (ordered_ids, rationale_by_id). Empty ordered_ids → caller uses default order."""
+    if not settings.deepseek_api_key:
+        return [], {}
+    try:
+        client = LLMClient(settings)
+    except ValueError:
+        return [], {}
+
+    payload = {
+        "city": seg.city,
+        "check_in": seg.check_in,
+        "check_out": seg.check_out,
+        "catalog": catalog_compact_for_prompt(catalog),
+        "trip_request": body.trip_request.model_dump(),
+        "flights": body.flights,
+        "preferences": body.preferences.model_dump() if body.preferences else None,
+        "prompt_themes": prompt_themes or [],
+    }
+    try:
+        raw = client.chat_json(
+            system=STAY_ZONE_CATALOG_RANK_SYSTEM,
+            user=json.dumps(payload, ensure_ascii=False),
+            temperature=0.2,
+            endpoint="stay_zones_catalog_rank",
+        )
+    except Exception as e:
+        logger.warning("stay zone catalog rank LLM failed: %s", e)
+        return [], {}
+
+    if not isinstance(raw, dict):
+        return [], {}
+    ids_raw = raw.get("ordered_ids") or raw.get("ids") or []
+    ordered: list[str] = []
+    if isinstance(ids_raw, list):
+        for x in ids_raw:
+            if isinstance(x, str) and x.strip():
+                ordered.append(x.strip())
+    notes: dict[str, str] = {}
+    notes_raw = raw.get("notes")
+    if isinstance(notes_raw, list):
+        for n in notes_raw:
+            if not isinstance(n, dict):
+                continue
+            nid = str(n.get("id") or "").strip()
+            rat = str(n.get("rationale") or "").strip()
+            if nid and rat:
+                notes[nid] = rat
+    return ordered, notes
+
+
+def _catalog_zones_for_segment(
+    body: StayZoneRecommendRequest,
+    seg: StaySegment,
+    settings: Settings,
+    prompt_themes: list[dict[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], str, list[str]]:
+    """Build zones from closed catalog. source catalog_llm | catalog."""
+    catalog = get_stay_zone_catalog_for_city(seg.city)
+    if not catalog:
+        return [], "", []
+    warnings: list[str] = []
+    ordered_ids, notes = _llm_rank_catalog_ids(
+        body, catalog, seg, settings, prompt_themes=prompt_themes
+    )
+    allowed = {str(e["id"]) for e in catalog}
+    dropped = [i for i in ordered_ids if i not in allowed]
+    if dropped:
+        warnings.append(f"已丢弃目录外片区 id：{', '.join(dropped[:5])}")
+    ranked = order_catalog_by_ids(catalog, ordered_ids)
+    source = "catalog_llm" if ordered_ids else "catalog"
+    if not ordered_ids:
+        warnings.append("目录排序 LLM 未可用，已按封闭目录默认顺序全列")
+    else:
+        warnings.append(f"已按封闭目录排序（{len(ranked)} 区 · 禁止编造新区）")
+    zones: list[dict[str, Any]] = []
+    for i, entry in enumerate(ranked):
+        zones.append(
+            entry_to_zone_dict(
+                entry,
+                sequence=i + 1,
+                check_in=seg.check_in,
+                check_out=seg.check_out,
+                day_indices=seg.day_indices,
+                rationale=notes.get(str(entry["id"])),
+            )
+        )
+    return zones, source, warnings
+
+
 def recommend_stay_zones(
     body: StayZoneRecommendRequest,
     settings: Settings,
@@ -208,10 +309,23 @@ def recommend_stay_zones(
     if labels:
         warnings.append(f"已从描述识别主题：{' · '.join(labels)}")
 
-    zones_raw = _llm_zones(
-        body, segments, compact, settings, prompt_themes=prompt_theme_dicts
-    )
+    primary = segments[0] if segments else None
+    zones_raw: list[dict[str, Any]] | None = None
     source: str = "llm"
+    if primary:
+        catalog_zones, cat_source, cat_warns = _catalog_zones_for_segment(
+            body, primary, settings, prompt_themes=prompt_theme_dicts
+        )
+        warnings.extend(cat_warns)
+        if catalog_zones:
+            source = cat_source or "catalog"
+            zones_raw = catalog_zones
+
+    if not zones_raw:
+        zones_raw = _llm_zones(
+            body, segments, compact, settings, prompt_themes=prompt_theme_dicts
+        )
+        source = "llm"
     if not zones_raw:
         source = "heuristic"
         zones_raw = [
@@ -230,16 +344,16 @@ def recommend_stay_zones(
             z["id"] = str(uuid.uuid4())
         matched = align_zone_themes(z, theme_result.themes)
         z["matched_themes"] = matched
-        # Q2: 卡上明示未覆盖主题（相对本区 matched）
         z["uncovered_themes"] = uncovered_themes_for_zone(matched, theme_result.themes)
 
     if any(z.get("fit_tag") == "needs_city_change" for z in zones_raw):
         warnings.append(
-            "部分片区更贴合偏好但与当前目的地不同城（需换城）；不可直接锁店，请先改目的地或忽略"
+            "部分片区更贴合偏好但与当前城段不同城（需换城）；可「加为下一段」后锁店，或改目的地/忽略"
         )
 
     adults = tr.get("travelers") or 2
     prefs_dict = body.preferences.model_dump() if body.preferences else None
+    from_catalog = source in ("catalog", "catalog_llm")
     enriched: list[dict[str, Any]] = []
     for i, z in enumerate(zones_raw):
         seg = segments[i] if i < len(segments) else segments[0]
@@ -247,14 +361,15 @@ def recommend_stay_zones(
             for w in detect_split_warnings(seg, itinerary):
                 if w not in warnings:
                     warnings.append(w)
-        attach_zone_geometry(
-            z,
-            destination if z.get("bookable", True) else str(z.get("city") or destination),
-            segment=seg,
-            itinerary=itinerary if z.get("bookable", True) else None,
-            flights=body.flights if z.get("bookable", True) else None,
-            prefs=prefs_dict,
-        )
+        if not (from_catalog and z.get("geometry")):
+            attach_zone_geometry(
+                z,
+                destination if z.get("bookable", True) else str(z.get("city") or destination),
+                segment=seg,
+                itinerary=itinerary if z.get("bookable", True) else None,
+                flights=body.flights if z.get("bookable", True) else None,
+                prefs=prefs_dict,
+            )
         budget = tr.get("hotel_budget_per_night")
         if budget is None and prefs_dict:
             budget = prefs_dict.get("budget")
@@ -262,7 +377,12 @@ def recommend_stay_zones(
             max_price = float(budget) if budget is not None else None
         except (TypeError, ValueError):
             max_price = None
-        attach_purchase_url(z, adults=adults, max_price=max_price)
+        rooms_raw = tr.get("hotel_rooms")
+        try:
+            rooms_n = int(rooms_raw) if rooms_raw is not None else None
+        except (TypeError, ValueError):
+            rooms_n = None
+        attach_purchase_url(z, adults=adults, rooms=rooms_n, max_price=max_price)
         if not z.get("geometry"):
             warnings.append(f"「{z.get('label')}」未能 geocode 枢纽，仅文本推荐")
         enriched.append(z)

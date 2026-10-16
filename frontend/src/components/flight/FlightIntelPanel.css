@@ -107,6 +107,22 @@
 .flight-intel__leg-summary {
   min-width: 0;
   font-variant-numeric: tabular-nums;
+  flex: 1;
+}
+
+.flight-intel__leg-seg {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted, #6b7280);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  max-width: 5.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flight-intel__leg-actions {

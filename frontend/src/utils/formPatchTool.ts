@@ -19,6 +19,7 @@ export const TRIP_REQUEST_FIELDS = [
   'travelers',
   'budget_level',
   'hotel_budget_per_night',
+  'hotel_rooms',
   'preference_tags',
   'notes',
   'planning_strategy',
@@ -116,6 +117,7 @@ export const FIELD_LABELS: Record<TripRequestField, string> = {
   travelers: '人数',
   budget_level: '预算',
   hotel_budget_per_night: '每晚酒店预算',
+  hotel_rooms: '酒店房间数',
   preference_tags: '偏好标签',
   notes: '备注',
   planning_strategy: '规划策略',
@@ -149,7 +151,7 @@ export function coerceTripRequestValue(
 
   if (action !== 'set') return null;
 
-  if (field === 'day_count' || field === 'travelers') {
+  if (field === 'day_count' || field === 'travelers' || field === 'hotel_rooms') {
     return coercePositiveInt(value);
   }
 

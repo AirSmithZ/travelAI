@@ -850,18 +850,23 @@ def geocode_itinerary(
     center_lng: float | None = None,
     country_code: str | None = None,
     geocode_destination: str | None = None,
+    day_biases: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """为缺失坐标的节点补全地理编码（并行 + TTL 缓存 + 目的地/机酒围栏）。
 
     GEO-13: pass ``center_lat/lng`` (hotel or arrival airport) so POIs are not
     fenced to a country centroid when ``destination`` is national-level.
+
+    FLOW-MC-4: optional ``day_biases`` maps day list-index →
+    ``{geocode_destination, center_lat, center_lng, country_code}`` so multi-city
+    days are not all fenced to hotel #1.
     """
     dest = (geocode_destination or destination).strip() or destination.strip()
-    pending: list[dict[str, Any]] = []
-    for day in itinerary.get("days", []):
+    pending: list[tuple[int, dict[str, Any]]] = []
+    for day_i, day in enumerate(itinerary.get("days", [])):
         for node in day.get("nodes", []):
             if _node_needs_geocode(node):
-                pending.append(node)
+                pending.append((day_i, node))
 
     # 预热目的地中心，避免并行时重复解析
     setup_warnings: list[str] = []
@@ -881,6 +886,19 @@ def geocode_itinerary(
             setup_warnings.append(
                 f"行程 geocode 围栏已钉机酒锚 ({center_lat:.3f},{center_lng:.3f})"
             )
+    if day_biases and len(day_biases) > 1:
+        cities = sorted(
+            {
+                str(b.get("geocode_destination") or "").strip()
+                for b in day_biases.values()
+                if b.get("geocode_destination")
+            }
+        )
+        if cities:
+            setup_warnings.append(
+                f"多城 geocode 按日围栏：{' / '.join(cities[:4])}"
+                + ("…" if len(cities) > 4 else "")
+            )
 
     total = len(pending)
     if total == 0:
@@ -893,18 +911,37 @@ def geocode_itinerary(
     started = time.perf_counter()
     done_count = 0
     outcomes: list[_GeocodeNodeOutcome] = []
+
+    def _bias_for_day(day_i: int) -> dict[str, Any]:
+        if day_biases and day_i in day_biases:
+            b = day_biases[day_i]
+            return {
+                "dest": str(b.get("geocode_destination") or dest).strip() or dest,
+                "center_lat": b.get("center_lat", center_lat),
+                "center_lng": b.get("center_lng", center_lng),
+                "country_code": b.get("country_code", country_code),
+            }
+        return {
+            "dest": dest,
+            "center_lat": center_lat,
+            "center_lng": center_lng,
+            "country_code": country_code,
+        }
+
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [
-            pool.submit(
-                _apply_geocode_to_node,
-                node,
-                dest,
-                center_lat=center_lat,
-                center_lng=center_lng,
-                country_code=country_code,
+        futures = []
+        for day_i, node in pending:
+            b = _bias_for_day(day_i)
+            futures.append(
+                pool.submit(
+                    _apply_geocode_to_node,
+                    node,
+                    b["dest"],
+                    center_lat=b["center_lat"],
+                    center_lng=b["center_lng"],
+                    country_code=b["country_code"],
+                )
             )
-            for node in pending
-        ]
         for fut in as_completed(futures):
             outcomes.append(fut.result())
             done_count += 1

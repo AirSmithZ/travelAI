@@ -3,6 +3,7 @@ import { usePlanStore, findNodeContext, findEdgeContext, selectActiveItinerary }
 import type { EditorTarget } from '../../stores/usePlanStore';
 import { ChatPanel } from '../chat/ChatPanel';
 import { EvidencePanel } from '../evidence/EvidencePanel';
+import { NotesBoardPanel } from '../notes/NotesBoardPanel';
 import { FlightIntelPanel } from '../flight/FlightIntelPanel';
 import { StayZonePanel } from '../stay/StayZonePanel';
 import { ItineraryEditor } from './ItineraryEditor';
@@ -73,6 +74,7 @@ export function InputPanel() {
   const showFlight = leftPanelMode === 'flight' && plan.phase !== 'detailed';
   const showStay = leftPanelMode === 'stay';
   const showEvidence = leftPanelMode === 'evidence';
+  const showNotes = leftPanelMode === 'notes';
   const showForm = leftPanelMode === 'form';
   /** Stay/evidence after generate (doc 36); flight entry stays pre-generate. */
   const showPhaseBFlightEntry = plan.phase !== 'detailed';
@@ -104,7 +106,9 @@ export function InputPanel() {
         ? 'input-panel--stay'
         : showEvidence
           ? 'input-panel--evidence'
-          : 'input-panel--form';
+          : showNotes
+            ? 'input-panel--notes'
+            : 'input-panel--form';
 
   return (
     <aside className={`input-panel ${panelClass}`}>
@@ -157,6 +161,23 @@ export function InputPanel() {
                 节点编辑
               </button>
             )}
+          </footer>
+        </>
+      )}
+
+      {showNotes && (
+        <>
+          <div className="input-panel__flight-scroll">
+            <NotesBoardPanel onClose={() => setLeftPanelMode('chat')} />
+          </div>
+          <footer className="input-panel__flight-foot">
+            <button
+              type="button"
+              className="input-panel__flight-btn"
+              onClick={() => setLeftPanelMode('chat')}
+            >
+              返回对话
+            </button>
           </footer>
         </>
       )}
@@ -286,6 +307,13 @@ export function InputPanel() {
                   {evidenceCount > 0 ? `参考依据 (${evidenceCount})` : '参考依据'}
                 </button>
               )}
+              <button
+                type="button"
+                className="input-panel__expand-chat"
+                onClick={() => setLeftPanelMode('notes')}
+              >
+                行前注意
+              </button>
               <button
                 type="button"
                 className="input-panel__expand-chat"

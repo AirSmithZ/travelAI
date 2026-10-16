@@ -170,7 +170,7 @@ def coerce_trip_request_value(field: str, action: str, value: Any) -> Any | None
     if action != "set":
         return None
 
-    if field in ("day_count", "travelers"):
+    if field in ("day_count", "travelers", "hotel_rooms"):
         return _coerce_positive_int(value)
 
     if field == "hotel_budget_per_night":

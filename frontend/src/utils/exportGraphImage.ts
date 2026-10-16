@@ -34,6 +34,15 @@ function downloadDataUrl(dataUrl: string, filename: string) {
   link.click();
 }
 
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = url;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = window.setTimeout(() => {
@@ -185,12 +194,12 @@ function measureShellCaptureSize(
   };
 }
 
-/** 展开总览壳层为完整尺寸后导出（暗色实色，与屏显一致） */
-export async function exportOverviewShell(
+/** 展开总览壳层为完整尺寸，回调结束后恢复。不挪动节点。 */
+export async function withExpandedOverviewShell<T>(
   shell: HTMLElement,
   layout: { width: number; height: number; railWidth: number },
-  filename: string,
-) {
+  run: (size: { width: number; height: number }) => Promise<T>,
+): Promise<T> {
   const body = shell.querySelector('.overview-shell__body') as HTMLElement | null;
   const header = shell.querySelector('.overview-shell__header') as HTMLElement | null;
   const rail = shell.querySelector('.overview-shell__rail') as HTMLElement | null;
@@ -314,8 +323,7 @@ export async function exportOverviewShell(
   });
 
   try {
-    const dataUrl = await captureElementPng(shell, captureSize);
-    downloadDataUrl(dataUrl, filename);
+    return await run(captureSize);
   } finally {
     if (!prev.dataExporting) {
       shell.removeAttribute('data-exporting');
@@ -364,4 +372,16 @@ export async function exportOverviewShell(
       railInner.style.height = prev.railInnerHeight ?? '';
     }
   }
+}
+
+/** 展开总览壳层为完整尺寸后导出（暗色实色，与屏显一致） */
+export async function exportOverviewShell(
+  shell: HTMLElement,
+  layout: { width: number; height: number; railWidth: number },
+  filename: string,
+) {
+  await withExpandedOverviewShell(shell, layout, async (captureSize) => {
+    const dataUrl = await captureElementPng(shell, captureSize);
+    downloadDataUrl(dataUrl, filename);
+  });
 }

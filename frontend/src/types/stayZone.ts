@@ -50,12 +50,23 @@ export function stayZoneFitTagLabel(tag?: StayZoneFitTag | null): string {
   return STAY_ZONE_FIT_TAG_LABELS[tag] ?? tag;
 }
 
-export function isStayZoneBookable(zone: {
-  bookable?: boolean;
-  fit_tag?: StayZoneFitTag;
-}): boolean {
+export function isStayZoneBookable(
+  zone: {
+    bookable?: boolean;
+    fit_tag?: StayZoneFitTag;
+    city?: string;
+  },
+  tripSegments?: Array<{ city: string }> | null,
+): boolean {
+  if (zone.fit_tag === 'needs_city_change') {
+    // FLOW-MC-2: once city is a trip segment, allow lock (ignore stale bookable=false)
+    const city = (zone.city || '').trim().toLowerCase().replace(/\s+/g, '');
+    if (city && tripSegments?.some((s) => s.city.trim().toLowerCase().replace(/\s+/g, '') === city)) {
+      return true;
+    }
+    return false;
+  }
   if (zone.bookable === false) return false;
-  if (zone.fit_tag === 'needs_city_change') return false;
   return true;
 }
 
@@ -115,7 +126,7 @@ export interface StayZoneRecommendRequest {
 export interface StayZoneRecommendResponse {
   zones: RecommendedStayZone[];
   fetched_at: string;
-  source: 'llm' | 'heuristic';
+  source: 'llm' | 'heuristic' | 'catalog' | 'catalog_llm';
   warnings: string[];
   prompt_themes?: PromptThemeTag[];
 }

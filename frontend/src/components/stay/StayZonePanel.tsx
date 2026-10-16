@@ -11,6 +11,8 @@ import {
   stayZonePanelBadgeLabel,
   stayZoneThemeChips,
 } from '../../types/stayZone';
+import { deriveSegments, zoneCityInSegments } from '../../utils/citySegments';
+import { hasStayZoneCatalog } from '../../utils/stayZoneCatalog';
 import { cityLabelFromOutboundFlight } from '../../utils/flightArrivalCity';
 import { validateHotelStays } from '../../utils/hotelStayValidate';
 import { resolveAirportPlace } from '../../utils/resolveAirportPlace';
@@ -56,7 +58,10 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   const itinerary = usePlanStore((s) => s.getItinerary());
   const intel = plan.travel_intel;
   const recommendStayZonesAction = usePlanStore((s) => s.recommendStayZones);
+  const loadStayZoneCatalog = usePlanStore((s) => s.loadStayZoneCatalog);
+  const startMapPickStayTemp = usePlanStore((s) => s.startMapPickStayTemp);
   const confirmStayZone = usePlanStore((s) => s.confirmStayZone);
+  const appendSegmentFromStayZone = usePlanStore((s) => s.appendSegmentFromStayZone);
   const rejectStayZone = usePlanStore((s) => s.rejectStayZone);
   const addHotelFromZone = usePlanStore((s) => s.addHotelFromZone);
   const addStandaloneHotel = usePlanStore((s) => s.addStandaloneHotel);
@@ -80,6 +85,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   const panelPhase = getStayZonePanelPhase(intel);
   const badgeLabel = stayZonePanelBadgeLabel(panelPhase);
   const hasItineraryDays = Boolean(itinerary?.days?.length);
+  const tripSegments = deriveSegments(plan.trip_request);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +109,15 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   );
 
   const canRecommend = Boolean(plan.trip_request.destination?.trim());
+  /** HOT-ZONE-CATALOG D: city that has a closed district list (pilot: HCMC). */
+  const catalogCity = useMemo(() => {
+    const fromSeg = tripSegments.find((s) => hasStayZoneCatalog(s.city));
+    if (fromSeg?.city) return fromSeg.city;
+    const dest = (plan.trip_request.destination || '').trim();
+    if (hasStayZoneCatalog(dest)) return dest;
+    return '';
+  }, [tripSegments, plan.trip_request.destination]);
+  const canLoadCatalog = Boolean(catalogCity);
   const displayWarnings = useMemo(() => dedupeMessages(warnings), [warnings]);
   const standaloneLocked = intel.hotels.find((h) => !h.zone_id);
 
@@ -145,6 +160,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
   }, [intel.hotels]);
 
   const lodgingAdults = plan.trip_request.travelers ?? 2;
+  const lodgingRooms = plan.trip_request.hotel_rooms ?? null;
   const lodgingMaxPrice = plan.trip_request.hotel_budget_per_night ?? null;
 
   const visibleZoneIds = useMemo(
@@ -380,6 +396,13 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
     }
   }
 
+  function handleLoadCatalog() {
+    if (!catalogCity) return;
+    setError(null);
+    const n = loadStayZoneCatalog(catalogCity);
+    if (n > 0 && hasItineraryDays) setActiveView('map');
+  }
+
   async function handleLockAreaHotel(zoneId: string, candidate: ZoneHotelCandidate) {
     if (!isValidMapCoord(Number(candidate.lat), Number(candidate.lng))) {
       showToast('该候选缺少有效坐标，无法锁定', 'warning');
@@ -463,14 +486,45 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
       />
 
       <div className="stay-zone__actions">
-        <button
-          type="button"
-          className="form-btn form-btn--primary"
-          disabled={!canRecommend || loading}
-          onClick={() => void handleRecommend()}
-        >
-          {loading ? '推荐中…' : hasItineraryDays ? '推荐住宿片区' : '粗推住宿片区'}
-        </button>
+        <div className="stay-zone__actions-row">
+          <button
+            type="button"
+            className="form-btn form-btn--primary"
+            disabled={!canRecommend || loading}
+            onClick={() => void handleRecommend()}
+          >
+            {loading ? '推荐中…' : hasItineraryDays ? '推荐住宿片区' : '粗推住宿片区'}
+          </button>
+          {canLoadCatalog ? (
+            <button
+              type="button"
+              className="form-btn"
+              disabled={loading}
+              onClick={handleLoadCatalog}
+              title="封闭片区目录 · 真实商圈坐标，点确认后再搜附近"
+            >
+              载入片区目录
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="form-btn"
+            disabled={loading}
+            onClick={() => startMapPickStayTemp()}
+            title="在地图点选临时搜店圆心"
+          >
+            地图点选临时区
+          </button>
+        </div>
+        {canLoadCatalog ? (
+          <p className="stay-zone__meta" role="status">
+            「{catalogCity}」有封闭片区目录：载入或粗推（LLM 只排序目录 id）；也可地图点选临时搜店区。确认后再「搜附近」。
+          </p>
+        ) : canRecommend ? (
+          <p className="stay-zone__meta" role="status">
+            片区目录目前仅试点城（胡志明 / 岘港）可用；本目的地请用「粗推」或店名/地图临时区自助搜店。
+          </p>
+        ) : null}
         {intel.stay_zones_fetched_at && (
           <p className="stay-zone__meta">
             上次更新 · {new Date(intel.stay_zones_fetched_at).toLocaleString()}
@@ -551,7 +605,12 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                 const zoneHotels = hotelsByZoneId.get(zone.id) ?? [];
                 const areaDraft = areaDraftByZone[zone.id] ?? null;
                 const hasOutline = zone.geometry?.type === 'circle';
-                const bookable = isStayZoneBookable(zone);
+                const bookable = isStayZoneBookable(zone, tripSegments);
+                const canAppendAsSegment =
+                  !bookable &&
+                  zone.fit_tag === 'needs_city_change' &&
+                  Boolean(zone.city?.trim()) &&
+                  !zoneCityInSegments(plan.trip_request, zone.city);
                 const fitTag = zone.fit_tag ?? 'current_anchor';
                 const { shown: themeShown, overflow: themeOverflow } = stayZoneThemeChips(
                   zone.matched_themes,
@@ -608,7 +667,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                     )}
                     {!bookable ? (
                       <p className="stay-zone__warning" role="status">
-                        与当前机酒目的地不同城：请先在对话中改目的地/航班，或忽略此备选
+                        与当前城段不同城：可「加为下一段」后锁店，或忽略此备选
                       </p>
                     ) : !hasOutline ? (
                       <p className="stay-zone__warning" role="status">
@@ -628,16 +687,28 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                       )}
                       {!bookable ? (
                         <>
+                          {canAppendAsSegment ? (
+                            <button
+                              type="button"
+                              className="form-btn form-btn--sm form-btn--primary"
+                              onClick={() => {
+                                const segId = appendSegmentFromStayZone(zone.id);
+                                if (segId) setSelectedStayZoneId(zone.id);
+                              }}
+                            >
+                              加为下一段
+                            </button>
+                          ) : null}
                           <button
                             type="button"
-                            className="form-btn form-btn--sm form-btn--primary"
+                            className="form-btn form-btn--sm"
                             onClick={() => {
                               addChatMessage(
                                 'assistant',
-                                `「${zone.label}」（${zone.city}）更贴合偏好，但与当前目的地不同。可在下方输入：「把目的地改成${zone.city}」；改完后请重新确认航班并粗推片区。`,
+                                `「${zone.label}」（${zone.city}）更贴合偏好，但与当前城段不同。可点「加为下一段」，或在对话输入：「把目的地改成${zone.city}」。`,
                               );
                               setLeftPanelMode('chat');
-                              showToast('已切到对话 · 可改目的地', 'info');
+                              showToast('已切到对话 · 也可改目的地', 'info');
                             }}
                           >
                             去对话改目的地
@@ -691,7 +762,9 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                       </ul>
                     ) : null}
 
-                    {bookable && zone.status === 'confirmed' && (
+                    {bookable &&
+                      zone.status === 'confirmed' &&
+                      selectedStayZoneId === zone.id && (
                       <div className="stay-zone__hotel-modules">
                         <ZoneAreaLodgingModule
                           zone={zone}
@@ -705,6 +778,7 @@ export function StayZonePanel({ layout = 'embedded' }: { layout?: 'embedded' | '
                             plan.trip_request.date_start
                           }
                           adults={lodgingAdults}
+                          rooms={lodgingRooms}
                           maxPrice={lodgingMaxPrice}
                           onDraftChange={(c) =>
                             setAreaDraftByZone((m) => ({ ...m, [zone.id]: c }))
@@ -782,6 +856,8 @@ function StayZonePreferenceForm({
 }) {
   const updateTripRequest = usePlanStore((s) => s.updateTripRequest);
   const hotelBudget = usePlanStore((s) => s.getActivePlan().trip_request.hotel_budget_per_night);
+  const hotelRooms = usePlanStore((s) => s.getActivePlan().trip_request.hotel_rooms);
+  const travelers = usePlanStore((s) => s.getActivePlan().trip_request.travelers);
   const p = preferences ?? { transit: 1.0, minimize_hotel_moves: true, walk_tolerance: 'medium' };
   const minimizeMoves = p.minimize_hotel_moves !== false;
   const safetyOn = p.safety_sensitive === true;
@@ -816,7 +892,7 @@ function StayZonePreferenceForm({
         </span>
       </div>
       <label className="stay-zone__budget">
-        <span>每晚预算上限（可选，写入 Trip.com 深链）</span>
+        <span>每晚最高预算（以内均可，可选）</span>
         <input
           type="number"
           min={0}
@@ -834,6 +910,30 @@ function StayZonePreferenceForm({
             if (!Number.isFinite(n) || n < 0) return;
             updateTripRequest({ hotel_budget_per_night: n });
             onChange({ ...p, budget: n });
+          }}
+        />
+      </label>
+      <label className="stay-zone__budget">
+        <span>
+          房间数（可选；默认约 {Math.max(1, Math.ceil((travelers ?? 2) / 2))} 间 ·{' '}
+          {travelers ?? 2} 人）
+        </span>
+        <input
+          type="number"
+          min={1}
+          max={9}
+          step={1}
+          placeholder="自动"
+          value={hotelRooms ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === '') {
+              updateTripRequest({ hotel_rooms: undefined });
+              return;
+            }
+            const n = Number(raw);
+            if (!Number.isFinite(n) || n < 1) return;
+            updateTripRequest({ hotel_rooms: Math.min(9, Math.round(n)) });
           }}
         />
       </label>

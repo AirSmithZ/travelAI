@@ -251,11 +251,14 @@ def _fetch_one(
 
 
 def select_travel_modes(straight_line_m: float) -> list[int]:
-    """Cost control: 1–2 Directions calls based on straight-line distance."""
+    """Cost control: 1–2 Directions calls based on straight-line distance.
+
+    P126: short hops also fetch drive so walk/taxi can be compared in UI.
+    """
     if straight_line_m < 900:
-        return [_MODE_WALK]
+        return [_MODE_WALK, _MODE_DRIVE]
     if straight_line_m < 3500:
-        return [_MODE_WALK, _MODE_TRANSIT]
+        return [_MODE_WALK, _MODE_DRIVE]
     if straight_line_m < 12000:
         return [_MODE_TRANSIT, _MODE_DRIVE]
     return [_MODE_DRIVE, _MODE_TRANSIT]

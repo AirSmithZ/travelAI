@@ -107,6 +107,14 @@
   margin-bottom: 10px;
 }
 
+.stay-zone__actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
 .stay-zone__prefs {
   margin-bottom: 12px;
   padding: 10px;

@@ -66,12 +66,32 @@ def resolve_search_iata(value: str) -> str:
     return resolve_tripcom_city_code(value).upper()
 
 
+# CJK / local airport names → concrete IATA (do not collapse via metro ignav_iata).
+_CJK_AIRPORT_IATA: dict[str, str] = {
+    "羽田": "HND",
+    "成田": "NRT",
+    "大兴": "PKX",
+    "首都": "PEK",
+    "虹桥": "SHA",
+    "浦东": "PVG",
+    "关西": "KIX",
+    "伊丹": "ITM",
+    "仁川": "ICN",
+    "金浦": "GMP",
+    "天府": "TFU",
+    "双流": "CTU",
+    "白云": "CAN",
+    "宝安": "SZX",
+}
+
+
 def resolve_ignav_iata(value: str) -> str:
     """
     Map user input to an airport IATA Ignav accepts.
 
     Trip.com uses metro codes (BJS/TYO/SEL/…) which Ignav rejects.
     - Explicit airport aliases (PEK, NRT, ICN…) are preserved.
+    - CJK airport names (羽田/大兴/虹桥…) map to concrete IATA (P125).
     - City names / metro codes fall back to city_codes.json ``ignav_iata``.
     """
     key = (value or "").strip().lower()
@@ -81,6 +101,12 @@ def resolve_ignav_iata(value: str) -> str:
     # User typed a concrete airport (PEK, NRT, PVG…) — do not collapse to metro.
     if key in _airport_alias_set():
         return key.upper()
+
+    # CJK airport tokens (羽田…) — match original casing-insensitive via strip
+    raw_key = (value or "").strip()
+    cjk = _CJK_AIRPORT_IATA.get(raw_key) or _CJK_AIRPORT_IATA.get(key)
+    if cjk:
+        return cjk
 
     raw = _load_raw()
     try:

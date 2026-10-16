@@ -109,6 +109,24 @@ export function OverviewNodeCard({
           {costLabel}
         </div>
       )}
+      {!compact && (node.evidence_refs?.length ?? 0) > 0 && (
+        <div className="trip-node__evidence">
+          {node.evidence_refs!.slice(0, 2).map((ref) =>
+            ref.url ? (
+              <a
+                key={ref.url}
+                className="trip-node__evidence-link"
+                href={ref.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {ref.title || '印证'}
+              </a>
+            ) : null,
+          )}
+        </div>
+      )}
       {!compact && node.tags && node.tags.length > 0 && (
         <div className="trip-node__tags">
           {node.tags.slice(0, 2).map((tag) => (
@@ -119,8 +137,24 @@ export function OverviewNodeCard({
         </div>
       )}
       {!compact && node.tips && node.tips.length > 0 && (
-        <div className="trip-node__desc" title={node.tips.join('\n')}>
-          {node.tips.join(' · ')}
+        <div
+          className={`trip-node__desc ${selected ? 'trip-node__desc--expanded' : ''}`}
+          title={node.tips.join('\n')}
+        >
+          {selected ? (
+            <ul className="trip-node__tips-list">
+              {node.tips.map((tip, i) => (
+                <li key={`${i}-${tip.slice(0, 24)}`}>{tip}</li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              {node.tips.join(' · ')}
+              {node.tips.length > 1 ? (
+                <span className="trip-node__tips-more"> · 选中展开</span>
+              ) : null}
+            </>
+          )}
         </div>
       )}
     </button>

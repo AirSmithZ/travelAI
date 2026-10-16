@@ -77,7 +77,7 @@ class StayZoneRecommendRequest(BaseModel):
 class StayZoneRecommendResponse(BaseModel):
     zones: list[RecommendedStayZoneOut]
     fetched_at: str
-    source: Literal["llm", "heuristic"] = "heuristic"
+    source: Literal["llm", "heuristic", "catalog", "catalog_llm"] = "heuristic"
     warnings: list[str] = Field(default_factory=list)
     # 运行时主题（不写回 preference_tags）
     prompt_themes: list[ThemeTagOut] = Field(default_factory=list)
@@ -95,6 +95,8 @@ class StayZoneLodgingRequest(BaseModel):
     check_in: str = ""
     check_out: str = ""
     adults: int = Field(default=2, ge=1, le=9)
+    # HOT-ROOM-01: optional explicit room count; else ceil(adults/2)
+    rooms: Optional[int] = Field(default=None, ge=1, le=9)
     max_price: Optional[float] = Field(default=None, ge=0)
 
 
@@ -107,8 +109,10 @@ class StayZoneLodgingCandidate(BaseModel):
     rating: Optional[float] = None
     distance_m: int = 0
     coord_source: str = "serpapi_lodging"
-    # HOT-RG-02: RollingGo 参考价 / 渠道链（非 Trip）
+    # HOT-RG-02 / P127: ref_price = 每晚参考价；ref_total = 住期总价（可选）
     ref_price: Optional[float] = None
+    ref_total: Optional[float] = None
+    stay_nights: Optional[int] = None
     currency: Optional[str] = None
     booking_url: Optional[str] = None
 

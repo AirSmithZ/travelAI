@@ -16,6 +16,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@types/dagre": "^0.7.54",
     "@xyflow/react": "^12.11.1",
+    "@zumer/snapdom": "^3.3.4",
     "dagre": "^0.8.5",
     "framer-motion": "^12.42.0",
     "html-to-image": "^1.11.13",

@@ -24,9 +24,10 @@
 |----|------|
 | Tag 契约 | `current_anchor` / `preference_fit` / `compromise` / `needs_city_change` |
 | 规则层 | `zone_tags.py`：同城判定、海边关键词、越南轻量备选表；**bookable 锚 = 航班抵达城优先于 destination** |
-| Prompt | 要求 2～4 zones，必含锚点；偏好冲突给换城备选 |
-| UI | StayZonePanel：`fit_tag` **次要**；主题 tag 见 [33](./33-提示词主题Tag分析.md)；`!bookable` 无确认/搜店，有「去对话改目的地」 |
+| Prompt | 要求 **4～6** zones（P131-A；原 2～4），必含锚点；偏好冲突给换城备选 |
+| UI | StayZonePanel：`fit_tag` **次要**；主题 tag 见 [33](./33-提示词主题Tag分析.md)；`!bookable` 无确认/搜店，有「去对话改目的地」 /「加为下一段」 |
 | 门禁 | store `confirmStayZone` 拒绝需换城 |
+| 目录 D 刀1 | 胡志明封闭片区池 · [40](./40-HOT-ZONE-CATALOG-D方案.md) · `stayZoneCatalog/` |
 
 ```bash
 cd backend && python scripts/test_zone_tags.py

@@ -120,17 +120,46 @@ def test_map_hotel_payload():
             "address": "A",
             "starRating": 4,
             "bookingUrl": "https://rollinggo.example/h/9",
-            "price": {"hasPrice": True, "lowestPrice": 321, "currency": "CNY"},
+            "price": {
+                "hasPrice": True,
+                "lowestPrice": 1744.0,
+                "currency": "CNY",
+                "message": "查价成功。4晚总价：1,744CNY（约436CNY/晚）",
+            },
         },
         hub_lat=1.28,
         hub_lng=103.85,
+        nights=4,
     )
     assert row is not None
     assert row["coord_source"] == "rollinggo"
     assert row["place_id"] == "rg:9"
-    assert row["ref_price"] == 321.0
+    assert row["ref_price"] == 436.0
+    assert row["ref_total"] == 1744.0
     assert row["booking_url"]
     print("map_hotel OK")
+
+
+def test_occupancy_and_trip_url():
+    from app.services.stay_zone.occupancy import split_hotel_occupancy
+    from app.services.stay_zone.tripcom_deeplink import build_tripcom_hotel_url
+
+    assert split_hotel_occupancy(6) == (3, 2)
+    assert split_hotel_occupancy(6, rooms=2) == (2, 3)
+    assert split_hotel_occupancy(1) == (1, 1)
+    url = build_tripcom_hotel_url(
+        "胡志明市",
+        "2026-10-02",
+        "2026-10-06",
+        area_keyword="第一郡",
+        adults=6,
+        max_price=800,
+    )
+    assert "crn=3" in url
+    assert "adult=2" in url
+    assert "highPrice=800" in url
+    assert "adult=6" not in url
+    print("occupancy_trip_url OK")
 
 
 if __name__ == "__main__":
@@ -138,4 +167,5 @@ if __name__ == "__main__":
     test_rollinggo_ok_mode()
     test_no_key_trip_first_no_serp()
     test_map_hotel_payload()
+    test_occupancy_and_trip_url()
     print("all rollinggo lodging tests passed")
